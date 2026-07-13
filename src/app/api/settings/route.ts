@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAiSettings, maskApiKey, saveAiSettings } from "@/lib/sheets/settings";
+import { getAiSettings, maskApiKey, saveAiSettings, type BotLanguage } from "@/lib/sheets/settings";
+
+const VALID_BOT_LANGUAGES: BotLanguage[] = ["english", "filipino", "cebuano"];
 
 export async function GET() {
   try {
@@ -9,6 +11,7 @@ export async function GET() {
       hasKey: !!settings.apiKey,
       keyPreview: settings.apiKey ? maskApiKey(settings.apiKey) : null,
       model: settings.model,
+      botLanguage: settings.botLanguage,
     });
   } catch (err) {
     return NextResponse.json({
@@ -20,7 +23,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  let body: { apiKey?: string; model?: string };
+  let body: { apiKey?: string; model?: string; botLanguage?: string };
   try {
     body = await req.json();
   } catch {
@@ -29,15 +32,19 @@ export async function POST(req: NextRequest) {
 
   const apiKey = body.apiKey?.trim();
   const model = body.model?.trim();
-  if (apiKey === undefined && model === undefined) {
+  const botLanguage = body.botLanguage?.trim();
+  if (apiKey === undefined && model === undefined && botLanguage === undefined) {
     return NextResponse.json({ success: false, reason: "nothing_to_save" }, { status: 400 });
   }
   if (apiKey === "" || model === "") {
     return NextResponse.json({ success: false, reason: "empty_value" }, { status: 400 });
   }
+  if (botLanguage !== undefined && !VALID_BOT_LANGUAGES.includes(botLanguage as BotLanguage)) {
+    return NextResponse.json({ success: false, reason: "invalid_bot_language" }, { status: 400 });
+  }
 
   try {
-    await saveAiSettings({ apiKey, model });
+    await saveAiSettings({ apiKey, model, botLanguage: botLanguage as BotLanguage | undefined });
     return NextResponse.json({ success: true });
   } catch (err) {
     return NextResponse.json(

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { callClaude, stripJsonFences } from "@/lib/ai/client";
 import { assistantSystemPrompt, buildAssistantPrompt } from "@/lib/ai/prompts";
+import { getAiSettings } from "@/lib/sheets/settings";
 import type { Entry } from "@/lib/store/types";
 
 const VALID_TYPES = ["SALE", "EXPENSE", "INVENTORY_IN", "INVENTORY_OUT", "WASTE", "SUPPLIER", "NOTE"];
@@ -108,7 +109,13 @@ export async function POST(req: NextRequest) {
   }
 
   const today = new Date().toISOString().slice(0, 10);
-  const system = assistantSystemPrompt(body.dataSummary ?? "No data available.", today);
+  let botLanguage: Awaited<ReturnType<typeof getAiSettings>>["botLanguage"] = "english";
+  try {
+    botLanguage = (await getAiSettings()).botLanguage;
+  } catch {
+    // Sheets unavailable — fall back to English rather than failing the whole request.
+  }
+  const system = assistantSystemPrompt(body.dataSummary ?? "No data available.", today, botLanguage);
 
   const history = (body.history ?? [])
     .slice(-6)

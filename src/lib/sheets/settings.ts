@@ -4,10 +4,15 @@ const SETTINGS_SHEET = "Settings";
 const SETTINGS_HEADER = ["key", "value"];
 const KEY_API_KEY = "anthropic_api_key";
 const KEY_MODEL = "anthropic_model";
+const KEY_BOT_LANGUAGE = "bot_language";
+
+export type BotLanguage = "english" | "filipino" | "cebuano";
+const VALID_BOT_LANGUAGES: BotLanguage[] = ["english", "filipino", "cebuano"];
 
 export interface AiSettings {
   apiKey: string | null;
   model: string | null;
+  botLanguage: BotLanguage;
 }
 
 export async function getAiSettings(): Promise<AiSettings> {
@@ -16,13 +21,15 @@ export async function getAiSettings(): Promise<AiSettings> {
   for (const [key, value] of rows) {
     if (key) byKey.set(key, value ?? "");
   }
+  const storedLanguage = byKey.get(KEY_BOT_LANGUAGE)?.trim();
   return {
     apiKey: byKey.get(KEY_API_KEY)?.trim() || null,
     model: byKey.get(KEY_MODEL)?.trim() || null,
+    botLanguage: VALID_BOT_LANGUAGES.includes(storedLanguage as BotLanguage) ? (storedLanguage as BotLanguage) : "english",
   };
 }
 
-export async function saveAiSettings(patch: { apiKey?: string; model?: string }): Promise<void> {
+export async function saveAiSettings(patch: { apiKey?: string; model?: string; botLanguage?: BotLanguage }): Promise<void> {
   await ensureSheetExists(SETTINGS_SHEET, SETTINGS_HEADER);
   const rows = await getSheetValues(`${SETTINGS_SHEET}!A:B`);
 
@@ -34,6 +41,7 @@ export async function saveAiSettings(patch: { apiKey?: string; model?: string })
   const updates: Array<[string, string]> = [];
   if (patch.apiKey !== undefined) updates.push([KEY_API_KEY, patch.apiKey]);
   if (patch.model !== undefined) updates.push([KEY_MODEL, patch.model]);
+  if (patch.botLanguage !== undefined) updates.push([KEY_BOT_LANGUAGE, patch.botLanguage]);
 
   for (const [key, value] of updates) {
     const existingRow = rowIndexByKey.get(key);

@@ -2,19 +2,27 @@
 
 import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
-import { ChevronDown, ChevronUp, KeyRound, Moon } from "lucide-react";
+import { ChevronDown, ChevronUp, KeyRound, Languages, Moon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { setApiKeyMissing } from "@/lib/store/store";
+import type { BotLanguage } from "@/lib/sheets/settings";
 import { cn } from "@/lib/utils";
+
+const LANGUAGE_LABELS: Record<BotLanguage, string> = {
+  english: "English",
+  filipino: "Filipino",
+  cebuano: "Cebuano",
+};
 
 interface SettingsState {
   hasKey: boolean;
   keyPreview: string | null;
   model: string | null;
+  botLanguage: BotLanguage;
 }
 
 export default function SettingsPage() {
@@ -28,6 +36,7 @@ export default function SettingsPage() {
   const [modelDraft, setModelDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [languageSaving, setLanguageSaving] = useState(false);
 
   // next-themes resolves the real theme synchronously on the client's first render
   // (to avoid a flash), which is already ahead of what the server rendered — so
@@ -49,7 +58,7 @@ export default function SettingsPage() {
           setLoadError(true);
           return;
         }
-        setSettings({ hasKey: json.hasKey, keyPreview: json.keyPreview, model: json.model });
+        setSettings({ hasKey: json.hasKey, keyPreview: json.keyPreview, model: json.model, botLanguage: json.botLanguage ?? "english" });
         setModelDraft(json.model ?? "");
         setEditingKey(!json.hasKey);
       })
@@ -82,12 +91,37 @@ export default function SettingsPage() {
       setSaveMessage("Saved.");
       const refreshed = await fetch("/api/settings").then((r) => r.json());
       if (refreshed.success) {
-        setSettings({ hasKey: refreshed.hasKey, keyPreview: refreshed.keyPreview, model: refreshed.model });
+        setSettings({
+          hasKey: refreshed.hasKey,
+          keyPreview: refreshed.keyPreview,
+          model: refreshed.model,
+          botLanguage: refreshed.botLanguage ?? "english",
+        });
       }
     } catch {
       setSaveMessage("Couldn't reach the server — check your connection and try again.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function saveLanguage(next: BotLanguage) {
+    if (!settings) return;
+    const previous = settings.botLanguage;
+    setSettings({ ...settings, botLanguage: next }); // optimistic — feels instant, matches the dark mode toggle
+    setLanguageSaving(true);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ botLanguage: next }),
+      });
+      const json = await res.json();
+      if (!json.success) setSettings((s) => (s ? { ...s, botLanguage: previous } : s));
+    } catch {
+      setSettings((s) => (s ? { ...s, botLanguage: previous } : s));
+    } finally {
+      setLanguageSaving(false);
     }
   }
 
@@ -121,6 +155,28 @@ export default function SettingsPage() {
           </span>
           {mounted && (
             <Switch checked={theme === "dark"} onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")} />
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="mb-4">
+        <CardContent className="flex items-center justify-between gap-3">
+          <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <Languages className="h-4 w-4" /> Bot language
+          </span>
+          {settings && (
+            <select
+              value={settings.botLanguage}
+              disabled={languageSaving}
+              onChange={(e) => saveLanguage(e.target.value as BotLanguage)}
+              className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
+            >
+              {(Object.keys(LANGUAGE_LABELS) as BotLanguage[]).map((lang) => (
+                <option key={lang} value={lang}>
+                  {LANGUAGE_LABELS[lang]}
+                </option>
+              ))}
+            </select>
           )}
         </CardContent>
       </Card>
