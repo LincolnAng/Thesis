@@ -5,6 +5,11 @@ import type { ChatMessage, DistributiveOmit } from "./chat-types";
 // with an automatic divider instead of silently continuing as if no time had passed.
 const REOPEN_DIVIDER_THRESHOLD_MS = 30 * 60 * 1000;
 
+// Purely a paint-speed cache — never trusted as the source of truth. Read once to
+// paint instantly on load, then always overwritten with whatever Google Sheets says,
+// even if that's empty. If the sheet is cleared, the next load clears this too.
+const PAINT_CACHE_KEY = "mang-kikos-cocoa-chat-paint-cache-v1";
+
 const INITIAL_SESSION_ID = "__initial__";
 
 export const GREETING: ChatMessage = {
@@ -21,6 +26,27 @@ export const GREETING: ChatMessage = {
 
 function genSessionId(): string {
   return `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function readPaintCache(): ChatMessage[] | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(PAINT_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? (parsed as ChatMessage[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writePaintCache(messages: ChatMessage[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(PAINT_CACHE_KEY, JSON.stringify(messages));
+  } catch {
+    // storage full/unavailable — fine, it's disposable, Sheets is unaffected
+  }
 }
 
 function formatDividerLabel(lastCreatedAt: string): string {
@@ -169,23 +195,26 @@ function pickDefaultSessionId(messages: ChatMessage[]): string {
 }
 
 /**
- * Google Sheets is the only place chat history lives — there is no local copy. This
- * loads the full history (every session) once, on first use, and picks the most
- * recently active session as the starting tab.
+ * Google Sheets is the only source of truth for chat history. This loads the full
+ * history (every session) once, on first use, and picks the most recently active
+ * session as the starting tab. Whatever Sheets says here always wins over the paint
+ * cache — including "nothing," so a cleared sheet correctly clears the app too.
  */
 async function loadFromServer() {
   try {
     const res = await fetch("/api/chat-history");
     const json = await res.json();
-    if (json.success && Array.isArray(json.messages) && json.messages.length > 0) {
-      rawMessages = json.messages as ChatMessage[];
-      currentSessionId = pickDefaultSessionId(rawMessages);
+    if (json.success && Array.isArray(json.messages)) {
+      const messages = json.messages as ChatMessage[];
+      rawMessages = messages.length > 0 ? messages : [GREETING];
+      currentSessionId = messages.length > 0 ? pickDefaultSessionId(messages) : genSessionId();
     } else {
+      // Sheets unreachable — keep whatever the paint cache already showed (better
+      // than nothing) and start a fresh session so new messages don't silently
+      // attach to history we can't actually confirm is current.
       currentSessionId = genSessionId();
     }
   } catch {
-    // Sheets unreachable — start a fresh, local-only session rather than blocking the
-    // chat entirely. Nothing in it will persist until Sheets is reachable again.
     currentSessionId = genSessionId();
   }
 
@@ -195,6 +224,7 @@ async function loadFromServer() {
   }
 
   recomputeVisible();
+  writePaintCache(rawMessages);
   ready = true;
   listeners.forEach((l) => l());
 }
@@ -207,8 +237,9 @@ async function mirrorAppend(message: ChatMessage) {
       body: JSON.stringify({ message }),
     });
   } catch {
-    // Sheets is the only copy — if this fails, the message only exists in this tab's
-    // memory and will be gone on reload. Best-effort for now; no local fallback by design.
+    // Sheets is still the source of truth — if this fails, the message survives in
+    // this tab's paint cache (so it isn't lost on an immediate reload), but it was
+    // never actually saved, so it won't show up on any other device.
   }
 }
 
@@ -240,6 +271,16 @@ function ensureLoadStarted() {
   if (typeof window === "undefined") return;
   if (!loadStarted) {
     loadStarted = true;
+    // Paint whatever we last saw instantly, while the authoritative fetch runs in the
+    // background — this is a guess, not confirmed truth, so sending still waits for
+    // `ready` (set once loadFromServer resolves) to avoid tagging a message to a
+    // session Sheets hasn't actually confirmed is current.
+    const cached = readPaintCache();
+    if (cached) {
+      rawMessages = cached;
+      currentSessionId = pickDefaultSessionId(cached);
+      recomputeVisible();
+    }
     void loadFromServer();
   }
 }
@@ -263,6 +304,7 @@ function mutate(updater: (prev: ChatMessage[]) => ChatMessage[]) {
   ensureLoadStarted();
   rawMessages = updater(rawMessages);
   recomputeVisible();
+  writePaintCache(rawMessages);
   listeners.forEach((l) => l());
 }
 
