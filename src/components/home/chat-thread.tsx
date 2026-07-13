@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatTime } from "@/lib/format";
 import type { ChatMessage, ClarifyOption } from "@/lib/home/chat-types";
 import type { EntryDraft } from "@/lib/home/describe-entry";
 import { EntryCard } from "@/components/home/entry-card";
@@ -33,7 +34,17 @@ export function ChatThread({
 
   return (
     <div className="mx-auto flex w-full max-w-[720px] flex-col gap-3 px-4 py-4">
-      {messages.map((m) => (
+      {messages.map((m) => {
+        if (m.kind === "divider") {
+          return (
+            <div key={m.id} className="flex items-center gap-3 py-1">
+              <div className="h-px flex-1 bg-border" />
+              <span className="text-[11px] text-muted-foreground">{formatTime(m.createdAt)}</span>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+          );
+        }
+        return (
         <div key={m.id} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
           {m.kind === "text" && (
             <div
@@ -78,7 +89,8 @@ export function ChatThread({
             </div>
           )}
         </div>
-      ))}
+        );
+      })}
       <div ref={bottomRef} />
     </div>
   );

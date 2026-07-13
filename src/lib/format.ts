@@ -30,6 +30,10 @@ export function formatDateShort(iso: string): string {
   return new Date(iso).toLocaleDateString("en-PH", { month: "short", day: "numeric" });
 }
 
+export function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" });
+}
+
 export const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
   raw_materials: "Ingredients",
   labor: "Labor",
