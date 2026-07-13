@@ -37,7 +37,7 @@ function ExtraRowsSection({
       <div className="flex items-center justify-between">
         <div>
           <Label className="text-xs font-semibold text-muted-foreground">{title}</Label>
-          {subtitle && <p className="text-[11px] text-muted-foreground">{subtitle}</p>}
+          {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
         </div>
         <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" onClick={onAdd}>
           <Plus className="h-3.5 w-3.5" /> Add
@@ -215,7 +215,7 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
             <select
               value={product.pricingMode}
               onChange={(e) => handleModeChange(e.target.value as PricingMode)}
-              className="h-7 w-full rounded-md border border-input bg-transparent px-1.5 text-[11px] text-muted-foreground"
+              className="h-7 w-full rounded-md border border-input bg-transparent px-1.5 text-xs text-muted-foreground"
             >
               <option value="manual">I&apos;ll set it myself</option>
               <option value="cost_percent">Cost + margin %</option>
@@ -238,7 +238,7 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
                   <span className="text-xs text-muted-foreground">% margin</span>
                 </div>
                 <p className="text-lg font-semibold text-foreground">{formatPeso(effectivePrice)}</p>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {formatPeso(cost.costPerJar)} cost + {product.marginPercent}% margin
                 </p>
               </div>

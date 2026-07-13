@@ -18,11 +18,11 @@ export function BottomTabBar() {
             key={item.href}
             href={item.href}
             className={cn(
-              "flex flex-1 flex-col items-center gap-1 py-3 text-xs font-medium",
+              "flex flex-1 flex-col items-center gap-1 py-3 text-sm font-medium",
               active ? "text-primary" : "text-muted-foreground",
             )}
           >
-            <Icon className="h-5 w-5" />
+            <Icon className="h-6 w-6" />
             {item.label}
           </Link>
         );

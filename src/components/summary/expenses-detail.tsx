@@ -8,7 +8,6 @@ import { CATEGORY_ICONS } from "@/lib/summary/category-icons";
 import { currentMonthLabel, formatDate, formatPeso, previousMonthShortLabel } from "@/lib/format";
 import { Bar } from "@/components/summary/bar";
 import { ComparisonBadge } from "@/components/summary/comparison-badge";
-import { DonutChart } from "@/components/summary/donut-chart";
 import { Sparkline } from "@/components/summary/sparkline";
 import { ExpensesTrendChart } from "@/components/summary/expenses-trend-chart";
 import { cn } from "@/lib/utils";
@@ -52,43 +51,40 @@ export function ExpensesDetail() {
       <div className="space-y-2">
         <h2 className="text-sm font-semibold text-muted-foreground">Where it went</h2>
         {summary.byCategory.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No expenses logged yet this month.</p>
+          <p className="text-base text-muted-foreground">No expenses logged yet this month.</p>
         ) : (
           <div className="space-y-4 rounded-2xl border border-border p-4">
-            <div className="flex items-center gap-4">
-              <DonutChart segments={summary.byCategory.map((r) => ({ label: r.label, value: r.amount, color: r.color }))} />
-              <div className="flex-1 space-y-2.5">
-                {summary.byCategory.map((row) => {
-                  const Icon = CATEGORY_ICONS[row.category];
-                  return (
-                    <div key={row.category} className="flex items-center justify-between gap-2">
-                      <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-                        <Icon className="h-3.5 w-3.5 shrink-0" style={{ color: row.color }} />
-                        {row.label}
-                      </span>
-                      <span className="text-right text-sm">
-                        <span className="font-semibold text-foreground">{formatPeso(row.amount)}</span>{" "}
-                        <span className="text-xs text-muted-foreground">({row.pctOfTotal}%)</span>
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="space-y-3 border-t border-border pt-3">
-              {summary.byCategory.map((row) => (
-                <div key={row.category} className="space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">{row.label}</span>
-                    <span className={cn(row.overBudget ? "font-semibold text-[var(--status-warning)]" : "text-muted-foreground")}>
-                      {formatPeso(row.amount)} of {formatPeso(row.budget)}
+            {summary.byCategory.map((row) => {
+              const Icon = CATEGORY_ICONS[row.category];
+              return (
+                <div key={row.category} className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-2 text-base font-medium text-foreground">
+                      <Icon className="h-4 w-4 shrink-0" style={{ color: row.color }} />
+                      {row.label}
+                    </span>
+                    <span className="text-right text-base">
+                      <span className="font-semibold text-foreground">{formatPeso(row.amount)}</span>{" "}
+                      <span className="text-sm text-muted-foreground">({row.pctOfTotal}%)</span>
                     </span>
                   </div>
-                  <Bar pct={row.budget > 0 ? (row.amount / row.budget) * 100 : 0} tone={row.overBudget ? "warning" : "neutral"} />
+                  <Bar
+                    pct={row.budget > 0 ? (row.amount / row.budget) * 100 : row.barPct}
+                    tone={row.overBudget ? "warning" : "neutral"}
+                  />
+                  {row.budget > 0 && (
+                    <p
+                      className={cn(
+                        "text-sm",
+                        row.overBudget ? "font-semibold text-[var(--status-warning)]" : "text-muted-foreground",
+                      )}
+                    >
+                      {formatPeso(row.amount)} of {formatPeso(row.budget)}
+                    </p>
+                  )}
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
         )}
       </div>

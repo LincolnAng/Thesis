@@ -22,7 +22,7 @@ export function EntryCard({
   return (
     <div className="w-full max-w-xs space-y-2 rounded-2xl border border-border bg-card p-3">
       <div className="flex items-center justify-between gap-2">
-        <Badge className={cn("border text-[11px]", ENTRY_TYPE_COLORS[draft.type])} variant="outline">
+        <Badge className={cn("border text-xs", ENTRY_TYPE_COLORS[draft.type])} variant="outline">
           {categoryBadgeLabel(draft)}
         </Badge>
         {hasAmount(draft) && draft.amount != null && (

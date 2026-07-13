@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, KeyRound } from "lucide-react";
+import { useTheme } from "next-themes";
+import { ChevronDown, ChevronUp, KeyRound, Moon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { setApiKeyMissing } from "@/lib/store/store";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +18,8 @@ interface SettingsState {
 }
 
 export default function SettingsPage() {
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
   const [settings, setSettings] = useState<SettingsState | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [editingKey, setEditingKey] = useState(false);
@@ -24,6 +28,16 @@ export default function SettingsPage() {
   const [modelDraft, setModelDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+
+  // next-themes resolves the real theme synchronously on the client's first render
+  // (to avoid a flash), which is already ahead of what the server rendered — so
+  // "theme !== undefined" alone isn't hydration-safe. Gating on a mount flag that
+  // only flips true in an effect (i.e. strictly after hydration) is the documented
+  // fix for this exact library.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -99,6 +113,17 @@ export default function SettingsPage() {
     <div className="mx-auto w-full max-w-[720px] px-4 py-8">
       <h1 className="mb-1 text-xl font-bold text-foreground">Settings</h1>
       <p className="mb-4 text-sm text-muted-foreground">Manage how the AI assistant works.</p>
+
+      <Card className="mb-4">
+        <CardContent className="flex items-center justify-between gap-3">
+          <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <Moon className="h-4 w-4" /> Dark mode
+          </span>
+          {mounted && (
+            <Switch checked={theme === "dark"} onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")} />
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

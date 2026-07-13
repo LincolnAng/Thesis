@@ -109,7 +109,7 @@ export function IngredientCostsPanel() {
                 <button
                   type="button"
                   onClick={() => updateRawMaterial(material.id, { unitCost: Math.round(suggestion! * 100) / 100 })}
-                  className="text-[11px] text-muted-foreground underline decoration-dotted"
+                  className="text-xs text-muted-foreground underline decoration-dotted"
                 >
                   Use {formatPeso(suggestion!)} — average of your logged purchases
                 </button>

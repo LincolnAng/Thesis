@@ -6,7 +6,6 @@ import { useStore } from "@/lib/store/use-store";
 import { computeSalesSummary } from "@/lib/summary/sales-summary";
 import { formatDate, formatPeso, previousMonthShortLabel } from "@/lib/format";
 import { ComparisonBadge } from "@/components/summary/comparison-badge";
-import { DonutChart } from "@/components/summary/donut-chart";
 import { Sparkline } from "@/components/summary/sparkline";
 import { MonthlyTrendChart } from "@/components/summary/monthly-trend-chart";
 
@@ -41,28 +40,21 @@ export function SalesDetail() {
       <div className="space-y-2">
         <h2 className="text-sm font-semibold text-muted-foreground">Best sellers</h2>
         {summary.bestSellers.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No sales logged yet this month.</p>
+          <p className="text-base text-muted-foreground">No sales logged yet this month.</p>
         ) : (
-          <div className="flex items-center gap-4 rounded-2xl border border-border p-4">
-            <DonutChart
-              segments={summary.bestSellers.map((s) => ({ label: s.sku, value: s.revenue, color: s.color }))}
-              size={80}
-              thickness={12}
-            />
-            <div className="flex-1 space-y-2.5">
-              {summary.bestSellers.map((s) => (
-                <div key={s.sku} className="space-y-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-1.5 truncate text-sm font-medium text-foreground">
-                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: s.color }} />
-                      {s.sku}
-                    </span>
-                    <span className="shrink-0 text-sm font-semibold text-foreground">{formatPeso(s.revenue)}</span>
-                  </div>
-                  <p className="pl-3.5 text-xs text-muted-foreground">{s.qty} jars</p>
-                </div>
-              ))}
-            </div>
+          <div className="divide-y divide-border rounded-2xl border border-border">
+            {summary.bestSellers.map((s, i) => (
+              <div key={s.sku} className="flex items-center justify-between gap-2 px-4 py-3">
+                <span className="flex min-w-0 items-center gap-2 text-base font-medium text-foreground">
+                  <span className="shrink-0 text-muted-foreground">{i + 1}.</span>
+                  <span className="truncate">{s.sku}</span>
+                </span>
+                <span className="shrink-0 text-right">
+                  <span className="block text-base font-semibold text-foreground">{formatPeso(s.revenue)}</span>
+                  <span className="block text-sm text-muted-foreground">{s.qty} jars</span>
+                </span>
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -70,25 +62,16 @@ export function SalesDetail() {
       {summary.byPriceType.length > 0 && (
         <div className="space-y-2">
           <h2 className="text-sm font-semibold text-muted-foreground">By price type</h2>
-          <div className="flex items-center gap-4 rounded-2xl border border-border p-4">
-            <DonutChart
-              segments={summary.byPriceType.map((r) => ({ label: r.label, value: r.revenue, color: r.color }))}
-              size={72}
-              thickness={11}
-            />
-            <div className="flex-1 space-y-2">
-              {summary.byPriceType.map((row) => (
-                <div key={row.key} className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: row.color }} />
-                    {row.label}
-                  </span>
-                  <span className="text-sm text-muted-foreground">
-                    {row.qty} jars · <span className="font-semibold text-foreground">{formatPeso(row.revenue)}</span>
-                  </span>
-                </div>
-              ))}
-            </div>
+          <div className="divide-y divide-border rounded-2xl border border-border">
+            {summary.byPriceType.map((row) => (
+              <div key={row.key} className="flex items-center justify-between gap-2 px-4 py-3">
+                <span className="text-base font-medium text-foreground">{row.label}</span>
+                <span className="shrink-0 text-right">
+                  <span className="block text-base font-semibold text-foreground">{formatPeso(row.revenue)}</span>
+                  <span className="block text-sm text-muted-foreground">{row.qty} jars</span>
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       )}

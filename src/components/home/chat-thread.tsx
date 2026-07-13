@@ -38,7 +38,7 @@ export function ChatThread({
           return (
             <div key={m.id} className="flex items-center gap-3 py-1">
               <div className="h-px flex-1 bg-border" />
-              <span className="text-[11px] text-muted-foreground">{m.label}</span>
+              <span className="text-xs text-muted-foreground">{m.label}</span>
               <div className="h-px flex-1 bg-border" />
             </div>
           );

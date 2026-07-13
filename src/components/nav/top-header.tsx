@@ -27,7 +27,7 @@ export function TopHeader() {
                 active ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-accent",
               )}
             >
-              <Icon className="h-4 w-4" />
+              <Icon className="h-5 w-5" />
               {item.label}
             </Link>
           );
