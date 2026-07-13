@@ -3,7 +3,7 @@
 import { Suspense, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ChatThread } from "@/components/home/chat-thread";
-import { ChatTabs } from "@/components/home/chat-tabs";
+import { ChatSidebarDesktop, ChatSidebarMobileTrigger } from "@/components/home/chat-sidebar";
 import { ChatInputBar } from "@/components/home/chat-input-bar";
 import type { ClarifyOption } from "@/lib/home/chat-types";
 import type { EntryDraft } from "@/lib/home/describe-entry";
@@ -17,6 +17,7 @@ import { buildClarifyPrompt } from "@/lib/home/clarify";
 import { computeInsight } from "@/lib/home/insights";
 import { pushChatMessage, removeChatMessage, replaceChatMessage } from "@/lib/home/chat-store";
 import { useChatMessages } from "@/lib/home/use-chat-messages";
+import { useChatReady } from "@/lib/home/use-chat-ready";
 
 const CONFIDENCE_THRESHOLD = 0.7;
 const INSIGHT_EVERY = 3;
@@ -57,6 +58,7 @@ function blankDraft(rawText: string): EntryDraft {
 function HomePageInner() {
   const searchParams = useSearchParams();
   const messages = useChatMessages();
+  const ready = useChatReady();
   const [input, setInput] = useState(() => searchParams.get("draft") ?? "");
   const [submitting, setSubmitting] = useState(false);
   const { degraded } = useAiStatus();
@@ -81,6 +83,7 @@ function HomePageInner() {
   }
 
   async function handleSubmit() {
+    if (!ready) return; // still loading history from Sheets — don't guess which chat this belongs to
     const rawText = input.trim();
     if (!rawText) return;
     setInput("");
@@ -258,40 +261,41 @@ function HomePageInner() {
   }
 
   return (
-    <div className="flex min-h-[calc(100svh-4rem)] flex-col">
-      <div className="border-b border-border px-4 py-3">
-        <div className="mx-auto w-full max-w-[720px]">
-          <ChatTabs />
+    <div className="flex min-h-[calc(100svh-4rem)]">
+      <ChatSidebarDesktop />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="border-b border-border px-4 py-3 min-[900px]:hidden">
+          <ChatSidebarMobileTrigger />
         </div>
-      </div>
-      <div className="flex-1 overflow-y-auto">
-        <ChatThread
-          messages={messages}
-          onEdit={handleEdit}
-          onUndo={handleUndo}
-          onPickClarify={handlePickClarify}
-          onSaveQuickEdit={handleSaveQuickEdit}
-          onCancelQuickEdit={handleCancelQuickEdit}
-        />
-      </div>
-      {messages.length <= 1 && (
-        <div className="mx-auto w-full max-w-[720px] px-4 pb-2">
-          <p className="mb-1.5 text-xs font-medium text-muted-foreground">Try one of these:</p>
-          <div className="flex flex-wrap gap-2">
-            {QUICK_START_EXAMPLES.map((example) => (
-              <button
-                key={example}
-                type="button"
-                onClick={() => setInput(example)}
-                className="rounded-full border border-border bg-card px-3 py-1.5 text-xs text-foreground hover:bg-accent"
-              >
-                {example}
-              </button>
-            ))}
+        <div className="flex-1 overflow-y-auto">
+          <ChatThread
+            messages={messages}
+            onEdit={handleEdit}
+            onUndo={handleUndo}
+            onPickClarify={handlePickClarify}
+            onSaveQuickEdit={handleSaveQuickEdit}
+            onCancelQuickEdit={handleCancelQuickEdit}
+          />
+        </div>
+        {messages.length <= 1 && (
+          <div className="mx-auto w-full max-w-[720px] px-4 pb-2">
+            <p className="mb-1.5 text-xs font-medium text-muted-foreground">Try one of these:</p>
+            <div className="flex flex-wrap gap-2">
+              {QUICK_START_EXAMPLES.map((example) => (
+                <button
+                  key={example}
+                  type="button"
+                  onClick={() => setInput(example)}
+                  className="rounded-full border border-border bg-card px-3 py-1.5 text-xs text-foreground hover:bg-accent"
+                >
+                  {example}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
-      <ChatInputBar value={input} onChange={setInput} onSubmit={handleSubmit} submitting={submitting} />
+        )}
+        <ChatInputBar value={input} onChange={setInput} onSubmit={handleSubmit} submitting={submitting || !ready} />
+      </div>
     </div>
   );
 }
