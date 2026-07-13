@@ -2,10 +2,9 @@
 
 import { Suspense, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { MessageSquarePlus } from "lucide-react";
 import { ChatThread } from "@/components/home/chat-thread";
+import { ChatTabs } from "@/components/home/chat-tabs";
 import { ChatInputBar } from "@/components/home/chat-input-bar";
-import { Button } from "@/components/ui/button";
 import type { ClarifyOption } from "@/lib/home/chat-types";
 import type { EntryDraft } from "@/lib/home/describe-entry";
 import { useAiStatus } from "@/lib/ai/use-ai-status";
@@ -16,7 +15,7 @@ import { buildDataSummary } from "@/lib/ai/data-summary";
 import { addEntry, deleteEntry, replaceEntry } from "@/lib/store/store";
 import { buildClarifyPrompt } from "@/lib/home/clarify";
 import { computeInsight } from "@/lib/home/insights";
-import { pushChatMessage, removeChatMessage, replaceChatMessage, startNewChat } from "@/lib/home/chat-store";
+import { pushChatMessage, removeChatMessage, replaceChatMessage } from "@/lib/home/chat-store";
 import { useChatMessages } from "@/lib/home/use-chat-messages";
 
 const CONFIDENCE_THRESHOLD = 0.7;
@@ -261,11 +260,8 @@ function HomePageInner() {
   return (
     <div className="flex min-h-[calc(100svh-4rem)] flex-col">
       <div className="border-b border-border px-4 py-3">
-        <div className="mx-auto flex w-full max-w-[720px] items-center justify-between gap-2">
-          <p className="text-sm font-medium text-muted-foreground">Tell me what happened — I&apos;ll track it.</p>
-          <Button size="sm" variant="ghost" className="shrink-0 gap-1.5 text-xs text-muted-foreground" onClick={startNewChat}>
-            <MessageSquarePlus className="h-3.5 w-3.5" /> New chat
-          </Button>
+        <div className="mx-auto w-full max-w-[720px]">
+          <ChatTabs />
         </div>
       </div>
       <div className="flex-1 overflow-y-auto">
