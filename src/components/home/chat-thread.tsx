@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatTime } from "@/lib/format";
 import type { ChatMessage, ClarifyOption } from "@/lib/home/chat-types";
 import type { EntryDraft } from "@/lib/home/describe-entry";
 import { EntryCard } from "@/components/home/entry-card";
@@ -39,7 +38,7 @@ export function ChatThread({
           return (
             <div key={m.id} className="flex items-center gap-3 py-1">
               <div className="h-px flex-1 bg-border" />
-              <span className="text-[11px] text-muted-foreground">{formatTime(m.createdAt)}</span>
+              <span className="text-[11px] text-muted-foreground">{m.label}</span>
               <div className="h-px flex-1 bg-border" />
             </div>
           );

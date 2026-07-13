@@ -7,10 +7,10 @@ export interface ClarifyOption {
 }
 
 export type ChatMessage =
-  | { id: string; role: "user"; kind: "text"; text: string; createdAt: string }
-  | { id: string; role: "assistant"; kind: "text"; text: string; createdAt: string }
-  | { id: string; role: "assistant"; kind: "entry"; entryId: string; draft: EntryDraft; createdAt: string }
-  | { id: string; role: "assistant"; kind: "entry-undone"; draft: EntryDraft; createdAt: string }
+  | { id: string; role: "user"; kind: "text"; text: string; createdAt: string; sessionId: string }
+  | { id: string; role: "assistant"; kind: "text"; text: string; createdAt: string; sessionId: string }
+  | { id: string; role: "assistant"; kind: "entry"; entryId: string; draft: EntryDraft; createdAt: string; sessionId: string }
+  | { id: string; role: "assistant"; kind: "entry-undone"; draft: EntryDraft; createdAt: string; sessionId: string }
   | {
       id: string;
       role: "assistant";
@@ -20,7 +20,20 @@ export type ChatMessage =
       draft: EntryDraft;
       options: ClarifyOption[];
       createdAt: string;
+      sessionId: string;
     }
-  | { id: string; role: "assistant"; kind: "quick-edit"; entryId: string | null; draft: EntryDraft; createdAt: string }
-  | { id: string; role: "assistant"; kind: "insight"; text: string; createdAt: string }
-  | { id: string; kind: "divider"; createdAt: string };
+  | {
+      id: string;
+      role: "assistant";
+      kind: "quick-edit";
+      entryId: string | null;
+      draft: EntryDraft;
+      createdAt: string;
+      sessionId: string;
+    }
+  | { id: string; role: "assistant"; kind: "insight"; text: string; createdAt: string; sessionId: string }
+  | { id: string; kind: "divider"; createdAt: string; label: string; sessionId: string };
+
+// Plain `Omit` collapses a union to its common keys, losing the discriminant-based
+// per-variant shape — this distributes it over each member instead.
+export type DistributiveOmit<T, K extends keyof T> = T extends unknown ? Omit<T, K> : never;
