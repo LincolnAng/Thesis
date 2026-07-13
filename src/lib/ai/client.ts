@@ -66,7 +66,12 @@ export async function callClaude(params: {
     }
 
     const json = await res.json();
-    const text: string = json?.content?.[0]?.text ?? "";
+    // claude-sonnet-5 may prepend a "thinking" content block before the actual "text" block —
+    // find the text block explicitly rather than assuming it's always at index 0.
+    const textBlock = Array.isArray(json?.content)
+      ? json.content.find((block: { type?: string }) => block?.type === "text")
+      : undefined;
+    const text: string = textBlock?.text ?? "";
     const usage: AnthropicUsage = {
       input_tokens: json?.usage?.input_tokens ?? 0,
       output_tokens: json?.usage?.output_tokens ?? 0,
