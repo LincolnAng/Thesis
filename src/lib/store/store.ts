@@ -29,6 +29,7 @@ export interface StoreState {
 
 const STORAGE_KEY = "mang-kikos-cocoa-state-v6";
 const SCHEMA_VERSION = 6;
+const ENTRIES_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-entries-migrated-v1";
 
 // Different expense categories naturally need different amounts planned for
 // them — one flat monthly ceiling couldn't tell you if ingredients were fine
@@ -86,17 +87,116 @@ function persist(state: StoreState) {
 const serverSnapshot: StoreState = defaultState();
 let state: StoreState = serverSnapshot;
 let hydrated = false;
+let entriesLoadStarted = false;
+// Entries added locally before the authoritative Sheets fetch below resolves —
+// on that first load, the fetch result overwrites `state.entries` wholesale
+// (so a deletion made on another device is correctly reflected here too), but
+// anything in this set that isn't yet in the server's response survives the
+// overwrite instead of flickering away and reappearing on the next reload.
+let pendingLocalEntryIds = new Set<string>();
 const listeners = new Set<() => void>();
 
 function ensureHydrated() {
-  if (hydrated || typeof window === "undefined") return;
-  state = loadState();
-  hydrated = true;
+  if (typeof window === "undefined") return;
+  if (!hydrated) {
+    state = loadState();
+    hydrated = true;
+  }
+  if (!entriesLoadStarted) {
+    entriesLoadStarted = true;
+    void loadEntriesFromServer();
+  }
 }
 
 function emit() {
   persist(state);
   listeners.forEach((l) => l());
+}
+
+/**
+ * Google Sheets is the source of truth for entries (business data is migrating
+ * off localStorage collection by collection — entries first). Local storage
+ * still acts as a disposable paint cache (via `persist`/`loadState` above) for
+ * instant load, same as chat history's pattern.
+ */
+async function loadEntriesFromServer() {
+  try {
+    const res = await fetch("/api/business-data");
+    const json = await res.json();
+    if (!json.success || !Array.isArray(json.entries)) return; // Sheets unreachable — keep local/paint-cache state
+
+    let serverEntries: Entry[] = json.entries;
+
+    if (serverEntries.length === 0 && !window.localStorage.getItem(ENTRIES_MIGRATION_FLAG_KEY)) {
+      // First run against a fresh sheet — push up any real local history once,
+      // skipping the demo seed data every fresh install starts with.
+      const localEntries = state.entries.filter((e) => !e.id.startsWith("seed-"));
+      if (localEntries.length > 0) {
+        try {
+          const migrateRes = await fetch("/api/business-data", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ collection: "entries", op: "migrate", items: localEntries }),
+          });
+          const migrateJson = await migrateRes.json();
+          if (migrateJson.success) {
+            serverEntries = localEntries;
+            window.localStorage.setItem(ENTRIES_MIGRATION_FLAG_KEY, "true");
+          }
+        } catch {
+          // leave the flag unset — retried on the next load
+        }
+      } else {
+        window.localStorage.setItem(ENTRIES_MIGRATION_FLAG_KEY, "true");
+      }
+    }
+
+    const serverIds = new Set(serverEntries.map((e) => e.id));
+    setState((prev) => {
+      const stillPendingLocal = prev.entries.filter((e) => pendingLocalEntryIds.has(e.id) && !serverIds.has(e.id));
+      pendingLocalEntryIds = new Set(stillPendingLocal.map((e) => e.id));
+      const merged = [...stillPendingLocal, ...serverEntries].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+      return { ...prev, entries: merged };
+    });
+  } catch {
+    // network/parse error — keep local/paint-cache state
+  }
+}
+
+async function mirrorEntryAppend(entry: Entry) {
+  try {
+    await fetch("/api/business-data", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ collection: "entries", op: "append", item: entry }),
+    });
+  } catch {
+    // best-effort — the paint cache still has it locally for this device
+  }
+}
+
+async function mirrorEntryUpdate(id: string, entry: Entry) {
+  try {
+    await fetch("/api/business-data", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ collection: "entries", op: "update", id, item: entry }),
+    });
+  } catch {
+    // best-effort
+  }
+}
+
+async function mirrorEntryDelete(id: string) {
+  try {
+    await fetch("/api/business-data", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ collection: "entries", op: "delete", id }),
+    });
+  } catch {
+    // best-effort
+  }
 }
 
 export function subscribe(listener: () => void): () => void {
@@ -183,38 +283,45 @@ function applyEntrySideEffects(
 
 export function addEntry(input: Omit<Entry, "id"> & { id?: string }): Entry {
   const entry: Entry = { ...input, id: input.id ?? genId("entry") };
+  pendingLocalEntryIds.add(entry.id);
   setState((prev) => {
     const { products, rawMaterials } = applyEntrySideEffects(entry, 1, prev.products, prev.rawMaterials);
     return { ...prev, entries: [entry, ...prev.entries], products, rawMaterials };
   });
+  void mirrorEntryAppend(entry);
   return entry;
 }
 
 /** Removes an entry and reverses whatever stock/ingredient effects it applied. Used by Undo. */
 export function deleteEntry(id: string) {
+  if (!state.entries.some((e) => e.id === id)) return;
+  pendingLocalEntryIds.delete(id);
   setState((prev) => {
     const entry = prev.entries.find((e) => e.id === id);
     if (!entry) return prev;
     const { products, rawMaterials } = applyEntrySideEffects(entry, -1, prev.products, prev.rawMaterials);
     return { ...prev, entries: prev.entries.filter((e) => e.id !== id), products, rawMaterials };
   });
+  void mirrorEntryDelete(id);
 }
 
 /** Replaces an entry's fields, reversing the old side effects and applying the new ones. Used by Edit. */
 export function replaceEntry(id: string, next: Omit<Entry, "id">) {
+  let updatedEntry: Entry | null = null;
   setState((prev) => {
     const old = prev.entries.find((e) => e.id === id);
     if (!old) return prev;
     const reversed = applyEntrySideEffects(old, -1, prev.products, prev.rawMaterials);
-    const updatedEntry: Entry = { ...next, id };
+    updatedEntry = { ...next, id };
     const applied = applyEntrySideEffects(updatedEntry, 1, reversed.products, reversed.rawMaterials);
     return {
       ...prev,
-      entries: prev.entries.map((e) => (e.id === id ? updatedEntry : e)),
+      entries: prev.entries.map((e) => (e.id === id ? (updatedEntry as Entry) : e)),
       products: applied.products,
       rawMaterials: applied.rawMaterials,
     };
   });
+  if (updatedEntry) void mirrorEntryUpdate(id, updatedEntry);
 }
 
 // --- Products ------------------------------------------------------------
