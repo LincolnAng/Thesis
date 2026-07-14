@@ -12,11 +12,44 @@ import { useStore } from "@/lib/store/use-store";
 import { ingredientRowCost, productCostPerJar } from "@/lib/summary/recipe-cost";
 import { CostBreakdownChart } from "@/components/finance/cost-breakdown-chart";
 import { useViewMode } from "@/lib/summary/view-mode";
-import type { PricingMode, Product, RecipeExtraRow, RecipeIngredientRow } from "@/lib/store/types";
+import { useNumericDraft } from "@/lib/use-numeric-draft";
+import type { PricingMode, Product, RawMaterialStock, RecipeExtraRow, RecipeIngredientRow } from "@/lib/store/types";
 import { cn } from "@/lib/utils";
 
 function genRowId(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function ExtraRow({
+  row,
+  onChange,
+  onRemove,
+}: {
+  row: RecipeExtraRow;
+  onChange: (id: string, patch: Partial<RecipeExtraRow>) => void;
+  onRemove: (id: string) => void;
+}) {
+  const costField = useNumericDraft(row.cost, (n) => onChange(row.id, { cost: n }));
+  return (
+    <div className="flex items-center gap-2">
+      <Input
+        placeholder="What for?"
+        value={row.label}
+        onChange={(e) => onChange(row.id, { label: e.target.value })}
+        className="h-8 flex-1 text-sm"
+      />
+      <Input
+        type="number"
+        placeholder="₱"
+        value={costField.value}
+        onChange={(e) => costField.onChange(e.target.value)}
+        className="h-8 w-24 text-sm"
+      />
+      <Button size="icon-sm" variant="ghost" className="text-muted-foreground" onClick={() => onRemove(row.id)}>
+        <Trash2 className="h-3.5 w-3.5" />
+      </Button>
+    </div>
+  );
 }
 
 function ExtraRowsSection({
@@ -47,33 +80,88 @@ function ExtraRowsSection({
       </div>
       <div className="space-y-2">
         {rows.map((row) => (
-          <div key={row.id} className="flex items-center gap-2">
-            <Input
-              placeholder="What for?"
-              value={row.label}
-              onChange={(e) => onChange(row.id, { label: e.target.value })}
-              className="h-8 flex-1 text-sm"
-            />
-            <Input
-              type="number"
-              placeholder="₱"
-              value={row.cost}
-              onChange={(e) => onChange(row.id, { cost: Number(e.target.value) || 0 })}
-              className="h-8 w-24 text-sm"
-            />
-            <Button size="icon-sm" variant="ghost" className="text-muted-foreground" onClick={() => onRemove(row.id)}>
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          </div>
+          <ExtraRow key={row.id} row={row} onChange={onChange} onRemove={onRemove} />
         ))}
       </div>
     </div>
   );
 }
 
+function IngredientRowEditor({
+  row,
+  material,
+  rawMaterials,
+  onUpdate,
+  onRemove,
+}: {
+  row: RecipeIngredientRow;
+  material: RawMaterialStock | undefined;
+  rawMaterials: RawMaterialStock[];
+  onUpdate: (id: string, patch: Partial<RecipeIngredientRow>) => void;
+  onRemove: (id: string) => void;
+}) {
+  const qtyField = useNumericDraft(row.quantity, (n) => onUpdate(row.id, { quantity: n }));
+  return (
+    <div className="space-y-1.5 rounded-xl border border-border p-2.5">
+      <div className="flex items-center gap-2">
+        <select
+          value={row.materialId}
+          onChange={(e) => onUpdate(row.id, { materialId: e.target.value })}
+          className="h-8 flex-1 rounded-md border border-input bg-transparent px-2 text-sm"
+        >
+          {rawMaterials.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name}
+            </option>
+          ))}
+        </select>
+        <Button size="icon-sm" variant="ghost" className="text-muted-foreground" onClick={() => onRemove(row.id)}>
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+      <div className="flex items-center gap-2">
+        <Input
+          type="number"
+          value={qtyField.value}
+          onChange={(e) => qtyField.onChange(e.target.value)}
+          className="h-8 flex-1 text-sm"
+        />
+        <span className="w-10 shrink-0 text-xs text-muted-foreground">{material?.unit ?? ""}</span>
+        <span className="w-20 shrink-0 text-right text-xs font-medium text-foreground">
+          {formatPeso(ingredientRowCost(row, rawMaterials))}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function TierRow({
+  tier,
+}: {
+  tier: { label: string; price: number; onChange: (n: number) => void; profit: number; belowCost: boolean };
+}) {
+  const field = useNumericDraft(tier.price, tier.onChange);
+  return (
+    <div className="flex items-center justify-between gap-2 text-sm">
+      <span className="flex items-center gap-2 text-muted-foreground">
+        {tier.label}
+        <Input type="number" value={field.value} onChange={(e) => field.onChange(e.target.value)} className="h-7 w-20 text-xs" />
+      </span>
+      <span
+        className={cn(
+          "flex items-center gap-1 font-medium",
+          tier.belowCost ? "text-[var(--status-warning)]" : "text-[var(--status-good)]",
+        )}
+      >
+        {tier.belowCost && <AlertTriangle className="h-3.5 w-3.5" />}
+        {tier.belowCost ? "Losing money" : `${formatPeso(tier.profit)} profit`}
+      </span>
+    </div>
+  );
+}
+
 export function PricingCalculatorCard({ product }: { product: Product }) {
   const { rawMaterials } = useStore();
-  const [yieldDraft, setYieldDraft] = useState(product.batchYield);
   const [showMore, setShowMore] = useState(false);
   const [batchCount, setBatchCount] = useState(1);
   const [viewMode] = useViewMode();
@@ -93,6 +181,10 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
 
   const standardProfit = effectivePrice - cost.costPerJar;
   const standardBelowCost = standardProfit < 0;
+
+  const marginField = useNumericDraft(product.marginPercent, (n) => updateProduct(product.id, { marginPercent: n }));
+  const standardPriceField = useNumericDraft(product.standardPrice, (n) => updateProduct(product.id, { standardPrice: n }));
+  const yieldField = useNumericDraft(product.batchYield, (n) => persist(ingredients, labor, misc, n));
 
   function handleModeChange(nextMode: PricingMode) {
     if (product.pricingMode === "cost_percent" && nextMode === "manual") {
@@ -141,7 +233,7 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
       [...ingredients, { id: genRowId("ing"), materialId: rawMaterials[0].id, quantity: 0 }],
       labor,
       misc,
-      yieldDraft,
+      product.batchYield,
     );
   }
   function updateIngredient(id: string, patch: Partial<RecipeIngredientRow>) {
@@ -149,7 +241,7 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
       ingredients.map((r) => (r.id === id ? { ...r, ...patch } : r)),
       labor,
       misc,
-      yieldDraft,
+      product.batchYield,
     );
   }
   function removeIngredient(id: string) {
@@ -157,19 +249,19 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
       ingredients.filter((r) => r.id !== id),
       labor,
       misc,
-      yieldDraft,
+      product.batchYield,
     );
   }
 
   function addLabor() {
-    persist(ingredients, [...labor, { id: genRowId("lab"), label: "", cost: 0 }], misc, yieldDraft);
+    persist(ingredients, [...labor, { id: genRowId("lab"), label: "", cost: 0 }], misc, product.batchYield);
   }
   function updateLabor(id: string, patch: Partial<RecipeExtraRow>) {
     persist(
       ingredients,
       labor.map((r) => (r.id === id ? { ...r, ...patch } : r)),
       misc,
-      yieldDraft,
+      product.batchYield,
     );
   }
   function removeLabor(id: string) {
@@ -177,19 +269,19 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
       ingredients,
       labor.filter((r) => r.id !== id),
       misc,
-      yieldDraft,
+      product.batchYield,
     );
   }
 
   function addMisc() {
-    persist(ingredients, labor, [...misc, { id: genRowId("misc"), label: "", cost: 0 }], yieldDraft);
+    persist(ingredients, labor, [...misc, { id: genRowId("misc"), label: "", cost: 0 }], product.batchYield);
   }
   function updateMisc(id: string, patch: Partial<RecipeExtraRow>) {
     persist(
       ingredients,
       labor,
       misc.map((r) => (r.id === id ? { ...r, ...patch } : r)),
-      yieldDraft,
+      product.batchYield,
     );
   }
   function removeMisc(id: string) {
@@ -197,13 +289,8 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
       ingredients,
       labor,
       misc.filter((r) => r.id !== id),
-      yieldDraft,
+      product.batchYield,
     );
-  }
-
-  function updateYield(next: number) {
-    setYieldDraft(next);
-    persist(ingredients, labor, misc, next);
   }
 
   return (
@@ -234,8 +321,8 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
                 <div className="flex items-center gap-1.5">
                   <Input
                     type="number"
-                    value={product.marginPercent}
-                    onChange={(e) => updateProduct(product.id, { marginPercent: Number(e.target.value) || 0 })}
+                    value={marginField.value}
+                    onChange={(e) => marginField.onChange(e.target.value)}
                     className="h-8 w-16 text-sm"
                   />
                   <span className="text-xs text-muted-foreground">% margin</span>
@@ -248,8 +335,8 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
             ) : (
               <Input
                 type="number"
-                value={product.standardPrice}
-                onChange={(e) => updateProduct(product.id, { standardPrice: Number(e.target.value) || 0 })}
+                value={standardPriceField.value}
+                onChange={(e) => standardPriceField.onChange(e.target.value)}
                 className="h-9 text-lg font-semibold"
               />
             )}
@@ -284,26 +371,7 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
               <Label className="text-xs font-semibold text-muted-foreground">Other prices</Label>
               <div className="space-y-1.5">
                 {otherTiers.map((tier) => (
-                  <div key={tier.label} className="flex items-center justify-between gap-2 text-sm">
-                    <span className="flex items-center gap-2 text-muted-foreground">
-                      {tier.label}
-                      <Input
-                        type="number"
-                        value={tier.price}
-                        onChange={(e) => tier.onChange(Number(e.target.value) || 0)}
-                        className="h-7 w-20 text-xs"
-                      />
-                    </span>
-                    <span
-                      className={cn(
-                        "flex items-center gap-1 font-medium",
-                        tier.belowCost ? "text-[var(--status-warning)]" : "text-[var(--status-good)]",
-                      )}
-                    >
-                      {tier.belowCost && <AlertTriangle className="h-3.5 w-3.5" />}
-                      {tier.belowCost ? "Losing money" : `${formatPeso(tier.profit)} profit`}
-                    </span>
-                  </div>
+                  <TierRow key={tier.label} tier={tier} />
                 ))}
               </div>
             </div>
@@ -333,46 +401,16 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
                 <p className="text-xs text-muted-foreground">No ingredients yet. Tap &quot;Add ingredient&quot; to get started.</p>
               ) : (
                 <div className="space-y-2">
-                  {ingredients.map((row) => {
-                    const material = rawMaterials.find((m) => m.id === row.materialId);
-                    return (
-                      <div key={row.id} className="space-y-1.5 rounded-xl border border-border p-2.5">
-                        <div className="flex items-center gap-2">
-                          <select
-                            value={row.materialId}
-                            onChange={(e) => updateIngredient(row.id, { materialId: e.target.value })}
-                            className="h-8 flex-1 rounded-md border border-input bg-transparent px-2 text-sm"
-                          >
-                            {rawMaterials.map((m) => (
-                              <option key={m.id} value={m.id}>
-                                {m.name}
-                              </option>
-                            ))}
-                          </select>
-                          <Button
-                            size="icon-sm"
-                            variant="ghost"
-                            className="text-muted-foreground"
-                            onClick={() => removeIngredient(row.id)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Input
-                            type="number"
-                            value={row.quantity}
-                            onChange={(e) => updateIngredient(row.id, { quantity: Number(e.target.value) || 0 })}
-                            className="h-8 flex-1 text-sm"
-                          />
-                          <span className="w-10 shrink-0 text-xs text-muted-foreground">{material?.unit ?? ""}</span>
-                          <span className="w-20 shrink-0 text-right text-xs font-medium text-foreground">
-                            {formatPeso(ingredientRowCost(row, rawMaterials))}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {ingredients.map((row) => (
+                    <IngredientRowEditor
+                      key={row.id}
+                      row={row}
+                      material={rawMaterials.find((m) => m.id === row.materialId)}
+                      rawMaterials={rawMaterials}
+                      onUpdate={updateIngredient}
+                      onRemove={removeIngredient}
+                    />
+                  ))}
                 </div>
               )}
 
@@ -390,8 +428,8 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
                 <Label className="text-xs">Jars per batch</Label>
                 <Input
                   type="number"
-                  value={yieldDraft}
-                  onChange={(e) => updateYield(Number(e.target.value) || 0)}
+                  value={yieldField.value}
+                  onChange={(e) => yieldField.onChange(e.target.value)}
                   className="h-8 w-28"
                 />
               </div>

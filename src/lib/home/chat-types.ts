@@ -32,7 +32,11 @@ export type ChatMessage =
       sessionId: string;
     }
   | { id: string; role: "assistant"; kind: "insight"; text: string; createdAt: string; sessionId: string }
-  | { id: string; kind: "divider"; createdAt: string; label: string; sessionId: string };
+  | { id: string; kind: "divider"; createdAt: string; label: string; sessionId: string }
+  // Not shown in the thread — a metadata record of a custom name for its session,
+  // synced through the same chat-history pipeline as everything else. The latest
+  // one per session overrides the auto-derived (first-message) label.
+  | { id: string; kind: "session-title"; createdAt: string; title: string; sessionId: string };
 
 // Plain `Omit` collapses a union to its common keys, losing the discriminant-based
 // per-variant shape — this distributes it over each member instead.

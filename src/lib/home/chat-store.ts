@@ -70,7 +70,7 @@ let reopenCheckDone = false;
 const listeners = new Set<() => void>();
 
 function recomputeVisible() {
-  const filtered = rawMessages.filter((m) => m.sessionId === currentSessionId);
+  const filtered = rawMessages.filter((m) => m.sessionId === currentSessionId && m.kind !== "session-title");
   visibleMessages = filtered.length > 0 ? filtered : [GREETING];
 }
 
@@ -100,6 +100,8 @@ function computeSessions(): ChatSession[] {
   const order: string[] = [];
   const createdAtById = new Map<string, string>();
   const firstUserTextById = new Map<string, string>();
+  const customTitleById = new Map<string, string>();
+  const customTitleTimeById = new Map<string, number>();
   for (const m of rawMessages) {
     if (m.sessionId === INITIAL_SESSION_ID) continue; // the fixed greeting placeholder, not a real session
     if (!createdAtById.has(m.sessionId)) {
@@ -108,6 +110,13 @@ function computeSessions(): ChatSession[] {
     }
     if (m.kind === "text" && m.role === "user" && !firstUserTextById.has(m.sessionId)) {
       firstUserTextById.set(m.sessionId, m.text);
+    }
+    if (m.kind === "session-title") {
+      const t = new Date(m.createdAt).getTime();
+      if (!customTitleTimeById.has(m.sessionId) || t >= customTitleTimeById.get(m.sessionId)!) {
+        customTitleById.set(m.sessionId, m.title);
+        customTitleTimeById.set(m.sessionId, t);
+      }
     }
   }
   // A brand-new chat has no messages yet — still list it, so it doesn't vanish the
@@ -120,7 +129,11 @@ function computeSessions(): ChatSession[] {
   const sessions = order.map((id, index) => ({
     id,
     createdAt: createdAtById.get(id)!,
-    label: firstUserTextById.has(id) ? truncateLabel(firstUserTextById.get(id)!, 28) : `Chat ${index + 1}`,
+    label: customTitleById.has(id)
+      ? truncateLabel(customTitleById.get(id)!, 28)
+      : firstUserTextById.has(id)
+        ? truncateLabel(firstUserTextById.get(id)!, 28)
+        : `Chat ${index + 1}`,
   }));
   sessionsCache = { forRawMessages: rawMessages, forCurrentSessionId: currentSessionId, sessions };
   return sessions;
@@ -131,8 +144,14 @@ export function getSessionsSnapshot(): ChatSession[] {
   return computeSessions();
 }
 
+// Must be referentially stable across calls — useSyncExternalStore compares this
+// by reference, so returning a fresh `[]` here every time (instead of this shared
+// constant) makes React think the snapshot changes on every render and can bail
+// out of updating the subtree entirely.
+const EMPTY_SESSIONS: ChatSession[] = [];
+
 export function getSessionsServerSnapshot(): ChatSession[] {
-  return [];
+  return EMPTY_SESSIONS;
 }
 
 export function getCurrentSessionIdSnapshot(): string {
@@ -159,7 +178,9 @@ export function getReadyServerSnapshot(): boolean {
  * time had passed. Runs once, right after the initial load.
  */
 function maybeInsertReopenDivider() {
-  const currentSessionMessages = rawMessages.filter((m) => m.sessionId === currentSessionId);
+  const currentSessionMessages = rawMessages.filter(
+    (m) => m.sessionId === currentSessionId && m.kind !== "session-title",
+  );
   const last = currentSessionMessages[currentSessionMessages.length - 1];
   if (!last || last.kind === "divider") return;
 
@@ -346,4 +367,21 @@ export function switchToSession(id: string) {
   currentSessionId = id;
   recomputeVisible();
   listeners.forEach((l) => l());
+}
+
+/** Gives a session a custom name, overriding its auto-derived (first-message) label.
+ * Works on any session, not just the active one — renaming doesn't switch to it. */
+export function renameSession(sessionId: string, title: string) {
+  ensureLoadStarted();
+  const trimmed = title.trim();
+  if (!trimmed) return;
+  const message: ChatMessage = {
+    id: `title-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    kind: "session-title",
+    sessionId,
+    title: trimmed,
+    createdAt: new Date().toISOString(),
+  };
+  mutate((prev) => [...prev, message]);
+  void mirrorAppend(message);
 }

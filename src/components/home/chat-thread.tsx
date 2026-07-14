@@ -43,6 +43,7 @@ export function ChatThread({
             </div>
           );
         }
+        if (m.kind === "session-title") return null; // metadata only — never rendered in the thread
         return (
         <div key={m.id} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
           {m.kind === "text" && (

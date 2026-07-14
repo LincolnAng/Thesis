@@ -19,12 +19,12 @@ export function AddSupplierForm({ onDone }: { onDone: () => void }) {
   const [name, setName] = useState("");
   const [type, setType] = useState<SupplierType>("raw_materials");
   const [items, setItems] = useState("");
-  const [lastPrice, setLastPrice] = useState(0);
+  const [lastPrice, setLastPrice] = useState("");
   const [contact, setContact] = useState("");
 
   function save() {
     if (!name.trim()) return;
-    addSupplier({ name: name.trim(), type, items: items.trim(), lastPrice, contact: contact.trim() });
+    addSupplier({ name: name.trim(), type, items: items.trim(), lastPrice: Number(lastPrice) || 0, contact: contact.trim() });
     onDone();
   }
 
@@ -71,7 +71,7 @@ export function AddSupplierForm({ onDone }: { onDone: () => void }) {
             type="number"
             className="h-9"
             value={lastPrice}
-            onChange={(e) => setLastPrice(Number(e.target.value) || 0)}
+            onChange={(e) => setLastPrice(e.target.value)}
           />
         </div>
         <div className="space-y-1">

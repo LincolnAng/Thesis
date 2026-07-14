@@ -66,6 +66,11 @@ export function QuickEditForm({
 }) {
   const { products, rawMaterials } = useStore();
   const [draft, setDraft] = useState<EntryDraft>(initial);
+  // Buffered as text, not the parsed number, so typing a decimal point doesn't get
+  // silently eaten (Number("12.") rounds to 12, so re-deriving the field from
+  // draft.amount on every keystroke would make "12.50" collapse to "1250").
+  const [amountText, setAmountText] = useState(initial.amount == null ? "" : String(initial.amount));
+  const [quantityText, setQuantityText] = useState(initial.quantity == null ? "" : String(initial.quantity));
 
   function set<K extends keyof EntryDraft>(key: K, value: EntryDraft[K]) {
     setDraft((d) => ({ ...d, [key]: value }));
@@ -90,8 +95,11 @@ export function QuickEditForm({
             type="number"
             inputMode="decimal"
             className="h-9"
-            value={draft.amount ?? ""}
-            onChange={(e) => set("amount", e.target.value === "" ? null : Number(e.target.value))}
+            value={amountText}
+            onChange={(e) => {
+              setAmountText(e.target.value);
+              set("amount", e.target.value === "" ? null : Number(e.target.value));
+            }}
           />
         </div>
         <div className="space-y-1">
@@ -100,8 +108,11 @@ export function QuickEditForm({
             type="number"
             inputMode="decimal"
             className="h-9"
-            value={draft.quantity ?? ""}
-            onChange={(e) => set("quantity", e.target.value === "" ? null : Number(e.target.value))}
+            value={quantityText}
+            onChange={(e) => {
+              setQuantityText(e.target.value);
+              set("quantity", e.target.value === "" ? null : Number(e.target.value));
+            }}
           />
         </div>
         <div className="space-y-1">

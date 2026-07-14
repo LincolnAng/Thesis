@@ -8,11 +8,13 @@ import { procurementHistoryFor, weightedAverageUnitCost } from "@/lib/summary/pr
 import { formatPeso } from "@/lib/format";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useNumericDraft } from "@/lib/use-numeric-draft";
+import type { RawMaterialStock } from "@/lib/store/types";
 
 function AddIngredientForm({ onDone }: { onDone: () => void }) {
   const [name, setName] = useState("");
   const [unit, setUnit] = useState("kg");
-  const [unitCost, setUnitCost] = useState(0);
+  const [unitCost, setUnitCost] = useState("");
 
   function save() {
     if (!name.trim()) return;
@@ -23,7 +25,7 @@ function AddIngredientForm({ onDone }: { onDone: () => void }) {
       lowStockThreshold: 0,
       perBatchQty: null,
       color: null,
-      unitCost,
+      unitCost: Number(unitCost) || 0,
     });
     onDone();
   }
@@ -42,7 +44,7 @@ function AddIngredientForm({ onDone }: { onDone: () => void }) {
           type="number"
           placeholder="Cost per unit (₱)"
           value={unitCost}
-          onChange={(e) => setUnitCost(Number(e.target.value) || 0)}
+          onChange={(e) => setUnitCost(e.target.value)}
           className="col-span-2 h-8 text-sm"
         />
       </div>
@@ -54,6 +56,44 @@ function AddIngredientForm({ onDone }: { onDone: () => void }) {
           Cancel
         </Button>
       </div>
+    </div>
+  );
+}
+
+function IngredientCostRow({
+  material,
+  suggestion,
+}: {
+  material: RawMaterialStock;
+  suggestion: number | null;
+}) {
+  const costField = useNumericDraft(material.unitCost, (n) => updateRawMaterial(material.id, { unitCost: n }));
+  const suggestionDiffers = suggestion != null && Math.round(suggestion * 100) !== Math.round(material.unitCost * 100);
+
+  return (
+    <div className="space-y-1 rounded-xl border border-border p-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-medium text-foreground">{material.name}</span>
+        <span className="text-xs text-muted-foreground">per {material.unit}</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground">₱</span>
+        <Input
+          type="number"
+          className="h-8 flex-1"
+          value={costField.value}
+          onChange={(e) => costField.onChange(e.target.value)}
+        />
+      </div>
+      {suggestionDiffers && (
+        <button
+          type="button"
+          onClick={() => updateRawMaterial(material.id, { unitCost: Math.round(suggestion! * 100) / 100 })}
+          className="text-xs text-muted-foreground underline decoration-dotted"
+        >
+          Use {formatPeso(suggestion!)} — average of your logged purchases
+        </button>
+      )}
     </div>
   );
 }
@@ -87,36 +127,13 @@ export function IngredientCostsPanel() {
           </p>
 
           <div className="space-y-2">
-            {rawMaterials.map((material) => {
-          const suggestion = weightedAverageUnitCost(procurementHistoryFor(entries, material.name));
-          const suggestionDiffers = suggestion != null && Math.round(suggestion * 100) !== Math.round(material.unitCost * 100);
-          return (
-            <div key={material.id} className="space-y-1 rounded-xl border border-border p-2.5">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-medium text-foreground">{material.name}</span>
-                <span className="text-xs text-muted-foreground">per {material.unit}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">₱</span>
-                <Input
-                  type="number"
-                  className="h-8 flex-1"
-                  value={material.unitCost}
-                  onChange={(e) => updateRawMaterial(material.id, { unitCost: Number(e.target.value) || 0 })}
-                />
-              </div>
-              {suggestionDiffers && (
-                <button
-                  type="button"
-                  onClick={() => updateRawMaterial(material.id, { unitCost: Math.round(suggestion! * 100) / 100 })}
-                  className="text-xs text-muted-foreground underline decoration-dotted"
-                >
-                  Use {formatPeso(suggestion!)} — average of your logged purchases
-                </button>
-              )}
-            </div>
-              );
-            })}
+            {rawMaterials.map((material) => (
+              <IngredientCostRow
+                key={material.id}
+                material={material}
+                suggestion={weightedAverageUnitCost(procurementHistoryFor(entries, material.name))}
+              />
+            ))}
           </div>
 
           {showAddForm ? (
