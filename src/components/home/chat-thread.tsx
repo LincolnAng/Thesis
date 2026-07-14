@@ -83,7 +83,7 @@ export function ChatThread({
                 <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <p>{m.text}</p>
               </div>
-              <Link href="/summary" className="pl-6 text-xs font-medium text-primary underline">
+              <Link href="/" className="pl-6 text-xs font-medium text-primary underline">
                 See summary
               </Link>
             </div>

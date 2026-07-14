@@ -43,7 +43,7 @@ export function StockDetail() {
                 : ` — ${summary.mostUrgent.product.stockQty} jars left.`}
             </p>
           </div>
-          <Link href={`/?draft=${encodeURIComponent(`Made a batch of ${summary.mostUrgent.product.name}`)}`}>
+          <Link href={`/chat?draft=${encodeURIComponent(`Made a batch of ${summary.mostUrgent.product.name}`)}`}>
             <Button size="sm" variant="secondary">
               Plan a batch
             </Button>
@@ -100,7 +100,7 @@ export function StockDetail() {
                     {r.daysLeft} day{r.daysLeft === 1 ? "" : "s"} left.
                   </p>
                 </div>
-                <Link href="/summary/suppliers">
+                <Link href="/suppliers">
                   <Button size="sm" variant="secondary">
                     Order now?
                   </Button>

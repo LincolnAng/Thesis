@@ -89,7 +89,7 @@ export default function SummaryPage() {
       label: "Pricing Calculator",
       icon: Calculator,
       stat: `${formatPeso(avgCostPerJar)} avg cost/jar`,
-      href: "/summary/pricing",
+      href: "/pricing",
     },
     {
       key: "suppliers",
@@ -100,14 +100,14 @@ export default function SummaryPage() {
           ? `${suppliers.length} suppliers · ${priceRoseCount} price rose`
           : `${suppliers.length} suppliers`,
       statTone: priceRoseCount > 0 ? "warning" : "neutral",
-      href: "/summary/suppliers",
+      href: "/suppliers",
     },
     {
       key: "marketing",
       label: "Marketing",
       icon: Megaphone,
       stat: `${totalFollowers.toLocaleString("en-PH")} followers`,
-      href: "/summary/marketing",
+      href: "/marketing",
     },
   ];
 
@@ -116,7 +116,7 @@ export default function SummaryPage() {
       {section === null ? (
         <>
           <div className="mb-8 text-center">
-            <h1 className="text-2xl font-bold text-foreground">Summary</h1>
+            <h1 className="text-2xl font-bold text-foreground">Home</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               <span className="min-[900px]:hidden">Tap a section to see your numbers</span>
               <span className="hidden min-[900px]:inline">Click a section to see your numbers</span>

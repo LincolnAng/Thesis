@@ -1,4 +1,4 @@
-import { Bot, LayoutGrid, Settings, type LucideIcon } from "lucide-react";
+import { Bot, Home, Settings, type LucideIcon } from "lucide-react";
 
 export interface NavItem {
   href: string;
@@ -7,7 +7,7 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { href: "/", label: "Home", icon: Bot },
-  { href: "/summary", label: "Summary", icon: LayoutGrid },
+  { href: "/", label: "Home", icon: Home },
+  { href: "/chat", label: "Ask AI", icon: Bot },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
