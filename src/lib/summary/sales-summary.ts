@@ -27,6 +27,7 @@ export interface SalesSummary {
   jarsSold: number;
   avgPerJar: number;
   profit: number;
+  grossMarginPct: number;
   bestSellers: BestSellerRow[];
   byPriceType: PriceTypeRow[];
   recent: Entry[];
@@ -37,7 +38,7 @@ function normalize(text: string | null | undefined): string {
   return (text ?? "").trim().toLowerCase();
 }
 
-function findProduct(products: Product[], sku: string | null): Product | undefined {
+export function findProduct(products: Product[], sku: string | null): Product | undefined {
   if (!sku) return undefined;
   const n = normalize(sku);
   return (
@@ -112,6 +113,7 @@ export function computeSalesSummary(entries: Entry[], products: Product[], rawMa
     jarsSold,
     avgPerJar,
     profit,
+    grossMarginPct: revenue > 0 ? (profit / revenue) * 100 : 0,
     bestSellers,
     byPriceType,
     recent,

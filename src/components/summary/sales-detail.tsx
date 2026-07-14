@@ -9,12 +9,24 @@ import { ComparisonBadge } from "@/components/summary/comparison-badge";
 import { Sparkline } from "@/components/summary/sparkline";
 import { MonthlyTrendChart } from "@/components/summary/monthly-trend-chart";
 import { SalesTrendChart } from "@/components/summary/sales-trend-chart";
+import { NetProfitChart } from "@/components/summary/net-profit-chart";
+import { CogsPercentChart } from "@/components/summary/cogs-percent-chart";
+import { ProfitableProductsList } from "@/components/summary/profitable-products-list";
+import { computeMonthlyProfitTrend, computeProductMarginRanking } from "@/lib/summary/profit-summary";
 import { useViewMode } from "@/lib/summary/view-mode";
 
 export function SalesDetail() {
   const { entries, products, rawMaterials } = useStore();
   const summary = useMemo(
     () => computeSalesSummary(entries, products, rawMaterials),
+    [entries, products, rawMaterials],
+  );
+  const profitTrend = useMemo(
+    () => computeMonthlyProfitTrend(entries, products, rawMaterials),
+    [entries, products, rawMaterials],
+  );
+  const marginRanking = useMemo(
+    () => computeProductMarginRanking(entries, products, rawMaterials),
     [entries, products, rawMaterials],
   );
   const lastMonthLabel = previousMonthShortLabel();
@@ -33,13 +45,22 @@ export function SalesDetail() {
               {summary.jarsSold} jars sold · about {formatPeso(summary.avgPerJar)} per jar ·{" "}
               {formatPeso(summary.profit)} of this is profit
             </p>
+            {viewMode === "advanced" && (
+              <p className="text-sm text-muted-foreground">Gross margin: {Math.round(summary.grossMarginPct)}%</p>
+            )}
           </div>
           <Sparkline points={summary.trend} />
         </div>
       </div>
 
       <MonthlyTrendChart data={summary.trend} metric="sales" />
-      {viewMode === "advanced" && <SalesTrendChart data={summary.trend} />}
+      {viewMode === "advanced" && (
+        <>
+          <SalesTrendChart data={summary.trend} />
+          <NetProfitChart data={profitTrend} />
+          <CogsPercentChart data={profitTrend} />
+        </>
+      )}
 
       <div className="space-y-2">
         <h2 className="text-sm font-semibold text-muted-foreground">Best sellers</h2>
@@ -62,6 +83,8 @@ export function SalesDetail() {
           </div>
         )}
       </div>
+
+      {viewMode === "advanced" && <ProfitableProductsList rows={marginRanking} />}
 
       {summary.byPriceType.length > 0 && (
         <div className="space-y-2">
