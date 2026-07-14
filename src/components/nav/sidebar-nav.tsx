@@ -5,16 +5,19 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "@/lib/nav-items";
 
-export function TopHeader() {
+/** Desktop-only persistent nav — same colors/type/active-state treatment as before,
+ * just arranged as a vertical sidebar instead of a horizontal top bar. Mobile keeps
+ * the existing bottom tab bar untouched. */
+export function SidebarNav() {
   const pathname = usePathname();
 
   return (
-    <header className="sticky top-0 z-40 hidden h-16 items-center justify-between border-b border-border bg-card px-6 min-[900px]:flex">
-      <div className="flex items-center gap-2">
+    <aside className="sticky top-0 hidden h-svh w-56 shrink-0 flex-col border-r border-border bg-card px-3 py-4 min-[900px]:flex">
+      <div className="mb-6 flex items-center gap-2 px-2">
         <span className="text-xl">🍫</span>
         <span className="text-sm font-bold text-foreground">Mang Kiko&apos;s Cocoa</span>
       </div>
-      <nav className="flex items-center gap-1">
+      <nav className="flex flex-col gap-1">
         {NAV_ITEMS.map((item) => {
           const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
           const Icon = item.icon;
@@ -23,7 +26,7 @@ export function TopHeader() {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors",
+                "flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                 active ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-accent",
               )}
             >
@@ -33,6 +36,6 @@ export function TopHeader() {
           );
         })}
       </nav>
-    </header>
+    </aside>
   );
 }

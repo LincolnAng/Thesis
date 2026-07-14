@@ -261,7 +261,7 @@ function HomePageInner() {
   }
 
   return (
-    <div className="flex min-h-[calc(100svh-4rem)]">
+    <div className="flex min-h-svh">
       <ChatSidebarDesktop />
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="border-b border-border px-4 py-3 min-[900px]:hidden">
