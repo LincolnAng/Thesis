@@ -10,6 +10,8 @@ import { formatPeso } from "@/lib/format";
 import { updateProduct } from "@/lib/store/store";
 import { useStore } from "@/lib/store/use-store";
 import { ingredientRowCost, productCostPerJar } from "@/lib/summary/recipe-cost";
+import { CostBreakdownChart } from "@/components/finance/cost-breakdown-chart";
+import { useViewMode } from "@/lib/summary/view-mode";
 import type { PricingMode, Product, RecipeExtraRow, RecipeIngredientRow } from "@/lib/store/types";
 import { cn } from "@/lib/utils";
 
@@ -74,6 +76,7 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
   const [yieldDraft, setYieldDraft] = useState(product.batchYield);
   const [showMore, setShowMore] = useState(false);
   const [batchCount, setBatchCount] = useState(1);
+  const [viewMode] = useViewMode();
 
   const ingredients = product.recipeIngredients;
   const labor = product.recipeLabor;
@@ -312,6 +315,8 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
                   Ingredients, labor, and other costs add up to {formatPeso(cost.costPerJar)} per jar.
                 </p>
               </div>
+
+              {viewMode === "advanced" && <CostBreakdownChart cost={cost} />}
 
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">Ingredients in a batch</span>

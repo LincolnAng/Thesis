@@ -10,6 +10,8 @@ import { Bar } from "@/components/summary/bar";
 import { ComparisonBadge } from "@/components/summary/comparison-badge";
 import { Sparkline } from "@/components/summary/sparkline";
 import { ExpensesTrendChart } from "@/components/summary/expenses-trend-chart";
+import { ExpensesCategoryChart } from "@/components/summary/expenses-category-chart";
+import { useViewMode } from "@/lib/summary/view-mode";
 import { cn } from "@/lib/utils";
 
 export function ExpensesDetail() {
@@ -18,6 +20,7 @@ export function ExpensesDetail() {
   const categoryTrend = useMemo(() => monthlyExpensesByCategory(entries), [entries]);
   const lastMonthLabel = previousMonthShortLabel();
   const monthLabel = currentMonthLabel();
+  const [viewMode] = useViewMode();
 
   const overBudget = summary.remaining < 0;
   const budgetBarPct = summary.budget > 0 ? (summary.total / summary.budget) * 100 : 0;
@@ -47,6 +50,7 @@ export function ExpensesDetail() {
       </div>
 
       <ExpensesTrendChart data={categoryTrend} totalBudget={summary.budget} />
+      {viewMode === "advanced" && <ExpensesCategoryChart data={categoryTrend} />}
 
       <div className="space-y-2">
         <h2 className="text-sm font-semibold text-muted-foreground">Where it went</h2>

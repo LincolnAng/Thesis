@@ -10,14 +10,17 @@ import { computeIngredientReach } from "@/lib/summary/ingredient-reach";
 import { stockMonthlyTrend } from "@/lib/summary/stock-trend";
 import { Bar } from "@/components/summary/bar";
 import { MonthlyTrendChart } from "@/components/summary/monthly-trend-chart";
+import { StockProducedSoldChart } from "@/components/summary/stock-produced-sold-chart";
 import { StockCalendar } from "@/components/summary/stock-calendar";
 import { Button } from "@/components/ui/button";
+import { useViewMode } from "@/lib/summary/view-mode";
 import { cn } from "@/lib/utils";
 
 export function StockDetail() {
   const { products, rawMaterials, entries } = useStore();
   const summary = useMemo(() => computeStockSummary(products, rawMaterials, entries), [products, rawMaterials, entries]);
   const trend = useMemo(() => stockMonthlyTrend(entries), [entries]);
+  const [viewMode] = useViewMode();
   const reaches = useMemo(
     () => computeIngredientReach(rawMaterials, products, entries),
     [rawMaterials, products, entries],
@@ -27,6 +30,7 @@ export function StockDetail() {
   return (
     <div className="space-y-6">
       <MonthlyTrendChart data={trend} metric="stock" />
+      {viewMode === "advanced" && <StockProducedSoldChart data={trend} />}
 
       {summary.mostUrgent && (
         <div className="space-y-3 rounded-2xl border border-[var(--status-warning)] bg-amber-50 px-4 py-3.5 dark:bg-amber-950/30">

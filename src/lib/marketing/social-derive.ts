@@ -19,3 +19,17 @@ export function summarizeByPlatform(stats: SocialStatEntry[]): PlatformSummary[]
     return { platform, latest, followerChange };
   });
 }
+
+export type WeeklyFollowersPoint = { weekOf: string } & Partial<Record<(typeof PLATFORMS)[number], number>>;
+
+/** Every logged week, oldest to newest, pivoted so each platform is its own column —
+ * the full history `summarizeByPlatform` discards after comparing the latest two weeks. */
+export function weeklyFollowersByPlatform(stats: SocialStatEntry[]): WeeklyFollowersPoint[] {
+  const byWeek = new Map<string, WeeklyFollowersPoint>();
+  for (const s of stats) {
+    const point = byWeek.get(s.weekOf) ?? { weekOf: s.weekOf };
+    point[s.platform] = s.followers;
+    byWeek.set(s.weekOf, point);
+  }
+  return Array.from(byWeek.values()).sort((a, b) => new Date(a.weekOf).getTime() - new Date(b.weekOf).getTime());
+}

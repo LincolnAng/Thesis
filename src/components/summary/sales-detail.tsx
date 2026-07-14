@@ -8,6 +8,8 @@ import { formatDate, formatPeso, previousMonthShortLabel } from "@/lib/format";
 import { ComparisonBadge } from "@/components/summary/comparison-badge";
 import { Sparkline } from "@/components/summary/sparkline";
 import { MonthlyTrendChart } from "@/components/summary/monthly-trend-chart";
+import { SalesTrendChart } from "@/components/summary/sales-trend-chart";
+import { useViewMode } from "@/lib/summary/view-mode";
 
 export function SalesDetail() {
   const { entries, products, rawMaterials } = useStore();
@@ -16,6 +18,7 @@ export function SalesDetail() {
     [entries, products, rawMaterials],
   );
   const lastMonthLabel = previousMonthShortLabel();
+  const [viewMode] = useViewMode();
 
   return (
     <div className="space-y-6">
@@ -36,6 +39,7 @@ export function SalesDetail() {
       </div>
 
       <MonthlyTrendChart data={summary.trend} metric="sales" />
+      {viewMode === "advanced" && <SalesTrendChart data={summary.trend} />}
 
       <div className="space-y-2">
         <h2 className="text-sm font-semibold text-muted-foreground">Best sellers</h2>
