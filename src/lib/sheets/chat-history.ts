@@ -1,4 +1,4 @@
-import { ensureSheetExists, getSheetValues, updateSheetValues } from "./client";
+import { appendSheetValues, ensureSheetExists, getSheetValues, updateSheetValues } from "./client";
 import type { ChatMessage } from "@/lib/home/chat-types";
 
 const CHAT_SHEET = "ChatHistory";
@@ -35,28 +35,32 @@ export async function getChatHistory(): Promise<ChatMessage[]> {
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
-async function findRowIndex(id: string): Promise<{ rows: string[][]; index: number | null }> {
+async function findRowIndex(id: string): Promise<number | null> {
   const rows = await getSheetValues(`${CHAT_SHEET}!A:E`);
   const index = rows.findIndex((row) => row[0] === id);
-  return { rows, index: index === -1 ? null : index };
+  return index === -1 ? null : index;
 }
 
 export async function appendChatMessage(message: ChatMessage): Promise<void> {
   await ensureSheetExists(CHAT_SHEET, CHAT_HEADER);
-  const rows = await getSheetValues(`${CHAT_SHEET}!A:E`);
-  const nextRow = rows.length + 1;
-  await updateSheetValues(`${CHAT_SHEET}!A${nextRow}:E${nextRow}`, [toRow(message)]);
+  await appendSheetValues(`${CHAT_SHEET}!A:E`, [toRow(message)]);
 }
 
 export async function updateChatMessage(id: string, message: ChatMessage): Promise<void> {
   await ensureSheetExists(CHAT_SHEET, CHAT_HEADER);
-  const { rows, index } = await findRowIndex(id);
-  const targetRow = index !== null ? index + 1 : rows.length + 1;
-  await updateSheetValues(`${CHAT_SHEET}!A${targetRow}:E${targetRow}`, [toRow(message)]);
+  const index = await findRowIndex(id);
+  if (index !== null) {
+    const targetRow = index + 1;
+    await updateSheetValues(`${CHAT_SHEET}!A${targetRow}:E${targetRow}`, [toRow(message)]);
+  } else {
+    // Its original append may not have landed yet — append this as a new row rather
+    // than guessing at a row number (that guess is exactly the race this replaced).
+    await appendSheetValues(`${CHAT_SHEET}!A:E`, [toRow(message)]);
+  }
 }
 
 export async function deleteChatMessage(id: string): Promise<void> {
-  const { index } = await findRowIndex(id);
+  const index = await findRowIndex(id);
   if (index === null) return;
   const targetRow = index + 1;
   await updateSheetValues(`${CHAT_SHEET}!E${targetRow}`, [[JSON.stringify({ deleted: true })]]);

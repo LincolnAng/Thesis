@@ -37,6 +37,20 @@ export async function updateSheetValues(range: string, values: string[][]): Prom
   });
 }
 
+/**
+ * Appends a row using Sheets' own append operation instead of reading the current
+ * row count and writing to `count + 1` — that read-then-write pattern races when two
+ * appends happen close together (both read the same count, both write the same row,
+ * one silently clobbers the other). `values:append` has Sheets itself atomically pick
+ * the next row per request, so concurrent appends can't collide.
+ */
+export async function appendSheetValues(range: string, values: string[][]): Promise<void> {
+  await sheetsFetch(`/values/${encodeURIComponent(range)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
+    method: "POST",
+    body: JSON.stringify({ range, majorDimension: "ROWS", values }),
+  });
+}
+
 interface SheetMeta {
   sheetId: number;
   title: string;
