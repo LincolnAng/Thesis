@@ -42,6 +42,7 @@ export function createSheetCollection<T>(config: CollectionConfig<T>): SheetColl
   }
 
   async function getAllRows(): Promise<string[][]> {
+    await ensureExists(); // a brand-new tab that doesn't exist yet fails the range lookup outright
     return getSheetValues(range);
   }
 

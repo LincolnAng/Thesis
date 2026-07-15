@@ -1,11 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { entriesCollection } from "@/lib/sheets/entries";
+import { productsCollection, recipesCollection } from "@/lib/sheets/products";
+import { rawMaterialsCollection } from "@/lib/sheets/raw-materials";
+import { suppliersCollection, supplierPriceHistoryCollection } from "@/lib/sheets/suppliers";
+import { socialStatsCollection } from "@/lib/sheets/marketing";
+import { budgetsCollection } from "@/lib/sheets/budgets";
 import type { SheetCollection } from "@/lib/sheets/collection";
 
-// One entry today — Products/RawMaterials/Suppliers/SocialStats/CategoryBudgets
-// join this map in the next stage, following the exact same shape.
 const COLLECTIONS = {
   entries: entriesCollection,
+  products: productsCollection,
+  recipes: recipesCollection,
+  rawMaterials: rawMaterialsCollection,
+  suppliers: suppliersCollection,
+  supplierPriceHistory: supplierPriceHistoryCollection,
+  socialStats: socialStatsCollection,
+  budgets: budgetsCollection,
 } as const;
 
 type CollectionName = keyof typeof COLLECTIONS;
@@ -16,8 +26,27 @@ function isCollectionName(value: unknown): value is CollectionName {
 
 export async function GET() {
   try {
-    const entries = await entriesCollection.getAll();
-    return NextResponse.json({ success: true, entries });
+    const [entries, products, recipes, rawMaterials, suppliers, supplierPriceHistory, socialStats, budgets] = await Promise.all([
+      entriesCollection.getAll(),
+      productsCollection.getAll(),
+      recipesCollection.getAll(),
+      rawMaterialsCollection.getAll(),
+      suppliersCollection.getAll(),
+      supplierPriceHistoryCollection.getAll(),
+      socialStatsCollection.getAll(),
+      budgetsCollection.getAll(),
+    ]);
+    return NextResponse.json({
+      success: true,
+      entries,
+      products,
+      recipes,
+      rawMaterials,
+      suppliers,
+      supplierPriceHistory,
+      socialStats,
+      budgets,
+    });
   } catch (err) {
     return NextResponse.json({ success: false, detail: err instanceof Error ? err.message : String(err) });
   }

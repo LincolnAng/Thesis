@@ -62,7 +62,7 @@ function fromRow(row: string[]): Entry | null {
 }
 
 export const entriesCollection = createSheetCollection<Entry>({
-  sheetName: "Entries",
+  sheetName: "Transactions",
   header: HEADER,
   idColumn: "id",
   deletedColumn: "deletedAt",

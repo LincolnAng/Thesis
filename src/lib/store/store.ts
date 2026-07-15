@@ -5,10 +5,23 @@ import {
   initialSocialStats,
   initialSuppliers,
 } from "./initial-data";
+import {
+  assembleProduct,
+  assembleSupplier,
+  budgetRowsToRecord,
+  flattenProductRecipe,
+  recordToBudgetRows,
+  type BudgetRow,
+  type ProductRow,
+  type RecipeRow,
+  type SupplierPriceHistoryRow,
+  type SupplierRow,
+} from "./sheet-shapes";
 import type {
   AiStatus,
   Entry,
   ExpenseCategory,
+  PriceHistoryPoint,
   Product,
   RawMaterialStock,
   SocialStatEntry,
@@ -30,6 +43,12 @@ export interface StoreState {
 const STORAGE_KEY = "mang-kikos-cocoa-state-v6";
 const SCHEMA_VERSION = 6;
 const ENTRIES_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-entries-migrated-v1";
+const PRODUCTS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-products-migrated-v1";
+const RAW_MATERIALS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-raw-materials-migrated-v1";
+const SUPPLIERS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-suppliers-migrated-v1";
+const SOCIAL_STATS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-social-stats-migrated-v1";
+const BUDGETS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-budgets-migrated-v1";
+const SYNC_POLL_INTERVAL_MS = 30_000;
 
 // Different expense categories naturally need different amounts planned for
 // them — one flat monthly ceiling couldn't tell you if ingredients were fine
@@ -87,7 +106,7 @@ function persist(state: StoreState) {
 const serverSnapshot: StoreState = defaultState();
 let state: StoreState = serverSnapshot;
 let hydrated = false;
-let entriesLoadStarted = false;
+let serverLoadStarted = false;
 // Entries added locally before the authoritative Sheets fetch below resolves —
 // on that first load, the fetch result overwrites `state.entries` wholesale
 // (so a deletion made on another device is correctly reflected here too), but
@@ -102,9 +121,10 @@ function ensureHydrated() {
     state = loadState();
     hydrated = true;
   }
-  if (!entriesLoadStarted) {
-    entriesLoadStarted = true;
-    void loadEntriesFromServer();
+  if (!serverLoadStarted) {
+    serverLoadStarted = true;
+    void loadAllFromServer();
+    startSyncPolling();
   }
 }
 
@@ -113,90 +133,188 @@ function emit() {
   listeners.forEach((l) => l());
 }
 
+/** Fire-and-forget helper for every `mirror*` call below — best-effort, since the
+ * paint cache still has the change locally for this device even if this fails. */
+async function mirrorOp(
+  collection: string,
+  op: "append" | "update" | "delete" | "migrate",
+  payload: { id?: string; item?: unknown; items?: unknown[] },
+): Promise<void> {
+  try {
+    await fetch("/api/business-data", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ collection, op, ...payload }),
+    });
+  } catch {
+    // best-effort
+  }
+}
+
+/** Pushes whatever's currently local up to Sheets exactly once, the first time the
+ * sheet comes back empty for that collection — shared by every collection below so
+ * the migration logic (and its "don't re-run, don't double-import" flag) isn't
+ * duplicated five times. */
+async function migrateCollectionIfEmpty<T>(
+  collectionName: string,
+  flagKey: string,
+  serverItems: T[],
+  localItems: T[],
+): Promise<{ items: T[]; migrated: boolean }> {
+  if (serverItems.length > 0 || window.localStorage.getItem(flagKey)) {
+    return { items: serverItems, migrated: false };
+  }
+  if (localItems.length === 0) {
+    window.localStorage.setItem(flagKey, "true");
+    return { items: serverItems, migrated: false };
+  }
+  try {
+    const res = await fetch("/api/business-data", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ collection: collectionName, op: "migrate", items: localItems }),
+    });
+    const json = await res.json();
+    if (json.success) {
+      window.localStorage.setItem(flagKey, "true");
+      return { items: localItems, migrated: true };
+    }
+  } catch {
+    // leave the flag unset — retried on the next load
+  }
+  return { items: serverItems, migrated: false };
+}
+
+async function migrateChildRows(collectionName: string, items: unknown[]): Promise<void> {
+  if (items.length === 0) return;
+  await mirrorOp(collectionName, "migrate", { items });
+}
+
+function priceHistoryToRows(supplierId: string, history: PriceHistoryPoint[]): SupplierPriceHistoryRow[] {
+  return history.map((h, i) => ({ id: genId(`price-${supplierId}-${i}`), supplierId, date: h.date, price: h.price }));
+}
+
 /**
- * Google Sheets is the source of truth for entries (business data is migrating
- * off localStorage collection by collection — entries first). Local storage
- * still acts as a disposable paint cache (via `persist`/`loadState` above) for
- * instant load, same as chat history's pattern.
+ * Google Sheets is the source of truth for every business collection now —
+ * entries, products+recipes, raw materials, suppliers+price history, social
+ * stats, and budgets. Local storage remains a disposable paint cache for
+ * instant load, same pattern as chat history. This always-overwrite fetch also
+ * doubles as the two-way sync poll (`startSyncPolling` below): edits made
+ * directly in Sheets, or from another device, show up here on the next call.
+ *
+ * Deletion is deliberately one-way (app → Sheets): a row missing from the
+ * server response is never treated as "delete it locally" — only the
+ * app's own delete/reset mutators remove data. That's what makes it safe to
+ * reorganize or prune the spreadsheet for looks without risking real data.
  */
-async function loadEntriesFromServer() {
+async function loadAllFromServer() {
   try {
     const res = await fetch("/api/business-data");
     const json = await res.json();
-    if (!json.success || !Array.isArray(json.entries)) return; // Sheets unreachable — keep local/paint-cache state
+    if (!json.success) return; // Sheets unreachable — keep local/paint-cache state
 
-    let serverEntries: Entry[] = json.entries;
+    const entriesMigration = await migrateCollectionIfEmpty<Entry>(
+      "entries",
+      ENTRIES_MIGRATION_FLAG_KEY,
+      Array.isArray(json.entries) ? json.entries : [],
+      state.entries.filter((e) => !e.id.startsWith("seed-")),
+    );
 
-    if (serverEntries.length === 0 && !window.localStorage.getItem(ENTRIES_MIGRATION_FLAG_KEY)) {
-      // First run against a fresh sheet — push up any real local history once,
-      // skipping the demo seed data every fresh install starts with.
-      const localEntries = state.entries.filter((e) => !e.id.startsWith("seed-"));
-      if (localEntries.length > 0) {
-        try {
-          const migrateRes = await fetch("/api/business-data", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ collection: "entries", op: "migrate", items: localEntries }),
-          });
-          const migrateJson = await migrateRes.json();
-          if (migrateJson.success) {
-            serverEntries = localEntries;
-            window.localStorage.setItem(ENTRIES_MIGRATION_FLAG_KEY, "true");
-          }
-        } catch {
-          // leave the flag unset — retried on the next load
-        }
-      } else {
-        window.localStorage.setItem(ENTRIES_MIGRATION_FLAG_KEY, "true");
-      }
+    const productsMigration = await migrateCollectionIfEmpty<ProductRow>(
+      "products",
+      PRODUCTS_MIGRATION_FLAG_KEY,
+      Array.isArray(json.products) ? json.products : [],
+      state.products.map(toProductRow),
+    );
+    let recipeRows: RecipeRow[] = Array.isArray(json.recipes) ? json.recipes : [];
+    if (productsMigration.migrated) {
+      recipeRows = state.products.flatMap(flattenProductRecipe);
+      await migrateChildRows("recipes", recipeRows);
     }
 
+    const rawMaterialsMigration = await migrateCollectionIfEmpty<RawMaterialStock>(
+      "rawMaterials",
+      RAW_MATERIALS_MIGRATION_FLAG_KEY,
+      Array.isArray(json.rawMaterials) ? json.rawMaterials : [],
+      state.rawMaterials,
+    );
+
+    const suppliersMigration = await migrateCollectionIfEmpty<SupplierRow>(
+      "suppliers",
+      SUPPLIERS_MIGRATION_FLAG_KEY,
+      Array.isArray(json.suppliers) ? json.suppliers : [],
+      state.suppliers.map(toSupplierRow),
+    );
+    let historyRows: SupplierPriceHistoryRow[] = Array.isArray(json.supplierPriceHistory) ? json.supplierPriceHistory : [];
+    if (suppliersMigration.migrated) {
+      historyRows = state.suppliers.flatMap((s) => priceHistoryToRows(s.id, s.priceHistory));
+      await migrateChildRows("supplierPriceHistory", historyRows);
+    }
+
+    const socialStatsMigration = await migrateCollectionIfEmpty<SocialStatEntry>(
+      "socialStats",
+      SOCIAL_STATS_MIGRATION_FLAG_KEY,
+      Array.isArray(json.socialStats) ? json.socialStats : [],
+      state.socialStats,
+    );
+
+    const budgetsMigration = await migrateCollectionIfEmpty<BudgetRow>(
+      "budgets",
+      BUDGETS_MIGRATION_FLAG_KEY,
+      Array.isArray(json.budgets) ? json.budgets : [],
+      recordToBudgetRows(state.categoryBudgets),
+    );
+
+    const serverEntries = entriesMigration.items;
     const serverIds = new Set(serverEntries.map((e) => e.id));
+
     setState((prev) => {
       const stillPendingLocal = prev.entries.filter((e) => pendingLocalEntryIds.has(e.id) && !serverIds.has(e.id));
       pendingLocalEntryIds = new Set(stillPendingLocal.map((e) => e.id));
-      const merged = [...stillPendingLocal, ...serverEntries].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
-      return { ...prev, entries: merged };
+      const mergedEntries = [...stillPendingLocal, ...serverEntries].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+
+      return {
+        ...prev,
+        entries: mergedEntries,
+        products: productsMigration.items.map((row) => assembleProduct(row, recipeRows)),
+        rawMaterials: rawMaterialsMigration.items,
+        suppliers: suppliersMigration.items.map((row) => assembleSupplier(row, historyRows)),
+        socialStats: socialStatsMigration.items,
+        categoryBudgets: budgetRowsToRecord(budgetsMigration.items),
+      };
     });
   } catch {
     // network/parse error — keep local/paint-cache state
   }
 }
 
-async function mirrorEntryAppend(entry: Entry) {
-  try {
-    await fetch("/api/business-data", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ collection: "entries", op: "append", item: entry }),
-    });
-  } catch {
-    // best-effort — the paint cache still has it locally for this device
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+/** Two-way sync: re-runs the same authoritative fetch on a timer so edits made
+ * directly in Sheets (or from another device) show up here without a page reload.
+ * Paused while the tab isn't visible, both to save quota and because a poll can't
+ * usefully update a page nobody's looking at. */
+function startSyncPolling() {
+  if (typeof window === "undefined" || pollTimer) return;
+
+  function tick() {
+    if (document.visibilityState === "visible") void loadAllFromServer();
   }
+
+  pollTimer = setInterval(tick, SYNC_POLL_INTERVAL_MS);
+  document.addEventListener("visibilitychange", tick);
+}
+
+async function mirrorEntryAppend(entry: Entry) {
+  await mirrorOp("entries", "append", { item: entry });
 }
 
 async function mirrorEntryUpdate(id: string, entry: Entry) {
-  try {
-    await fetch("/api/business-data", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ collection: "entries", op: "update", id, item: entry }),
-    });
-  } catch {
-    // best-effort
-  }
+  await mirrorOp("entries", "update", { id, item: entry });
 }
 
 async function mirrorEntryDelete(id: string) {
-  try {
-    await fetch("/api/business-data", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ collection: "entries", op: "delete", id }),
-    });
-  } catch {
-    // best-effort
-  }
+  await mirrorOp("entries", "delete", { id });
 }
 
 export function subscribe(listener: () => void): () => void {
@@ -326,57 +444,125 @@ export function replaceEntry(id: string, next: Omit<Entry, "id">) {
 
 // --- Products ------------------------------------------------------------
 
+function toProductRow(p: Product): ProductRow {
+  return {
+    id: p.id,
+    name: p.name,
+    standardPrice: p.standardPrice,
+    pricingMode: p.pricingMode,
+    marginPercent: p.marginPercent,
+    friendPrice: p.friendPrice,
+    wholesalePrice: p.wholesalePrice,
+    stockQty: p.stockQty,
+    lowStockThreshold: p.lowStockThreshold,
+    batchYield: p.batchYield,
+  };
+}
+
+/** Diffs one product's recipe rows before/after an edit and mirrors just the
+ * change — rows no longer present are soft-deleted, everything else is
+ * upserted (Sheets' `update` already appends when a row doesn't exist yet). */
+function mirrorProductRecipeDiff(oldProduct: Product, newProduct: Product) {
+  const oldRows = flattenProductRecipe(oldProduct);
+  const newRows = flattenProductRecipe(newProduct);
+  const newIds = new Set(newRows.map((r) => r.id));
+  for (const row of oldRows) {
+    if (!newIds.has(row.id)) void mirrorOp("recipes", "delete", { id: row.id });
+  }
+  for (const row of newRows) {
+    void mirrorOp("recipes", "update", { id: row.id, item: row });
+  }
+}
+
 export function updateProduct(id: string, patch: Partial<Product>) {
+  let oldProduct: Product | undefined;
+  let newProduct: Product | undefined;
   setState((prev) => ({
     ...prev,
-    products: prev.products.map((p) => (p.id === id ? { ...p, ...patch } : p)),
+    products: prev.products.map((p) => {
+      if (p.id !== id) return p;
+      oldProduct = p;
+      newProduct = { ...p, ...patch };
+      return newProduct;
+    }),
   }));
+  if (!oldProduct || !newProduct) return;
+  void mirrorOp("products", "update", { id, item: toProductRow(newProduct) });
+  if (patch.recipeIngredients || patch.recipeLabor || patch.recipeMisc) {
+    mirrorProductRecipeDiff(oldProduct, newProduct);
+  }
 }
 
 export function addProduct(input: Omit<Product, "id">): Product {
   const product: Product = { ...input, id: genId("prod") };
   setState((prev) => ({ ...prev, products: [...prev.products, product] }));
+  void mirrorOp("products", "append", { item: toProductRow(product) });
+  void migrateChildRows("recipes", flattenProductRecipe(product));
   return product;
 }
 
 // --- Raw materials ---------------------------------------------------------
 
 export function updateRawMaterial(id: string, patch: Partial<RawMaterialStock>) {
+  let updated: RawMaterialStock | undefined;
   setState((prev) => ({
     ...prev,
-    rawMaterials: prev.rawMaterials.map((m) => (m.id === id ? { ...m, ...patch } : m)),
+    rawMaterials: prev.rawMaterials.map((m) => {
+      if (m.id !== id) return m;
+      updated = { ...m, ...patch };
+      return updated;
+    }),
   }));
+  if (updated) void mirrorOp("rawMaterials", "update", { id, item: updated });
 }
 
 export function addRawMaterial(input: Omit<RawMaterialStock, "id">): RawMaterialStock {
   const material: RawMaterialStock = { ...input, id: genId("rm") };
   setState((prev) => ({ ...prev, rawMaterials: [...prev.rawMaterials, material] }));
+  void mirrorOp("rawMaterials", "append", { item: material });
   return material;
 }
 
 // --- Suppliers -------------------------------------------------------------
 
+function toSupplierRow(s: Supplier): SupplierRow {
+  return { id: s.id, name: s.name, type: s.type, items: s.items, lastPrice: s.lastPrice, contact: s.contact };
+}
+
 export function updateSupplier(id: string, patch: Partial<Supplier>) {
+  let updated: Supplier | undefined;
+  let newHistoryPoint: PriceHistoryPoint | null = null;
   setState((prev) => ({
     ...prev,
     suppliers: prev.suppliers.map((s) => {
       if (s.id !== id) return s;
       const next = { ...s, ...patch };
       if (patch.lastPrice !== undefined && patch.lastPrice !== s.lastPrice) {
-        next.priceHistory = [...s.priceHistory, { date: new Date().toISOString(), price: patch.lastPrice }];
+        const point = { date: new Date().toISOString(), price: patch.lastPrice };
+        next.priceHistory = [...s.priceHistory, point];
+        newHistoryPoint = point;
       }
+      updated = next;
       return next;
     }),
   }));
+  if (updated) void mirrorOp("suppliers", "update", { id, item: toSupplierRow(updated) });
+  if (newHistoryPoint) {
+    const point: PriceHistoryPoint = newHistoryPoint;
+    void mirrorOp("supplierPriceHistory", "append", {
+      item: { id: genId(`price-${id}`), supplierId: id, date: point.date, price: point.price },
+    });
+  }
 }
 
 export function addSupplier(input: Omit<Supplier, "id" | "priceHistory">): Supplier {
-  const supplier: Supplier = {
-    ...input,
-    id: genId("sup"),
-    priceHistory: [{ date: new Date().toISOString(), price: input.lastPrice }],
-  };
+  const historyPoint = { date: new Date().toISOString(), price: input.lastPrice };
+  const supplier: Supplier = { ...input, id: genId("sup"), priceHistory: [historyPoint] };
   setState((prev) => ({ ...prev, suppliers: [...prev.suppliers, supplier] }));
+  void mirrorOp("suppliers", "append", { item: toSupplierRow(supplier) });
+  void mirrorOp("supplierPriceHistory", "append", {
+    item: { id: genId(`price-${supplier.id}`), supplierId: supplier.id, date: historyPoint.date, price: historyPoint.price },
+  });
   return supplier;
 }
 
@@ -385,6 +571,7 @@ export function addSupplier(input: Omit<Supplier, "id" | "priceHistory">): Suppl
 export function addSocialStat(input: Omit<SocialStatEntry, "id">): SocialStatEntry {
   const stat: SocialStatEntry = { ...input, id: genId("soc") };
   setState((prev) => ({ ...prev, socialStats: [...prev.socialStats, stat] }));
+  void mirrorOp("socialStats", "append", { item: stat });
   return stat;
 }
 
@@ -408,10 +595,12 @@ export function setApiKeyMissing(missing: boolean) {
 // --- Budget --------------------------------------------------------------
 
 export function setCategoryBudget(category: ExpenseCategory, amount: number) {
+  const clamped = Math.max(0, amount);
   setState((prev) => ({
     ...prev,
-    categoryBudgets: { ...prev.categoryBudgets, [category]: Math.max(0, amount) },
+    categoryBudgets: { ...prev.categoryBudgets, [category]: clamped },
   }));
+  void mirrorOp("budgets", "update", { id: category, item: { category, monthlyBudget: clamped } });
 }
 
 export function removeCategoryBudget(category: ExpenseCategory) {
@@ -420,16 +609,17 @@ export function removeCategoryBudget(category: ExpenseCategory) {
     delete next[category];
     return { ...prev, categoryBudgets: next };
   });
+  void mirrorOp("budgets", "delete", { id: category });
 }
 
 export function resetAllData() {
   setState(() => defaultState());
 }
 
-/** Restores the local-only collections from a previously exported backup file.
- * Deliberately excludes `entries` — those are Sheets-authoritative, so overwriting
- * them here would just be clobbered by the next `loadEntriesFromServer()` fetch,
- * and re-adding them via `addEntry` would duplicate rows in the sheet. */
+/** Restores the catalog collections from a previously exported backup file, and
+ * pushes them up to Sheets too — these are Sheets-authoritative now (like
+ * entries), so without this the next sync poll would just overwrite the
+ * restored values straight back with whatever Sheets still has. */
 export function restoreLocalCollections(data: {
   products?: Product[];
   rawMaterials?: RawMaterialStock[];
@@ -445,4 +635,20 @@ export function restoreLocalCollections(data: {
     socialStats: data.socialStats ?? prev.socialStats,
     categoryBudgets: data.categoryBudgets ?? prev.categoryBudgets,
   }));
+
+  data.products?.forEach((p) => {
+    void mirrorOp("products", "update", { id: p.id, item: toProductRow(p) });
+    void migrateChildRows("recipes", flattenProductRecipe(p));
+  });
+  data.rawMaterials?.forEach((m) => void mirrorOp("rawMaterials", "update", { id: m.id, item: m }));
+  data.suppliers?.forEach((s) => {
+    void mirrorOp("suppliers", "update", { id: s.id, item: toSupplierRow(s) });
+    void migrateChildRows("supplierPriceHistory", priceHistoryToRows(s.id, s.priceHistory));
+  });
+  data.socialStats?.forEach((stat) => void mirrorOp("socialStats", "update", { id: stat.id, item: stat }));
+  if (data.categoryBudgets) {
+    for (const [category, amount] of Object.entries(data.categoryBudgets)) {
+      void mirrorOp("budgets", "update", { id: category, item: { category, monthlyBudget: amount } });
+    }
+  }
 }

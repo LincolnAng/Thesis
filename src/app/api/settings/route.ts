@@ -6,12 +6,14 @@ const VALID_BOT_LANGUAGES: BotLanguage[] = ["english", "filipino", "cebuano"];
 export async function GET() {
   try {
     const settings = await getAiSettings();
+    const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
     return NextResponse.json({
       success: true,
       hasKey: !!settings.apiKey,
       keyPreview: settings.apiKey ? maskApiKey(settings.apiKey) : null,
       model: settings.model,
       botLanguage: settings.botLanguage,
+      spreadsheetUrl: spreadsheetId ? `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit` : null,
     });
   } catch (err) {
     return NextResponse.json({

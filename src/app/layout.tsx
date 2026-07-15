@@ -37,7 +37,7 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${sans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-background text-foreground">
+      <body className="min-h-full flex flex-col bg-background text-foreground" suppressHydrationWarning>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
           <AppShell>{children}</AppShell>
         </ThemeProvider>

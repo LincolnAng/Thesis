@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ChangeEvent } from "react";
 import { useTheme } from "next-themes";
-import { ChevronDown, ChevronUp, Database, Download, KeyRound, Languages, Moon, Trash2, Upload } from "lucide-react";
+import { ChevronDown, ChevronUp, Database, Download, ExternalLink, KeyRound, Languages, Moon, Sheet, Trash2, Upload } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,6 +23,7 @@ interface SettingsState {
   keyPreview: string | null;
   model: string | null;
   botLanguage: BotLanguage;
+  spreadsheetUrl: string | null;
 }
 
 export default function SettingsPage() {
@@ -60,7 +61,13 @@ export default function SettingsPage() {
           setLoadError(true);
           return;
         }
-        setSettings({ hasKey: json.hasKey, keyPreview: json.keyPreview, model: json.model, botLanguage: json.botLanguage ?? "english" });
+        setSettings({
+          hasKey: json.hasKey,
+          keyPreview: json.keyPreview,
+          model: json.model,
+          botLanguage: json.botLanguage ?? "english",
+          spreadsheetUrl: json.spreadsheetUrl ?? null,
+        });
         setModelDraft(json.model ?? "");
         setEditingKey(!json.hasKey);
       })
@@ -98,6 +105,7 @@ export default function SettingsPage() {
           keyPreview: refreshed.keyPreview,
           model: refreshed.model,
           botLanguage: refreshed.botLanguage ?? "english",
+          spreadsheetUrl: refreshed.spreadsheetUrl ?? null,
         });
       }
     } catch {
@@ -173,7 +181,7 @@ export default function SettingsPage() {
       try {
         const parsed = JSON.parse(String(ev.target?.result));
         restoreLocalCollections(parsed);
-        setBackupMessage("Restored — products, stock, and suppliers are back from your backup file.");
+        setBackupMessage("Restored — products, stock, and suppliers are back from your backup file, and synced to Google Sheets.");
       } catch {
         setBackupMessage("Couldn't read that file — make sure it's a backup exported from this app.");
       }
@@ -315,13 +323,38 @@ export default function SettingsPage() {
       <Card className="mt-4">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
+            <Sheet className="h-4 w-4" /> Google Sheets
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Every sale, expense, product, ingredient, supplier, and budget is kept in sync with a Google
+            Sheet — a readable, editable record of the whole business. Edits made directly in the sheet sync back
+            here automatically within moments.
+          </p>
+          {settings?.spreadsheetUrl && (
+            <a
+              href={settings.spreadsheetUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary underline decoration-dotted"
+            >
+              Open the spreadsheet <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
             <Database className="h-4 w-4" /> Business data backup
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Back up your products, recipes, stock levels, and suppliers as a file. Your logged sales and expenses
-            are already backed up automatically in Google Sheets, so they aren&apos;t included here.
+            Download a file with your products, recipes, stock levels, and suppliers — a manual snapshot alongside
+            the automatic Google Sheets sync above. Importing a file pushes its contents back up to Sheets too.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="secondary" className="gap-1" onClick={exportBackup}>
@@ -346,8 +379,10 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Resets products, recipes, stock levels, and suppliers back to the starting defaults. Your logged sales
-            and expenses stay safe in Google Sheets and aren&apos;t affected.
+            Resets this device&apos;s view of products, recipes, stock levels, and suppliers back to the starting
+            defaults. Since these now sync with Google Sheets, that reset syncs back within moments unless you also
+            edit or delete the rows directly in the spreadsheet — open it above to do that. Your logged sales and
+            expenses are never touched by this button.
           </p>
           {showResetConfirm ? (
             <div className="space-y-2 rounded-xl border border-[var(--status-critical)] bg-red-50 p-3 dark:bg-red-950/30">
