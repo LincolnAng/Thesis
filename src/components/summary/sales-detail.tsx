@@ -1,10 +1,9 @@
 "use client";
 
 import { useMemo } from "react";
-import { ArrowUpRight } from "lucide-react";
 import { useStore } from "@/lib/store/use-store";
 import { computeSalesSummary } from "@/lib/summary/sales-summary";
-import { formatDate, formatPeso, previousMonthShortLabel } from "@/lib/format";
+import { formatPeso, previousMonthShortLabel } from "@/lib/format";
 import { ComparisonBadge } from "@/components/summary/comparison-badge";
 import { Sparkline } from "@/components/summary/sparkline";
 import { MonthlyTrendChart } from "@/components/summary/monthly-trend-chart";
@@ -102,28 +101,6 @@ export function SalesDetail() {
           </div>
         </div>
       )}
-
-      <div className="space-y-2">
-        <h2 className="text-sm font-semibold text-muted-foreground">Recent sales</h2>
-        {summary.recent.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nothing logged yet.</p>
-        ) : (
-          <div className="divide-y divide-border rounded-2xl border border-border">
-            {summary.recent.map((e) => (
-              <div key={e.id} className="flex items-center gap-3 px-4 py-3">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--status-good)]/15">
-                  <ArrowUpRight className="h-4 w-4 text-[var(--status-good)]" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-foreground">{e.sku ?? "Sale"}</p>
-                  <p className="text-xs text-muted-foreground">{formatDate(e.timestamp)}</p>
-                </div>
-                <p className="shrink-0 text-sm font-semibold text-[var(--status-good)]">+{formatPeso(e.amount)}</p>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   );
 }

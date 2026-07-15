@@ -4,6 +4,13 @@ import type { Entry, Product, RawMaterialStock } from "@/lib/store/types";
 
 export type EntryDraft = Omit<Entry, "id">;
 
+/** Strips the id off an existing entry so it can seed an edit form's draft state. */
+export function entryToDraft(entry: Entry): EntryDraft {
+  const draft: Partial<Entry> = { ...entry };
+  delete draft.id;
+  return draft as EntryDraft;
+}
+
 /** Short category badge text, e.g. "Sale · wholesale" or "Expense · ingredients". */
 export function categoryBadgeLabel(draft: EntryDraft): string {
   const base = ENTRY_TYPE_LABELS[draft.type] ?? draft.type;

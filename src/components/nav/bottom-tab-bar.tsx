@@ -9,7 +9,7 @@ export function BottomTabBar() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-card min-[900px]:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-40 flex overflow-x-auto border-t border-border bg-card min-[900px]:hidden">
       {NAV_ITEMS.map((item) => {
         const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
         const Icon = item.icon;
@@ -18,7 +18,7 @@ export function BottomTabBar() {
             key={item.href}
             href={item.href}
             className={cn(
-              "flex flex-1 flex-col items-center gap-1 py-3 text-sm font-medium",
+              "flex w-20 shrink-0 flex-col items-center gap-1 py-3 text-sm font-medium",
               active ? "text-primary" : "text-muted-foreground",
             )}
           >

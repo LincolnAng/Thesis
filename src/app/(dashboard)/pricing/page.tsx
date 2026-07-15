@@ -9,7 +9,7 @@ export default function PricingPage() {
   const { products } = useStore();
 
   return (
-    <div className="mx-auto w-full max-w-[720px] px-4 py-8">
+    <div className="mx-auto w-full max-w-6xl px-4 py-8">
       <div className="mb-4">
         <BackToSummaryLink />
       </div>

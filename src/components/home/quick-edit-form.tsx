@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { ChipGroup } from "@/components/ui/chip-group";
 import { useStore } from "@/lib/store/use-store";
 import { EXPENSE_CATEGORY_LABELS, ENTRY_TYPE_LABELS, PRICE_TYPE_LABELS } from "@/lib/format";
 import type { EntryDraft } from "@/lib/home/describe-entry";
@@ -13,38 +14,6 @@ import { cn } from "@/lib/utils";
 const ENTRY_TYPES = Object.keys(ENTRY_TYPE_LABELS) as EntryType[];
 const EXPENSE_CATEGORIES = Object.keys(EXPENSE_CATEGORY_LABELS) as ExpenseCategory[];
 const PRICE_TYPES: Exclude<PriceType, null>[] = ["standard", "friend", "wholesale"];
-
-function ChipGroup<T extends string>({
-  options,
-  value,
-  labels,
-  onChange,
-}: {
-  options: T[];
-  value: T;
-  labels: Record<string, string>;
-  onChange: (v: T) => void;
-}) {
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {options.map((opt) => (
-        <button
-          key={opt}
-          type="button"
-          onClick={() => onChange(opt)}
-          className={cn(
-            "rounded-full border px-2.5 py-1 text-xs font-medium",
-            value === opt
-              ? "border-primary bg-primary text-primary-foreground"
-              : "border-border bg-background text-foreground",
-          )}
-        >
-          {labels[opt] ?? opt}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 export function QuickEditForm({
   initial,

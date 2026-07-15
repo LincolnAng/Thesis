@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 import { useTheme } from "next-themes";
-import { ChevronDown, ChevronUp, KeyRound, Languages, Moon } from "lucide-react";
+import { ChevronDown, ChevronUp, Database, Download, KeyRound, Languages, Moon, Trash2, Upload } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { setApiKeyMissing } from "@/lib/store/store";
+import { getSnapshot, resetAllData, restoreLocalCollections, setApiKeyMissing } from "@/lib/store/store";
 import type { BotLanguage } from "@/lib/sheets/settings";
 import { cn } from "@/lib/utils";
 
@@ -37,6 +37,8 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [languageSaving, setLanguageSaving] = useState(false);
+  const [backupMessage, setBackupMessage] = useState<string | null>(null);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // next-themes resolves the real theme synchronously on the client's first render
   // (to avoid a flash), which is already ahead of what the server rendered — so
@@ -143,8 +145,44 @@ export default function SettingsPage() {
     }
   }
 
+  function exportBackup() {
+    const snapshot = getSnapshot();
+    const backup = {
+      exportedAt: new Date().toISOString(),
+      products: snapshot.products,
+      rawMaterials: snapshot.rawMaterials,
+      suppliers: snapshot.suppliers,
+      socialStats: snapshot.socialStats,
+      categoryBudgets: snapshot.categoryBudgets,
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `mang-kikos-cocoa-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function importBackup(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const parsed = JSON.parse(String(ev.target?.result));
+        restoreLocalCollections(parsed);
+        setBackupMessage("Restored — products, stock, and suppliers are back from your backup file.");
+      } catch {
+        setBackupMessage("Couldn't read that file — make sure it's a backup exported from this app.");
+      }
+    };
+    reader.readAsText(file);
+  }
+
   return (
-    <div className="mx-auto w-full max-w-[720px] px-4 py-8">
+    <div className="mx-auto w-full max-w-4xl px-4 py-8">
       <h1 className="mb-1 text-xl font-bold text-foreground">Settings</h1>
       <p className="mb-4 text-sm text-muted-foreground">Manage how the AI assistant works.</p>
 
@@ -270,6 +308,70 @@ export default function SettingsPage() {
                 </Button>
               </div>
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Database className="h-4 w-4" /> Business data backup
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Back up your products, recipes, stock levels, and suppliers as a file. Your logged sales and expenses
+            are already backed up automatically in Google Sheets, so they aren&apos;t included here.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="secondary" className="gap-1" onClick={exportBackup}>
+              <Download className="h-4 w-4" /> Export backup
+            </Button>
+            <Button size="sm" variant="secondary" className="gap-1" asChild>
+              <label className="cursor-pointer">
+                <Upload className="h-4 w-4" /> Import backup
+                <input type="file" accept="application/json" className="hidden" onChange={importBackup} />
+              </label>
+            </Button>
+          </div>
+          {backupMessage && <p className="text-xs text-muted-foreground">{backupMessage}</p>}
+        </CardContent>
+      </Card>
+
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base text-[var(--status-critical)]">
+            <Trash2 className="h-4 w-4" /> Reset business data
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Resets products, recipes, stock levels, and suppliers back to the starting defaults. Your logged sales
+            and expenses stay safe in Google Sheets and aren&apos;t affected.
+          </p>
+          {showResetConfirm ? (
+            <div className="space-y-2 rounded-xl border border-[var(--status-critical)] bg-red-50 p-3 dark:bg-red-950/30">
+              <p className="text-sm font-medium text-foreground">Are you sure? This can&apos;t be undone.</p>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => {
+                    resetAllData();
+                    setShowResetConfirm(false);
+                  }}
+                >
+                  Yes, reset
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setShowResetConfirm(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button size="sm" variant="destructive" onClick={() => setShowResetConfirm(true)}>
+              Reset business data
+            </Button>
           )}
         </CardContent>
       </Card>

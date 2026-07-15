@@ -5,16 +5,13 @@ import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 import { useStore } from "@/lib/store/use-store";
 import { computeStockSummary } from "@/lib/summary/stock-summary";
-import { productColor } from "@/lib/summary/sales-summary";
 import { computeIngredientReach } from "@/lib/summary/ingredient-reach";
 import { stockMonthlyTrend } from "@/lib/summary/stock-trend";
-import { Bar } from "@/components/summary/bar";
 import { MonthlyTrendChart } from "@/components/summary/monthly-trend-chart";
 import { StockProducedSoldChart } from "@/components/summary/stock-produced-sold-chart";
 import { StockCalendar } from "@/components/summary/stock-calendar";
 import { Button } from "@/components/ui/button";
 import { useViewMode } from "@/lib/summary/view-mode";
-import { cn } from "@/lib/utils";
 
 export function StockDetail() {
   const { products, rawMaterials, entries } = useStore();
@@ -50,37 +47,6 @@ export function StockDetail() {
           </Link>
         </div>
       )}
-
-      <div className="space-y-2">
-        <h2 className="text-sm font-semibold text-muted-foreground">Jars on hand</h2>
-        <div className="divide-y divide-border rounded-2xl border border-border">
-          {summary.products.map((row) => (
-            <div key={row.product.id} className="space-y-1.5 px-4 py-3">
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-                  <span
-                    className="h-2 w-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: productColor(products, row.product.name) }}
-                  />
-                  {row.product.name}
-                </span>
-                <p
-                  className={cn(
-                    "text-sm font-semibold",
-                    row.tone === "warning" ? "text-[var(--status-warning)]" : "text-foreground",
-                  )}
-                >
-                  {row.product.stockQty} jars
-                </p>
-              </div>
-              <Bar pct={row.barPct} tone={row.tone} />
-              <p className="pl-3.5 text-xs text-muted-foreground">
-                {row.runwayDays != null ? `About ${row.runwayDays} days left` : "Not enough sales history yet"}
-              </p>
-            </div>
-          ))}
-        </div>
-      </div>
 
       <div className="space-y-2">
         <h2 className="text-sm font-semibold text-muted-foreground">Ingredients and supplies</h2>

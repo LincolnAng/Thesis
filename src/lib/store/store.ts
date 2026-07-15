@@ -425,3 +425,24 @@ export function removeCategoryBudget(category: ExpenseCategory) {
 export function resetAllData() {
   setState(() => defaultState());
 }
+
+/** Restores the local-only collections from a previously exported backup file.
+ * Deliberately excludes `entries` — those are Sheets-authoritative, so overwriting
+ * them here would just be clobbered by the next `loadEntriesFromServer()` fetch,
+ * and re-adding them via `addEntry` would duplicate rows in the sheet. */
+export function restoreLocalCollections(data: {
+  products?: Product[];
+  rawMaterials?: RawMaterialStock[];
+  suppliers?: Supplier[];
+  socialStats?: SocialStatEntry[];
+  categoryBudgets?: Partial<Record<ExpenseCategory, number>>;
+}) {
+  setState((prev) => ({
+    ...prev,
+    products: data.products ?? prev.products,
+    rawMaterials: data.rawMaterials ?? prev.rawMaterials,
+    suppliers: data.suppliers ?? prev.suppliers,
+    socialStats: data.socialStats ?? prev.socialStats,
+    categoryBudgets: data.categoryBudgets ?? prev.categoryBudgets,
+  }));
+}
