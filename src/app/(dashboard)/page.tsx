@@ -9,6 +9,7 @@ import { NetProfitChart } from "@/components/summary/net-profit-chart";
 import { CogsPercentChart } from "@/components/summary/cogs-percent-chart";
 import { ExpensesCategoryChart } from "@/components/summary/expenses-category-chart";
 import { ProfitableProductsList } from "@/components/summary/profitable-products-list";
+import { SupplierPriceSummaryChart } from "@/components/summary/supplier-price-summary-chart";
 import { useStore } from "@/lib/store/use-store";
 import { formatPeso } from "@/lib/format";
 import { computeSalesSummary } from "@/lib/summary/sales-summary";
@@ -148,6 +149,7 @@ export default function HomePage() {
             <NetProfitChart data={profitTrend} />
             <CogsPercentChart data={profitTrend} />
             <ExpensesCategoryChart data={expensesByCategory} />
+            <SupplierPriceSummaryChart suppliers={suppliers} />
             <ProfitableProductsList rows={marginRanking} />
           </div>
         </>
