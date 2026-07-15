@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Check, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export function ConfirmDeleteButton({ onConfirm }: { onConfirm: () => void }) {
+export function ConfirmDeleteButton({ onConfirm, label = "Delete" }: { onConfirm: () => void; label?: string }) {
   const [confirming, setConfirming] = useState(false);
 
   if (confirming) {
@@ -13,7 +13,7 @@ export function ConfirmDeleteButton({ onConfirm }: { onConfirm: () => void }) {
         <Button
           size="icon-sm"
           variant="destructive"
-          aria-label="Confirm delete"
+          aria-label={`Confirm ${label.toLowerCase()}`}
           onClick={() => {
             onConfirm();
             setConfirming(false);
@@ -21,7 +21,7 @@ export function ConfirmDeleteButton({ onConfirm }: { onConfirm: () => void }) {
         >
           <Check className="h-4 w-4" />
         </Button>
-        <Button size="icon-sm" variant="ghost" aria-label="Cancel delete" onClick={() => setConfirming(false)}>
+        <Button size="icon-sm" variant="ghost" aria-label="Cancel" onClick={() => setConfirming(false)}>
           <X className="h-4 w-4" />
         </Button>
       </div>
@@ -29,7 +29,7 @@ export function ConfirmDeleteButton({ onConfirm }: { onConfirm: () => void }) {
   }
 
   return (
-    <Button size="icon-sm" variant="ghost" aria-label="Delete" onClick={() => setConfirming(true)}>
+    <Button size="icon-sm" variant="ghost" aria-label={label} onClick={() => setConfirming(true)}>
       <Trash2 className="h-4 w-4 text-muted-foreground" />
     </Button>
   );

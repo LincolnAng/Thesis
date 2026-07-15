@@ -17,6 +17,7 @@ export function ChatThread({
   onPickClarify,
   onSaveQuickEdit,
   onCancelQuickEdit,
+  isTyping = false,
 }: {
   messages: ChatMessage[];
   onEdit: (id: string) => void;
@@ -24,12 +25,14 @@ export function ChatThread({
   onPickClarify: (id: string, option: ClarifyOption) => void;
   onSaveQuickEdit: (id: string, draft: EntryDraft) => void;
   onCancelQuickEdit: (id: string) => void;
+  /** Shows a floating "Kuya AI is typing" bubble while a response is in flight. */
+  isTyping?: boolean;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages]);
+  }, [messages, isTyping]);
 
   return (
     <div className="mx-auto flex w-full max-w-[720px] flex-col gap-3 px-4 py-4">
@@ -91,6 +94,15 @@ export function ChatThread({
         </div>
         );
       })}
+      {isTyping && (
+        <div className="flex justify-start">
+          <div className="flex items-center gap-1 rounded-2xl bg-secondary px-4 py-3">
+            <span className="h-2 w-2 animate-bounce rounded-full bg-secondary-foreground/50 [animation-delay:-0.3s]" />
+            <span className="h-2 w-2 animate-bounce rounded-full bg-secondary-foreground/50 [animation-delay:-0.15s]" />
+            <span className="h-2 w-2 animate-bounce rounded-full bg-secondary-foreground/50" />
+          </div>
+        </div>
+      )}
       <div ref={bottomRef} />
     </div>
   );

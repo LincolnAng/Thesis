@@ -6,7 +6,7 @@ import type { Entry } from "@/lib/store/types";
 
 const VALID_TYPES = ["SALE", "EXPENSE", "INVENTORY_IN", "INVENTORY_OUT", "WASTE", "SUPPLIER", "NOTE"];
 const VALID_PRICE_TYPES = ["standard", "friend", "wholesale"];
-const VALID_CATEGORIES = ["raw_materials", "labor", "utilities", "packaging", "transport", "misc"];
+const DEFAULT_VALID_CATEGORIES = ["raw_materials", "labor", "utilities", "packaging", "transport", "misc"];
 
 export interface AssistantEntryResult {
   type: Entry["type"];
@@ -47,14 +47,12 @@ function str(v: unknown): string | null {
   return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
 }
 
-function coerceEntry(parsed: Record<string, unknown>, today: string): AssistantEntryResult {
+function coerceEntry(parsed: Record<string, unknown>, today: string, validCategories: string[]): AssistantEntryResult {
   const type = VALID_TYPES.includes(parsed.type as string) ? (parsed.type as Entry["type"]) : "NOTE";
   const priceType = VALID_PRICE_TYPES.includes(parsed.priceType as string)
     ? (parsed.priceType as Entry["priceType"])
     : null;
-  const category = VALID_CATEGORIES.includes(parsed.category as string)
-    ? (parsed.category as Entry["category"])
-    : null;
+  const category = validCategories.includes(parsed.category as string) ? (parsed.category as Entry["category"]) : null;
 
   return {
     type,
@@ -72,7 +70,7 @@ function coerceEntry(parsed: Record<string, unknown>, today: string): AssistantE
   };
 }
 
-function coercePatch(parsed: Record<string, unknown>): Partial<AssistantEntryResult> {
+function coercePatch(parsed: Record<string, unknown>, validCategories: string[]): Partial<AssistantEntryResult> {
   const patch: Partial<AssistantEntryResult> = {};
   if ("type" in parsed && VALID_TYPES.includes(parsed.type as string)) patch.type = parsed.type as Entry["type"];
   if ("amount" in parsed) patch.amount = num(parsed.amount);
@@ -84,7 +82,7 @@ function coercePatch(parsed: Record<string, unknown>): Partial<AssistantEntryRes
   if ("priceType" in parsed && VALID_PRICE_TYPES.includes(parsed.priceType as string)) {
     patch.priceType = parsed.priceType as Entry["priceType"];
   }
-  if ("category" in parsed && VALID_CATEGORIES.includes(parsed.category as string)) {
+  if ("category" in parsed && validCategories.includes(parsed.category as string)) {
     patch.category = parsed.category as Entry["category"];
   }
   if ("notes" in parsed) patch.notes = str(parsed.notes);
@@ -96,7 +94,7 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 export async function POST(req: NextRequest) {
-  let body: { text?: string; dataSummary?: string; history?: ChatTurn[] };
+  let body: { text?: string; dataSummary?: string; history?: ChatTurn[]; categories?: string[] };
   try {
     body = await req.json();
   } catch {
@@ -108,6 +106,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, reason: "empty_message" }, { status: 400 });
   }
 
+  const validCategories =
+    Array.isArray(body.categories) && body.categories.length > 0 ? body.categories : DEFAULT_VALID_CATEGORIES;
+
   const today = new Date().toISOString().slice(0, 10);
   let botLanguage: Awaited<ReturnType<typeof getAiSettings>>["botLanguage"] = "english";
   try {
@@ -115,7 +116,7 @@ export async function POST(req: NextRequest) {
   } catch {
     // Sheets unavailable — fall back to English rather than failing the whole request.
   }
-  const system = assistantSystemPrompt(body.dataSummary ?? "No data available.", today, botLanguage);
+  const system = assistantSystemPrompt(body.dataSummary ?? "No data available.", today, botLanguage, validCategories);
 
   const history = (body.history ?? [])
     .slice(-6)
@@ -142,12 +143,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, mode: "chat", reply, usage: result.usage });
     }
 
-    const entry = coerceEntry(isRecord(parsed.entry) ? parsed.entry : {}, today);
+    const entry = coerceEntry(isRecord(parsed.entry) ? parsed.entry : {}, today, validCategories);
     const clarifyQuestion = typeof parsed.clarifyQuestion === "string" ? parsed.clarifyQuestion : null;
     const clarifyOptionsRaw: unknown[] = Array.isArray(parsed.clarifyOptions) ? parsed.clarifyOptions : [];
     const clarifyOptions: AssistantClarifyOption[] = clarifyOptionsRaw
       .filter((o): o is Record<string, unknown> => isRecord(o) && typeof o.label === "string")
-      .map((o) => ({ label: o.label as string, patch: coercePatch(isRecord(o.patch) ? o.patch : {}) }));
+      .map((o) => ({ label: o.label as string, patch: coercePatch(isRecord(o.patch) ? o.patch : {}, validCategories) }));
 
     return NextResponse.json({
       success: true,

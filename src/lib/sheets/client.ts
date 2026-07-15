@@ -51,6 +51,23 @@ export async function appendSheetValues(range: string, values: string[][]): Prom
   });
 }
 
+/**
+ * Writes several separate, non-contiguous ranges in one HTTP call instead of one
+ * `updateSheetValues` per row — used when soft-deleting every row that belongs to
+ * a chat session, so removing a long conversation doesn't fire dozens of individual
+ * requests and risk the same read-quota exhaustion already seen elsewhere.
+ */
+export async function batchUpdateValues(data: { range: string; values: string[][] }[]): Promise<void> {
+  if (data.length === 0) return;
+  await sheetsFetch("/values:batchUpdate", {
+    method: "POST",
+    body: JSON.stringify({
+      valueInputOption: "RAW",
+      data: data.map((d) => ({ range: d.range, majorDimension: "ROWS", values: d.values })),
+    }),
+  });
+}
+
 interface SheetMeta {
   sheetId: number;
   title: string;

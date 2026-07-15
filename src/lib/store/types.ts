@@ -9,13 +9,19 @@ export type EntryType =
 
 export type PriceType = "standard" | "friend" | "wholesale" | null;
 
-export type ExpenseCategory =
-  | "raw_materials"
-  | "labor"
-  | "utilities"
-  | "packaging"
-  | "transport"
-  | "misc";
+// The 6 built-ins below always exist; a plain string (not a closed union) so the
+// owner can add their own categories from the Expenses budget editor — anything
+// not in EXPENSE_CATEGORY_LABELS just displays as its own raw name.
+export type ExpenseCategory = string;
+
+export const BUILT_IN_EXPENSE_CATEGORIES = [
+  "raw_materials",
+  "labor",
+  "utilities",
+  "packaging",
+  "transport",
+  "misc",
+] as const;
 
 export interface Entry {
   id: string;

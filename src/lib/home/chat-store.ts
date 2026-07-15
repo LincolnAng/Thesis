@@ -288,6 +288,18 @@ async function mirrorRemove(id: string) {
   }
 }
 
+async function mirrorRemoveSession(sessionId: string) {
+  try {
+    await fetch("/api/chat-history", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId }),
+    });
+  } catch {
+    // best-effort — see mirrorAppend
+  }
+}
+
 function ensureLoadStarted() {
   if (typeof window === "undefined") return;
   if (!loadStarted) {
@@ -384,4 +396,19 @@ export function renameSession(sessionId: string, title: string) {
   };
   mutate((prev) => [...prev, message]);
   void mirrorAppend(message);
+}
+
+/** Permanently removes a whole conversation and every message in it. If it was the
+ * active session, switches to whichever remaining session was most recently active,
+ * or starts a fresh one if none are left. */
+export function deleteSession(sessionId: string) {
+  ensureLoadStarted();
+  mutate((prev) => prev.filter((m) => m.sessionId !== sessionId));
+  void mirrorRemoveSession(sessionId);
+
+  if (sessionId === currentSessionId) {
+    currentSessionId = pickDefaultSessionId(rawMessages);
+    recomputeVisible();
+    listeners.forEach((l) => l());
+  }
 }

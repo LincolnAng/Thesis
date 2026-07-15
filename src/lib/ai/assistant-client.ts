@@ -11,12 +11,13 @@ export async function requestAssistant(
   text: string,
   dataSummary: string,
   history: { role: "user" | "assistant"; content: string }[],
+  categories: string[] = [],
 ): Promise<AssistantOutcome> {
   try {
     const res = await fetch("/api/assistant", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, dataSummary, history }),
+      body: JSON.stringify({ text, dataSummary, history, categories }),
     });
     const json = await res.json();
 

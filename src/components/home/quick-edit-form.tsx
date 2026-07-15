@@ -7,12 +7,12 @@ import { Button } from "@/components/ui/button";
 import { ChipGroup } from "@/components/ui/chip-group";
 import { useStore } from "@/lib/store/use-store";
 import { EXPENSE_CATEGORY_LABELS, ENTRY_TYPE_LABELS, PRICE_TYPE_LABELS } from "@/lib/format";
+import { allExpenseCategories } from "@/lib/summary/expenses-summary";
 import type { EntryDraft } from "@/lib/home/describe-entry";
-import type { EntryType, ExpenseCategory, PriceType } from "@/lib/store/types";
+import type { EntryType, PriceType } from "@/lib/store/types";
 import { cn } from "@/lib/utils";
 
 const ENTRY_TYPES = Object.keys(ENTRY_TYPE_LABELS) as EntryType[];
-const EXPENSE_CATEGORIES = Object.keys(EXPENSE_CATEGORY_LABELS) as ExpenseCategory[];
 const PRICE_TYPES: Exclude<PriceType, null>[] = ["standard", "friend", "wholesale"];
 
 export function QuickEditForm({
@@ -33,7 +33,7 @@ export function QuickEditForm({
   /** Overrides the default chat-bubble width — pass "max-w-none" when this fills a full-width page column. */
   className?: string;
 }) {
-  const { products, rawMaterials } = useStore();
+  const { products, rawMaterials, categoryBudgets } = useStore();
   const [draft, setDraft] = useState<EntryDraft>(initial);
   // Buffered as text, not the parsed number, so typing a decimal point doesn't get
   // silently eaten (Number("12.") rounds to 12, so re-deriving the field from
@@ -45,8 +45,11 @@ export function QuickEditForm({
     setDraft((d) => ({ ...d, [key]: value }));
   }
 
-  const skuOptions = [...products.map((p) => p.name), ...rawMaterials.map((m) => m.name)];
+  const skuOptions = Array.from(
+    new Set([...(draft.sku ? [draft.sku] : []), ...products.map((p) => p.name), ...rawMaterials.map((m) => m.name)]),
+  );
   const typeOptions = allowedTypes ?? ENTRY_TYPES;
+  const expenseCategories = allExpenseCategories(categoryBudgets);
 
   return (
     <div className={cn("w-full max-w-sm space-y-3 rounded-2xl border border-border bg-card p-3", className)}>
@@ -95,22 +98,23 @@ export function QuickEditForm({
         </div>
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">Product / item</Label>
-          <Input
-            className="h-9"
-            list="quick-edit-sku-options"
+          <select
+            className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
             value={draft.sku ?? ""}
             onChange={(e) => set("sku", e.target.value || null)}
-          />
-          <datalist id="quick-edit-sku-options">
+          >
+            <option value="">Select…</option>
             {skuOptions.map((s) => (
-              <option key={s} value={s} />
+              <option key={s} value={s}>
+                {s}
+              </option>
             ))}
-          </datalist>
+          </select>
         </div>
       </div>
 
       <div className="space-y-1">
-        <Label className="text-xs text-muted-foreground">Buyer / supplier</Label>
+        <Label className="text-xs text-muted-foreground">Buyer</Label>
         <Input
           className="h-9"
           value={draft.counterparty ?? ""}
@@ -134,7 +138,7 @@ export function QuickEditForm({
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">Category</Label>
           <ChipGroup
-            options={EXPENSE_CATEGORIES}
+            options={expenseCategories}
             value={draft.category ?? "misc"}
             labels={EXPENSE_CATEGORY_LABELS}
             onChange={(v) => set("category", v)}

@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useStore } from "@/lib/store/use-store";
 import { computeExpensesSummary, monthlyExpensesByCategory } from "@/lib/summary/expenses-summary";
-import { CATEGORY_ICONS } from "@/lib/summary/category-icons";
+import { CategoryIcon } from "@/lib/summary/category-icons";
 import { currentMonthLabel, formatPeso, previousMonthShortLabel } from "@/lib/format";
 import { Bar } from "@/components/summary/bar";
 import { ComparisonBadge } from "@/components/summary/comparison-badge";
@@ -58,12 +58,11 @@ export function ExpensesDetail() {
         ) : (
           <div className="space-y-4 rounded-2xl border border-border p-4">
             {summary.byCategory.map((row) => {
-              const Icon = CATEGORY_ICONS[row.category];
               return (
                 <div key={row.category} className="space-y-1.5">
                   <div className="flex items-center justify-between gap-2">
                     <span className="flex items-center gap-2 text-base font-medium text-foreground">
-                      <Icon className="h-4 w-4 shrink-0" style={{ color: row.color }} />
+                      <CategoryIcon category={row.category} className="h-4 w-4 shrink-0" style={{ color: row.color }} />
                       {row.label}
                     </span>
                     <span className="text-right text-base">

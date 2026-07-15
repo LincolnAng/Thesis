@@ -12,6 +12,7 @@ import { useStore } from "@/lib/store/use-store";
 import { requestAssistant } from "@/lib/ai/assistant-client";
 import { localAnswer } from "@/lib/ai/local-fallback";
 import { buildDataSummary } from "@/lib/ai/data-summary";
+import { allExpenseCategories } from "@/lib/summary/expenses-summary";
 import { addEntry, deleteEntry, replaceEntry } from "@/lib/store/store";
 import { buildClarifyPrompt } from "@/lib/home/clarify";
 import { computeInsight } from "@/lib/home/insights";
@@ -103,7 +104,7 @@ function HomePageInner() {
 
     setSubmitting(true);
     const summary = buildDataSummary(state);
-    const outcome = await requestAssistant(rawText, summary, []);
+    const outcome = await requestAssistant(rawText, summary, [], allExpenseCategories(state.categoryBudgets));
     setSubmitting(false);
 
     if (outcome.status === "unavailable") {
@@ -275,6 +276,7 @@ function HomePageInner() {
             onPickClarify={handlePickClarify}
             onSaveQuickEdit={handleSaveQuickEdit}
             onCancelQuickEdit={handleCancelQuickEdit}
+            isTyping={submitting}
           />
         </div>
         {messages.length <= 1 && (

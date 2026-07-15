@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { appendChatMessage, deleteChatMessage, getChatHistory, updateChatMessage } from "@/lib/sheets/chat-history";
+import { appendChatMessage, deleteChatMessage, deleteChatSession, getChatHistory, updateChatMessage } from "@/lib/sheets/chat-history";
 import type { ChatMessage } from "@/lib/home/chat-types";
 
 export async function GET() {
@@ -54,17 +54,21 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  let body: { id?: string };
+  let body: { id?: string; sessionId?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ success: false, reason: "invalid_request" }, { status: 400 });
   }
-  if (!body.id) {
+  if (!body.id && !body.sessionId) {
     return NextResponse.json({ success: false, reason: "missing_id" }, { status: 400 });
   }
   try {
-    await deleteChatMessage(body.id);
+    if (body.sessionId) {
+      await deleteChatSession(body.sessionId);
+    } else if (body.id) {
+      await deleteChatMessage(body.id);
+    }
     return NextResponse.json({ success: true });
   } catch (err) {
     return NextResponse.json(

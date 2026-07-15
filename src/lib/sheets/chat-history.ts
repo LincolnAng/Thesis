@@ -1,4 +1,4 @@
-import { appendSheetValues, ensureSheetExists, getSheetValues, updateSheetValues } from "./client";
+import { appendSheetValues, batchUpdateValues, ensureSheetExists, getSheetValues, updateSheetValues } from "./client";
 import type { ChatMessage } from "@/lib/home/chat-types";
 
 const CHAT_SHEET = "ChatHistory";
@@ -64,4 +64,29 @@ export async function deleteChatMessage(id: string): Promise<void> {
   if (index === null) return;
   const targetRow = index + 1;
   await updateSheetValues(`${CHAT_SHEET}!E${targetRow}`, [[JSON.stringify({ deleted: true })]]);
+}
+
+/** Soft-deletes every message belonging to one conversation in a single batched
+ * write, rather than one `deleteChatMessage` call per message. */
+export async function deleteChatSession(sessionId: string): Promise<void> {
+  const rows = await getSheetValues(`${CHAT_SHEET}!A:E`);
+  const updates: { range: string; values: string[][] }[] = [];
+
+  rows.forEach((row, index) => {
+    const [id, , , , payloadRaw] = row;
+    if (!id || id === "id") return; // header/blank row
+
+    let payload: Record<string, unknown> = {};
+    try {
+      payload = payloadRaw ? JSON.parse(payloadRaw) : {};
+    } catch {
+      payload = {};
+    }
+    if (payload.deleted || payload.sessionId !== sessionId) return;
+
+    const targetRow = index + 1;
+    updates.push({ range: `${CHAT_SHEET}!E${targetRow}`, values: [[JSON.stringify({ deleted: true })]] });
+  });
+
+  await batchUpdateValues(updates);
 }

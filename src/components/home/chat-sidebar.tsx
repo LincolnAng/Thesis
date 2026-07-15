@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { Check, MessageSquarePlus, MessageSquareText, PanelLeft, Pencil, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { renameSession, startNewChat, switchToSession } from "@/lib/home/chat-store";
+import { deleteSession, renameSession, startNewChat, switchToSession } from "@/lib/home/chat-store";
 import { useChatSessions } from "@/lib/home/use-chat-sessions";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { ConfirmDeleteButton } from "@/components/data-table/confirm-delete-button";
 
 function ChatSidebarList({ onNavigate }: { onNavigate?: () => void }) {
   const { sessions, currentSessionId } = useChatSessions();
@@ -95,6 +96,7 @@ function ChatSidebarList({ onNavigate }: { onNavigate?: () => void }) {
               >
                 <Pencil className="h-3.5 w-3.5" />
               </button>
+              <ConfirmDeleteButton label={`Delete ${session.label}`} onConfirm={() => deleteSession(session.id)} />
             </div>
           ),
         )}

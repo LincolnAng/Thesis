@@ -1,14 +1,19 @@
 "use client";
 
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { CATEGORY_ORDER, expenseCategoryColor, type MonthlyCategoryPoint } from "@/lib/summary/expenses-summary";
+import { expenseCategoryColor, type MonthlyCategoryPoint } from "@/lib/summary/expenses-summary";
 import { EXPENSE_CATEGORY_LABELS, formatPesoAbbrev } from "@/lib/format";
 import { CHART_AXIS_TICK, CHART_GRID_STROKE, CHART_HEIGHT, CHART_LEGEND_STYLE, ChartTooltip } from "./chart-theme";
 
 export function ExpensesCategoryChart({ data }: { data: MonthlyCategoryPoint[] }) {
+  // Whatever categories actually show up in the data — built-in or custom — not a
+  // fixed list, so a category the owner added themselves still gets its own bar.
+  const categories = Array.from(new Set(data.flatMap((point) => Object.keys(point.byCategory))));
+  const labelFor = (category: string) => EXPENSE_CATEGORY_LABELS[category] ?? category;
+
   const chartData = data.map((point) => {
     const row: Record<string, string | number> = { label: point.label };
-    for (const category of CATEGORY_ORDER) row[EXPENSE_CATEGORY_LABELS[category]] = point.byCategory[category] ?? 0;
+    for (const category of categories) row[labelFor(category)] = point.byCategory[category] ?? 0;
     return row;
   });
 
@@ -29,10 +34,10 @@ export function ExpensesCategoryChart({ data }: { data: MonthlyCategoryPoint[] }
             />
             <Tooltip content={<ChartTooltip formatValue={(v) => formatPesoAbbrev(Number(v))} />} />
             <Legend wrapperStyle={CHART_LEGEND_STYLE} iconType="circle" iconSize={8} />
-            {CATEGORY_ORDER.map((category) => (
+            {categories.map((category) => (
               <Bar
                 key={category}
-                dataKey={EXPENSE_CATEGORY_LABELS[category]}
+                dataKey={labelFor(category)}
                 stackId="expenses"
                 fill={expenseCategoryColor(category)}
                 maxBarSize={24}

@@ -15,7 +15,9 @@ export function entryToDraft(entry: Entry): EntryDraft {
 export function categoryBadgeLabel(draft: EntryDraft): string {
   const base = ENTRY_TYPE_LABELS[draft.type] ?? draft.type;
   if (draft.type === "SALE" && draft.priceType) return `${base} · ${PRICE_TYPE_LABELS[draft.priceType]}`;
-  if (draft.type === "EXPENSE" && draft.category) return `${base} · ${EXPENSE_CATEGORY_LABELS[draft.category]}`;
+  if (draft.type === "EXPENSE" && draft.category) {
+    return `${base} · ${EXPENSE_CATEGORY_LABELS[draft.category] ?? draft.category}`;
+  }
   return base;
 }
 

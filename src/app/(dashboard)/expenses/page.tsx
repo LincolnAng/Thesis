@@ -16,15 +16,10 @@ import { useStore } from "@/lib/store/use-store";
 import { addEntry, deleteEntry, replaceEntry } from "@/lib/store/store";
 import { blankEntryDraft } from "@/lib/store/blank-draft";
 import { entryToDraft } from "@/lib/home/describe-entry";
-import { computeExpensesSummary } from "@/lib/summary/expenses-summary";
+import { allExpenseCategories, computeExpensesSummary } from "@/lib/summary/expenses-summary";
 import { currentMonthLabel, EXPENSE_CATEGORY_LABELS, formatDate, formatPeso } from "@/lib/format";
 import { useViewMode } from "@/lib/summary/view-mode";
 import type { Entry } from "@/lib/store/types";
-
-const CATEGORY_FILTER_OPTIONS = [
-  { value: "all", label: "All categories" },
-  ...Object.entries(EXPENSE_CATEGORY_LABELS).map(([value, label]) => ({ value, label })),
-];
 
 const SIMPLE_ROW_CAP = 8;
 
@@ -32,6 +27,15 @@ export default function ExpensesPage() {
   const { entries, categoryBudgets } = useStore();
   const [viewMode] = useViewMode();
   const summary = useMemo(() => computeExpensesSummary(entries, categoryBudgets), [entries, categoryBudgets]);
+
+  const categoryFilterOptions = useMemo(() => {
+    const loggedCategories = entries.filter((e) => e.type === "EXPENSE").map((e) => e.category ?? "misc");
+    const categories = Array.from(new Set([...allExpenseCategories(categoryBudgets), ...loggedCategories]));
+    return [
+      { value: "all", label: "All categories" },
+      ...categories.map((c) => ({ value: c, label: EXPENSE_CATEGORY_LABELS[c] ?? c })),
+    ];
+  }, [categoryBudgets, entries]);
 
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -58,7 +62,7 @@ export default function ExpensesPage() {
     {
       key: "category",
       header: "Category",
-      render: (e) => EXPENSE_CATEGORY_LABELS[e.category ?? "misc"] ?? "Other",
+      render: (e) => EXPENSE_CATEGORY_LABELS[e.category ?? "misc"] ?? e.category ?? "Other",
     },
     { key: "amount", header: "Amount", align: "right", render: (e) => formatPeso(e.amount) },
   ];
@@ -94,7 +98,7 @@ export default function ExpensesPage() {
             searchValue={search}
             onSearchChange={setSearch}
             searchPlaceholder="Search by description…"
-            filters={[{ label: "Category", value: categoryFilter, options: CATEGORY_FILTER_OPTIONS, onChange: setCategoryFilter }]}
+            filters={[{ label: "Category", value: categoryFilter, options: categoryFilterOptions, onChange: setCategoryFilter }]}
             onAdd={() => setAddOpen(true)}
             addLabel="Add expense"
           />
@@ -126,7 +130,9 @@ export default function ExpensesPage() {
             icon={ArrowDownRight}
             iconTone="warning"
             title={(e) => e.sku ?? e.rawText}
-            subtitle={(e) => `${formatDate(e.timestamp)} · ${EXPENSE_CATEGORY_LABELS[e.category ?? "misc"] ?? "Other"}`}
+            subtitle={(e) =>
+              `${formatDate(e.timestamp)} · ${EXPENSE_CATEGORY_LABELS[e.category ?? "misc"] ?? e.category ?? "Other"}`
+            }
             trailing={(e) => `−${formatPeso(e.amount)}`}
             trailingTone="warning"
             onSelect={(e) => setEditingEntry(e)}
