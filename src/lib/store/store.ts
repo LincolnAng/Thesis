@@ -499,6 +499,7 @@ function toProductRow(p: Product): ProductRow {
     standardPrice: p.standardPrice,
     pricingMode: p.pricingMode,
     marginPercent: p.marginPercent,
+    marketPrice: p.marketPrice,
     friendPrice: p.friendPrice,
     wholesalePrice: p.wholesalePrice,
     stockQty: p.stockQty,

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { formatPeso } from "@/lib/format";
 import { updateProduct } from "@/lib/store/store";
 import { useStore } from "@/lib/store/use-store";
-import { ingredientRowCost, productCostPerJar } from "@/lib/summary/recipe-cost";
+import { effectiveProductPrice, ingredientRowCost, productCostPerJar } from "@/lib/summary/recipe-cost";
 import { CostBreakdownChart } from "@/components/finance/cost-breakdown-chart";
 import { useViewMode } from "@/lib/summary/view-mode";
 import { useNumericDraft } from "@/lib/use-numeric-draft";
@@ -174,25 +174,29 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
   const totalForRun = cost.batchTotal * batchCount;
   const jarsForRun = product.batchYield * batchCount;
 
-  const effectivePrice =
-    product.pricingMode === "cost_percent"
-      ? cost.costPerJar * (1 + product.marginPercent / 100)
-      : product.standardPrice;
+  const effectivePrice = effectiveProductPrice(product, cost);
 
   const standardProfit = effectivePrice - cost.costPerJar;
   const standardBelowCost = standardProfit < 0;
 
   const marginField = useNumericDraft(product.marginPercent, (n) => updateProduct(product.id, { marginPercent: n }));
   const standardPriceField = useNumericDraft(product.standardPrice, (n) => updateProduct(product.id, { standardPrice: n }));
+  const marketPriceField = useNumericDraft(product.marketPrice, (n) => updateProduct(product.id, { marketPrice: n }));
   const yieldField = useNumericDraft(product.batchYield, (n) => persist(ingredients, labor, misc, n));
 
   function handleModeChange(nextMode: PricingMode) {
     if (product.pricingMode === "cost_percent" && nextMode === "manual") {
       // Snapshot the live cost-based price so switching back to manual doesn't revert to a stale number.
       updateProduct(product.id, { pricingMode: "manual", standardPrice: Math.round(effectivePrice * 100) / 100 });
-    } else {
-      updateProduct(product.id, { pricingMode: nextMode });
+      return;
     }
+    if (nextMode === "competitive" && product.marketPrice === 0) {
+      // Seed the market-price field from whatever's currently effective, so switching
+      // to this mode never abruptly shows ₱0 before the owner has entered anything.
+      updateProduct(product.id, { pricingMode: "competitive", marketPrice: Math.round(effectivePrice * 100) / 100 });
+      return;
+    }
+    updateProduct(product.id, { pricingMode: nextMode });
   }
 
   const otherTiers = [
@@ -309,9 +313,7 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
             >
               <option value="manual">I&apos;ll set it myself</option>
               <option value="cost_percent">Cost + margin %</option>
-              <option value="competitive" disabled>
-                Match a competitor — coming soon
-              </option>
+              <option value="competitive">Match the market</option>
               <option value="suggested" disabled>
                 Suggested for me — coming soon
               </option>
@@ -331,6 +333,16 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
                 <p className="text-xs text-muted-foreground">
                   {formatPeso(cost.costPerJar)} cost + {product.marginPercent}% margin
                 </p>
+              </div>
+            ) : product.pricingMode === "competitive" ? (
+              <div className="space-y-1">
+                <Input
+                  type="number"
+                  value={marketPriceField.value}
+                  onChange={(e) => marketPriceField.onChange(e.target.value)}
+                  className="h-9 text-lg font-semibold"
+                />
+                <p className="text-xs text-muted-foreground">what similar products sell for</p>
               </div>
             ) : (
               <Input

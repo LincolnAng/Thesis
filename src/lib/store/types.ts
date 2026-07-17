@@ -58,8 +58,9 @@ export interface Product {
   id: string;
   name: string;
   standardPrice: number;
-  pricingMode: PricingMode; // how standardPrice is determined; "cost_percent" computes it live instead
+  pricingMode: PricingMode; // how standardPrice is determined; "cost_percent"/"competitive" compute it live instead
   marginPercent: number; // used only when pricingMode === "cost_percent"
+  marketPrice: number; // used only when pricingMode === "competitive" — what similar products sell for
   friendPrice: number;
   wholesalePrice: number;
   stockQty: number;

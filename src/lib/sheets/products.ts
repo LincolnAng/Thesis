@@ -3,6 +3,10 @@ import type { ProductRow, RecipeRow } from "@/lib/store/sheet-shapes";
 
 export type { ProductRow, RecipeRow };
 
+// marketPrice is appended strictly after deletedAt (not just after the other
+// price fields) so every column already written for existing rows — including
+// deletedAt's own position — stays exactly where it was; only a genuinely new
+// trailing column is added, which old rows simply read back as empty/0.
 const PRODUCT_HEADER = [
   "id",
   "name",
@@ -15,6 +19,7 @@ const PRODUCT_HEADER = [
   "lowStockThreshold",
   "batchYield",
   "deletedAt",
+  "marketPrice",
 ];
 
 function productToRow(p: ProductRow): string[] {
@@ -30,12 +35,25 @@ function productToRow(p: ProductRow): string[] {
     String(p.lowStockThreshold),
     String(p.batchYield),
     "",
+    String(p.marketPrice),
   ];
 }
 
 function productFromRow(row: string[]): ProductRow | null {
-  const [id, name, standardPrice, pricingMode, marginPercent, friendPrice, wholesalePrice, stockQty, lowStockThreshold, batchYield] =
-    row;
+  const [
+    id,
+    name,
+    standardPrice,
+    pricingMode,
+    marginPercent,
+    friendPrice,
+    wholesalePrice,
+    stockQty,
+    lowStockThreshold,
+    batchYield,
+    ,
+    marketPrice,
+  ] = row;
   if (!id) return null;
   return {
     id,
@@ -48,6 +66,7 @@ function productFromRow(row: string[]): ProductRow | null {
     stockQty: Number(stockQty) || 0,
     lowStockThreshold: Number(lowStockThreshold) || 0,
     batchYield: Number(batchYield) || 0,
+    marketPrice: Number(marketPrice) || 0,
   };
 }
 

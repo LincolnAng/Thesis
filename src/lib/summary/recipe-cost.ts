@@ -25,6 +25,16 @@ export function ingredientBatchTotal(rows: RecipeIngredientRow[], rawMaterials: 
   return rows.reduce((total, row) => total + ingredientRowCost(row, rawMaterials), 0);
 }
 
+/** The price actually charged at the standard tier, derived from the product's
+ * chosen pricing metric — cost-based and market-based both compute this live
+ * rather than trusting a possibly-stale `standardPrice`, which is only the
+ * source of truth in "manual" mode. */
+export function effectiveProductPrice(product: Product, cost: ProductCostBreakdown): number {
+  if (product.pricingMode === "cost_percent") return cost.costPerJar * (1 + product.marginPercent / 100);
+  if (product.pricingMode === "competitive") return product.marketPrice;
+  return product.standardPrice;
+}
+
 /**
  * Cost per jar is always computed live from current ingredient costs and the
  * recipe — never cached on the product — so it can't go stale when an

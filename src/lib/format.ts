@@ -71,6 +71,13 @@ export const PRICE_TYPE_LABELS: Record<string, string> = {
   wholesale: "Wholesale",
 };
 
+export const PRICING_MODE_LABELS: Record<string, string> = {
+  manual: "Custom",
+  cost_percent: "Cost-based",
+  competitive: "Market-based",
+  suggested: "Suggested",
+};
+
 export function currentMonthLabel(now: Date = new Date()): string {
   return now.toLocaleDateString("en-PH", { month: "long", year: "numeric" });
 }
