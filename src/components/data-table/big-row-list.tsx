@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ConfirmDeleteButton } from "@/components/data-table/confirm-delete-button";
 
 type Tone = "good" | "warning" | "neutral";
 
@@ -13,6 +14,8 @@ export interface BigRowListProps<T> {
   icon?: LucideIcon;
   iconTone?: "good" | "warning";
   onSelect: (row: T) => void;
+  /** Shows a trash-can button on the right of each row that deletes without opening the edit dialog. */
+  onDelete?: (row: T) => void;
   emptyMessage: string;
 }
 
@@ -28,6 +31,7 @@ export function BigRowList<T>({
   icon: Icon,
   iconTone = "good",
   onSelect,
+  onDelete,
   emptyMessage,
 }: BigRowListProps<T>) {
   if (rows.length === 0) {
@@ -44,42 +48,48 @@ export function BigRowList<T>({
         const sub = subtitle?.(row);
         const tone = typeof trailingTone === "function" ? trailingTone(row) : trailingTone;
         return (
-          <button
-            key={keyFor(row)}
-            type="button"
-            onClick={() => onSelect(row)}
-            className="flex w-full items-center gap-3 px-4 py-4 text-left transition-colors hover:bg-accent"
-          >
-            {Icon && (
+          <div key={keyFor(row)} className="flex items-center transition-colors hover:bg-accent">
+            <button
+              type="button"
+              onClick={() => onSelect(row)}
+              className="flex min-w-0 flex-1 items-center gap-3 px-4 py-4 text-left"
+            >
+              {Icon && (
+                <span
+                  className={cn(
+                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
+                    iconTone === "good" ? "bg-[var(--status-good)]/15" : "bg-[var(--status-warning)]/15",
+                  )}
+                >
+                  <Icon
+                    className={cn(
+                      "h-4 w-4",
+                      iconTone === "good" ? "text-[var(--status-good)]" : "text-[var(--status-warning)]",
+                    )}
+                  />
+                </span>
+              )}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-base font-medium text-foreground">{title(row)}</span>
+                {sub && <span className="block truncate text-sm text-muted-foreground">{sub}</span>}
+              </span>
               <span
                 className={cn(
-                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
-                  iconTone === "good" ? "bg-[var(--status-good)]/15" : "bg-[var(--status-warning)]/15",
+                  "shrink-0 text-base font-semibold",
+                  tone === "good" && "text-[var(--status-good)]",
+                  tone === "warning" && "text-[var(--status-warning)]",
+                  (tone === "neutral" || !tone) && "text-foreground",
                 )}
               >
-                <Icon
-                  className={cn(
-                    "h-4 w-4",
-                    iconTone === "good" ? "text-[var(--status-good)]" : "text-[var(--status-warning)]",
-                  )}
-                />
+                {trailing(row)}
+              </span>
+            </button>
+            {onDelete && (
+              <span className="pr-3">
+                <ConfirmDeleteButton onConfirm={() => onDelete(row)} />
               </span>
             )}
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-base font-medium text-foreground">{title(row)}</span>
-              {sub && <span className="block truncate text-sm text-muted-foreground">{sub}</span>}
-            </span>
-            <span
-              className={cn(
-                "shrink-0 text-base font-semibold",
-                tone === "good" && "text-[var(--status-good)]",
-                tone === "warning" && "text-[var(--status-warning)]",
-                (tone === "neutral" || !tone) && "text-foreground",
-              )}
-            >
-              {trailing(row)}
-            </span>
-          </button>
+          </div>
         );
       })}
     </div>

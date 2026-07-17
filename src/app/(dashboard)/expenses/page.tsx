@@ -136,6 +136,7 @@ export default function ExpensesPage() {
             trailing={(e) => `−${formatPeso(e.amount)}`}
             trailingTone="warning"
             onSelect={(e) => setEditingEntry(e)}
+            onDelete={(e) => deleteEntry(e.id)}
             emptyMessage="No expenses logged yet."
           />
 

@@ -124,6 +124,7 @@ export default function SalesPage() {
             trailing={(e) => `+${formatPeso(e.amount)}`}
             trailingTone="good"
             onSelect={(e) => setEditingEntry(e)}
+            onDelete={(e) => deleteEntry(e.id)}
             emptyMessage="No sales logged yet."
           />
 

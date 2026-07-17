@@ -52,6 +52,7 @@ export function QuickEditForm({
   // draft.amount on every keystroke would make "12.50" collapse to "1250").
   const [amountText, setAmountText] = useState(initial.amount == null ? "" : String(initial.amount));
   const [quantityText, setQuantityText] = useState(initial.quantity == null ? "" : String(initial.quantity));
+  const [amountInvalid, setAmountInvalid] = useState(false);
 
   function set<K extends keyof EntryDraft>(key: K, value: EntryDraft[K]) {
     setDraft((d) => ({ ...d, [key]: value }));
@@ -79,13 +80,17 @@ export function QuickEditForm({
             type="number"
             inputMode="decimal"
             className="h-9"
+            aria-invalid={amountInvalid}
             value={amountText}
             onChange={(e) => {
-              const clean = sanitizeAmountText(e.target.value);
+              const raw = e.target.value;
+              const clean = sanitizeAmountText(raw);
               setAmountText(clean);
               set("amount", clean === "" ? null : Number(clean));
+              setAmountInvalid(raw !== clean);
             }}
           />
+          {amountInvalid && <p className="text-xs text-destructive">Numbers only</p>}
         </div>
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">Quantity</Label>
