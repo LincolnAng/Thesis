@@ -20,11 +20,11 @@ export function SummaryGrid({ items }: { items: GridItem[] }) {
         const Icon = item.icon;
         const content = (
           <>
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-muted">
-              <Icon className="h-6 w-6 text-foreground" />
+            <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-muted">
+              <Icon className="h-8 w-8 text-foreground" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-lg font-semibold text-foreground">{item.label}</span>
+              <span className="block text-xl font-semibold text-foreground">{item.label}</span>
               <span
                 className={cn(
                   "block truncate text-base",
@@ -34,11 +34,11 @@ export function SummaryGrid({ items }: { items: GridItem[] }) {
                 {item.stat}
               </span>
             </span>
-            <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+            <ChevronRight className="h-6 w-6 shrink-0 text-muted-foreground" />
           </>
         );
         const className =
-          "flex w-full items-center gap-4 rounded-2xl border border-border bg-card px-4 py-4 text-left transition-colors hover:bg-accent";
+          "flex w-full items-center gap-4 rounded-2xl border border-border bg-card px-5 py-6 text-left transition-colors hover:bg-accent";
 
         return (
           <Link key={item.key} href={item.href} className={className}>

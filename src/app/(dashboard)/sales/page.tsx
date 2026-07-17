@@ -150,6 +150,7 @@ export default function SalesPage() {
           initial={entryToDraft(editingEntry)}
           lockType
           onSave={(draft) => replaceEntry(editingEntry.id, draft)}
+          onDelete={() => deleteEntry(editingEntry.id)}
         />
       )}
     </div>

@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { ChipGroup } from "@/components/ui/chip-group";
+import { ConfirmDeleteButton } from "@/components/data-table/confirm-delete-button";
 import { useStore } from "@/lib/store/use-store";
 import { EXPENSE_CATEGORY_LABELS, ENTRY_TYPE_LABELS, PRICE_TYPE_LABELS } from "@/lib/format";
 import { allExpenseCategories } from "@/lib/summary/expenses-summary";
@@ -15,10 +16,19 @@ import { cn } from "@/lib/utils";
 const ENTRY_TYPES = Object.keys(ENTRY_TYPE_LABELS) as EntryType[];
 const PRICE_TYPES: Exclude<PriceType, null>[] = ["standard", "friend", "wholesale"];
 
+/** Strips anything but digits and a single decimal point — typed or pasted. */
+function sanitizeAmountText(raw: string): string {
+  const digitsAndDots = raw.replace(/[^0-9.]/g, "");
+  const firstDot = digitsAndDots.indexOf(".");
+  if (firstDot === -1) return digitsAndDots;
+  return digitsAndDots.slice(0, firstDot + 1) + digitsAndDots.slice(firstDot + 1).replace(/\./g, "");
+}
+
 export function QuickEditForm({
   initial,
   onSave,
   onCancel,
+  onDelete,
   lockType = false,
   allowedTypes,
   className,
@@ -26,6 +36,8 @@ export function QuickEditForm({
   initial: EntryDraft;
   onSave: (draft: EntryDraft) => void;
   onCancel: () => void;
+  /** Shows a delete button next to Save/Cancel — pass only when editing an entry that already exists. */
+  onDelete?: () => void;
   /** Hide the "This was a..." type picker entirely — used when the form is already scoped to one type. */
   lockType?: boolean;
   /** Restrict the type picker to a subset (e.g. Stock's manual entry only offers Batch made / Waste / Stock out). */
@@ -69,8 +81,9 @@ export function QuickEditForm({
             className="h-9"
             value={amountText}
             onChange={(e) => {
-              setAmountText(e.target.value);
-              set("amount", e.target.value === "" ? null : Number(e.target.value));
+              const clean = sanitizeAmountText(e.target.value);
+              setAmountText(clean);
+              set("amount", clean === "" ? null : Number(clean));
             }}
           />
         </div>
@@ -146,7 +159,8 @@ export function QuickEditForm({
         </div>
       )}
 
-      <div className="flex gap-2 pt-1">
+      <div className="flex items-center gap-2 pt-1">
+        {onDelete && <ConfirmDeleteButton onConfirm={onDelete} />}
         <Button size="sm" className="flex-1" onClick={() => onSave(draft)}>
           Save
         </Button>

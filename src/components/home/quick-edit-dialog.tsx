@@ -11,6 +11,7 @@ export function QuickEditDialog({
   title,
   initial,
   onSave,
+  onDelete,
   lockType,
   allowedTypes,
 }: {
@@ -19,6 +20,8 @@ export function QuickEditDialog({
   title: string;
   initial: EntryDraft;
   onSave: (draft: EntryDraft) => void;
+  /** Shows a delete button in the form — pass only when editing an entry that already exists. */
+  onDelete?: () => void;
   lockType?: boolean;
   allowedTypes?: EntryType[];
 }) {
@@ -38,6 +41,14 @@ export function QuickEditDialog({
             onOpenChange(false);
           }}
           onCancel={() => onOpenChange(false)}
+          onDelete={
+            onDelete
+              ? () => {
+                  onDelete();
+                  onOpenChange(false);
+                }
+              : undefined
+          }
         />
       </DialogContent>
     </Dialog>
