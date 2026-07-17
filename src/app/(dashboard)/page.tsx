@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Receipt, Wallet, Box, Calculator, Truck, Megaphone } from "lucide-react";
+import { Receipt, Wallet, Box, Calculator, Truck } from "lucide-react";
 import { SummaryGrid, type GridItem } from "@/components/summary/summary-grid";
 import { Bar } from "@/components/summary/bar";
 import { StatTile } from "@/components/data-table/stat-tile";
@@ -17,11 +17,10 @@ import { computeExpensesSummary, monthlyExpensesByCategory } from "@/lib/summary
 import { computeIngredientReach } from "@/lib/summary/ingredient-reach";
 import { computeMonthlyProfitTrend, computeProductMarginRanking } from "@/lib/summary/profit-summary";
 import { productCostPerJar } from "@/lib/summary/recipe-cost";
-import { summarizeByPlatform } from "@/lib/marketing/social-derive";
 import { useViewMode } from "@/lib/summary/view-mode";
 
 export default function HomePage() {
-  const { entries, products, rawMaterials, suppliers, categoryBudgets, socialStats } = useStore();
+  const { entries, products, rawMaterials, suppliers, categoryBudgets } = useStore();
   const [viewMode] = useViewMode();
 
   const sales = useMemo(
@@ -61,8 +60,6 @@ export default function HomePage() {
     return h.length >= 2 && h[h.length - 1].price > h[h.length - 2].price;
   }).length;
 
-  const totalFollowers = summarizeByPlatform(socialStats).reduce((sum, p) => sum + (p.latest?.followers ?? 0), 0);
-
   const netProfit = profitThisMonth?.netProfit ?? 0;
   const cogsPct = profitThisMonth?.cogsPct ?? 0;
   const expensesPct = sales.revenue > 0 ? (expenses.total / sales.revenue) * 100 : 0;
@@ -101,13 +98,6 @@ export default function HomePage() {
           : `${suppliers.length} suppliers`,
       statTone: priceRoseCount > 0 ? "warning" : "neutral",
       href: "/suppliers",
-    },
-    {
-      key: "marketing",
-      label: "Marketing",
-      icon: Megaphone,
-      stat: `${totalFollowers.toLocaleString("en-PH")} followers`,
-      href: "/marketing",
     },
   ];
 
