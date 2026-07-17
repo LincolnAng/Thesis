@@ -26,6 +26,7 @@ import type {
   RawMaterialStock,
   SocialStatEntry,
   Supplier,
+  SyncStatus,
   TokenUsage,
 } from "./types";
 
@@ -38,6 +39,7 @@ export interface StoreState {
   categoryBudgets: Partial<Record<ExpenseCategory, number>>;
   tokenUsage: TokenUsage;
   aiStatus: AiStatus;
+  syncStatus: SyncStatus;
 }
 
 const STORAGE_KEY = "mang-kikos-cocoa-state-v6";
@@ -78,6 +80,10 @@ function defaultState(): StoreState {
     aiStatus: {
       apiKeyMissing: false,
     },
+    syncStatus: {
+      failing: false,
+      failedAt: null,
+    },
   };
 }
 
@@ -88,7 +94,10 @@ function loadState(): StoreState {
     if (!raw) return defaultState();
     const parsed = JSON.parse(raw);
     if (parsed.__v !== SCHEMA_VERSION) return defaultState();
-    return parsed.state as StoreState;
+    // Spread over defaultState() (not just the cached blob) so a field added after
+    // a user's browser already cached state under this same SCHEMA_VERSION — like
+    // syncStatus — still comes back defined instead of undefined.
+    return { ...defaultState(), ...(parsed.state as Partial<StoreState>) };
   } catch {
     return defaultState();
   }
@@ -133,22 +142,61 @@ function emit() {
   listeners.forEach((l) => l());
 }
 
-/** Fire-and-forget helper for every `mirror*` call below — best-effort, since the
- * paint cache still has the change locally for this device even if this fails. */
+// Every mirror write for a given collection must land in the order it was
+// issued — otherwise an update/delete's "find this row" read can race ahead of
+// an earlier append that hasn't written yet, causing a duplicate row (update)
+// or a silent no-op (delete, which then reappears on the next sync poll).
+// Queuing per collection name (i.e. per Sheets tab) serializes writes to that
+// tab without blocking unrelated tabs from mirroring concurrently.
+const collectionQueues = new Map<string, Promise<void>>();
+
+function enqueueForCollection(collection: string, task: () => Promise<void>): Promise<void> {
+  const prior = collectionQueues.get(collection) ?? Promise.resolve();
+  const run = prior.then(task, task);
+  // Store a tail that always settles, so one failed op doesn't wedge every
+  // later op on this collection into permanent rejection.
+  collectionQueues.set(
+    collection,
+    run.then(
+      () => undefined,
+      () => undefined,
+    ),
+  );
+  return run;
+}
+
+function setSyncFailing(failing: boolean) {
+  if (state.syncStatus.failing === failing) return;
+  setState((prev) => ({
+    ...prev,
+    syncStatus: { failing, failedAt: failing ? new Date().toISOString() : null },
+  }));
+}
+
+/** Best-effort helper for every `mirror*` call below — the paint cache still has
+ * the change locally for this device even if the write to Sheets fails, but a
+ * failure now flips visible sync-status (see `SyncErrorBanner`) instead of
+ * disappearing silently. Ops on the same collection are serialized (see
+ * `enqueueForCollection`) so a fast add-then-edit/delete can't race. */
 async function mirrorOp(
   collection: string,
   op: "append" | "update" | "delete" | "migrate",
   payload: { id?: string; item?: unknown; items?: unknown[] },
 ): Promise<void> {
-  try {
-    await fetch("/api/business-data", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ collection, op, ...payload }),
-    });
-  } catch {
-    // best-effort
-  }
+  await enqueueForCollection(collection, async () => {
+    try {
+      const res = await fetch("/api/business-data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ collection, op, ...payload }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.reason ?? json.detail ?? "sync failed");
+      setSyncFailing(false);
+    } catch {
+      setSyncFailing(true);
+    }
+  });
 }
 
 /** Pushes whatever's currently local up to Sheets exactly once, the first time the

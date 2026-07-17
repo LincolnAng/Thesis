@@ -116,3 +116,11 @@ export interface TokenUsage {
 export interface AiStatus {
   apiKeyMissing: boolean;
 }
+
+export interface SyncStatus {
+  /** True if the most recently settled write to Google Sheets failed. Clears
+   * on the next write that succeeds — it does not mean the failed write was
+   * retried, only that something didn't save and hasn't been confirmed since. */
+  failing: boolean;
+  failedAt: string | null;
+}
