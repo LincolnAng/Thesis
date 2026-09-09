@@ -121,7 +121,7 @@ export default function AllocationsPage() {
         </>
       )}
 
-      {addOpen && <AllocationDialog allocation={null} onClose={() => setAddOpen(false)} onSave={(patch) => addAllocation({ ...patch, eventId: null })} />}
+      {addOpen && <AllocationDialog allocation={null} onClose={() => setAddOpen(false)} onSave={(patch) => addAllocation(patch)} />}
 
       {editing && (
         <AllocationDialog

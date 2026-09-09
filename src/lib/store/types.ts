@@ -196,6 +196,19 @@ export interface Allocation {
   createdAt: string;
 }
 
+/** A time-boxed sales period (a one-week mall fiesta, a holiday promo, a trade show) — a
+ * thin, standalone entity, not a subsystem. Its only real behavior is being something
+ * entries and allocations can optionally tag (Entry.eventId, Allocation.eventId), so
+ * activity during it can be viewed separately from ordinary day-to-day tracking — see
+ * lib/summary/event-summary.ts. */
+export interface Event {
+  id: string;
+  name: string;
+  startDate: string; // ISO date
+  endDate: string; // ISO date
+  notes: string;
+}
+
 export interface SyncStatus {
   /** True if the most recently settled write to Google Sheets failed. Clears
    * on the next write that succeeds — it does not mean the failed write was

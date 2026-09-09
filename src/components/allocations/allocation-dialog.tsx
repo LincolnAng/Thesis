@@ -20,14 +20,15 @@ export function AllocationDialog({
   /** null = "create new" mode; otherwise editing this existing allocation. */
   allocation: Allocation | null;
   onClose: () => void;
-  onSave: (patch: { productId: string; variantId: string | null; label: string; allocatedQty: number }) => void;
+  onSave: (patch: { productId: string; variantId: string | null; label: string; allocatedQty: number; eventId: string | null }) => void;
   onDelete?: () => void;
 }) {
-  const { products, entries } = useStore();
+  const { products, entries, events } = useStore();
   const [productId, setProductId] = useState(allocation?.productId ?? products[0]?.id ?? "");
   const [variantId, setVariantId] = useState(allocation?.variantId ?? "");
   const [label, setLabel] = useState(allocation?.label ?? "");
   const [qtyText, setQtyText] = useState(allocation ? String(allocation.allocatedQty) : "");
+  const [eventId, setEventId] = useState(allocation?.eventId ?? "");
 
   const product = products.find((p) => p.id === productId);
   const stats = allocation ? allocationStats(allocation, entries) : null;
@@ -36,7 +37,7 @@ export function AllocationDialog({
     const trimmedLabel = label.trim();
     const qty = Number(qtyText) || 0;
     if (!trimmedLabel || !productId || qty <= 0) return;
-    onSave({ productId, variantId: variantId || null, label: trimmedLabel, allocatedQty: qty });
+    onSave({ productId, variantId: variantId || null, label: trimmedLabel, allocatedQty: qty, eventId: eventId || null });
     onClose();
   }
 
@@ -93,6 +94,24 @@ export function AllocationDialog({
             <Label className="text-xs text-muted-foreground">Quantity reserved</Label>
             <Input type="number" value={qtyText} onChange={(e) => setQtyText(e.target.value)} placeholder="e.g. 30" />
           </div>
+
+          {events.length > 0 && (
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Linked event (optional)</Label>
+              <select
+                className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
+                value={eventId}
+                onChange={(e) => setEventId(e.target.value)}
+              >
+                <option value="">None</option>
+                {events.map((ev) => (
+                  <option key={ev.id} value={ev.id}>
+                    {ev.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {allocation && stats && (
             <div className="rounded-xl border border-border p-3 text-sm">

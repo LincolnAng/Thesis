@@ -8,6 +8,7 @@ import { budgetsCollection } from "@/lib/sheets/budgets";
 import { customersCollection } from "@/lib/sheets/customers";
 import { priceTiersCollection } from "@/lib/sheets/price-tiers";
 import { allocationsCollection } from "@/lib/sheets/allocations";
+import { eventsCollection } from "@/lib/sheets/events";
 import type { SheetCollection } from "@/lib/sheets/collection";
 
 const COLLECTIONS = {
@@ -23,6 +24,7 @@ const COLLECTIONS = {
   customers: customersCollection,
   priceTiers: priceTiersCollection,
   allocations: allocationsCollection,
+  events: eventsCollection,
 } as const;
 
 type CollectionName = keyof typeof COLLECTIONS;
@@ -46,6 +48,7 @@ export async function GET() {
       customers,
       priceTiers,
       allocations,
+      events,
     ] = await Promise.all([
       entriesCollection.getAll(),
       productsCollection.getAll(),
@@ -59,6 +62,7 @@ export async function GET() {
       customersCollection.getAll(),
       priceTiersCollection.getAll(),
       allocationsCollection.getAll(),
+      eventsCollection.getAll(),
     ]);
     return NextResponse.json({
       success: true,
@@ -74,6 +78,7 @@ export async function GET() {
       customers,
       priceTiers,
       allocations,
+      events,
     });
   } catch (err) {
     return NextResponse.json({ success: false, detail: err instanceof Error ? err.message : String(err) });

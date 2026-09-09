@@ -45,7 +45,7 @@ export function QuickEditForm({
   /** Overrides the default chat-bubble width — pass "max-w-none" when this fills a full-width page column. */
   className?: string;
 }) {
-  const { products, rawMaterials, categoryBudgets, allocations } = useStore();
+  const { products, rawMaterials, categoryBudgets, allocations, events } = useStore();
   const [draft, setDraft] = useState<EntryDraft>(initial);
   // Buffered as text, not the parsed number, so typing a decimal point doesn't get
   // silently eaten (Number("12.") rounds to 12, so re-deriving the field from
@@ -168,6 +168,24 @@ export function QuickEditForm({
             {productAllocations.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {events.length > 0 && (
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Event (optional)</Label>
+          <select
+            className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
+            value={draft.eventId ?? ""}
+            onChange={(e) => set("eventId", e.target.value || null)}
+          >
+            <option value="">None</option>
+            {events.map((ev) => (
+              <option key={ev.id} value={ev.id}>
+                {ev.name}
               </option>
             ))}
           </select>

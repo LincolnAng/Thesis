@@ -24,6 +24,7 @@ import type {
   Allocation,
   Customer,
   Entry,
+  Event,
   ExpenseCategory,
   PriceHistoryPoint,
   PriceTier,
@@ -46,6 +47,7 @@ export interface StoreState {
   customers: Customer[];
   priceTiers: PriceTier[];
   allocations: Allocation[];
+  events: Event[];
   tokenUsage: TokenUsage;
   aiStatus: AiStatus;
   syncStatus: SyncStatus;
@@ -62,6 +64,7 @@ const BUDGETS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-budgets-migrated-v1";
 const CUSTOMERS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-customers-migrated-v1";
 const PRICE_TIERS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-price-tiers-migrated-v1";
 const ALLOCATIONS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-allocations-migrated-v1";
+const EVENTS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-events-migrated-v1";
 const SYNC_POLL_INTERVAL_MS = 30_000;
 
 // Different expense categories naturally need different amounts planned for
@@ -87,6 +90,7 @@ function defaultState(): StoreState {
     customers: initialCustomers,
     priceTiers: [],
     allocations: [],
+    events: [],
     tokenUsage: {
       totalInputTokens: 0,
       totalOutputTokens: 0,
@@ -352,6 +356,13 @@ async function loadAllFromServer() {
       state.allocations,
     );
 
+    const eventsMigration = await migrateCollectionIfEmpty<Event>(
+      "events",
+      EVENTS_MIGRATION_FLAG_KEY,
+      Array.isArray(json.events) ? json.events : [],
+      state.events,
+    );
+
     const serverEntries = entriesMigration.items;
     const serverIds = new Set(serverEntries.map((e) => e.id));
 
@@ -371,6 +382,7 @@ async function loadAllFromServer() {
         customers: customersMigration.items,
         priceTiers: priceTiersMigration.items,
         allocations: allocationsMigration.items,
+        events: eventsMigration.items,
       };
     });
   } catch {
@@ -810,6 +822,36 @@ export function updateAllocation(id: string, patch: Partial<Allocation>) {
 export function deleteAllocation(id: string) {
   setState((prev) => ({ ...prev, allocations: prev.allocations.filter((a) => a.id !== id) }));
   void mirrorOp("allocations", "delete", { id });
+}
+
+// --- Events ------------------------------------------------------------------
+
+export function addEvent(input: Omit<Event, "id">): Event {
+  const event: Event = { ...input, id: genId("event") };
+  setState((prev) => ({ ...prev, events: [...prev.events, event] }));
+  void mirrorOp("events", "append", { item: event });
+  return event;
+}
+
+export function updateEvent(id: string, patch: Partial<Event>) {
+  let updated: Event | undefined;
+  setState((prev) => ({
+    ...prev,
+    events: prev.events.map((e) => {
+      if (e.id !== id) return e;
+      updated = { ...e, ...patch };
+      return updated;
+    }),
+  }));
+  if (updated) void mirrorOp("events", "update", { id, item: updated });
+}
+
+/** Only removes the Event record — entries/allocations already tagged with this eventId keep
+ * that tag (it just no longer resolves to a visible event), same one-way-delete principle as
+ * deleteCustomer/deleteAllocation. */
+export function deleteEvent(id: string) {
+  setState((prev) => ({ ...prev, events: prev.events.filter((e) => e.id !== id) }));
+  void mirrorOp("events", "delete", { id });
 }
 
 // --- Token usage ------------------------------------------------------------
