@@ -1,4 +1,5 @@
 import {
+  initialCustomers,
   initialEntries,
   initialProducts,
   initialRawMaterials,
@@ -19,6 +20,7 @@ import {
 } from "./sheet-shapes";
 import type {
   AiStatus,
+  Customer,
   Entry,
   ExpenseCategory,
   PriceHistoryPoint,
@@ -37,6 +39,7 @@ export interface StoreState {
   suppliers: Supplier[];
   socialStats: SocialStatEntry[];
   categoryBudgets: Partial<Record<ExpenseCategory, number>>;
+  customers: Customer[];
   tokenUsage: TokenUsage;
   aiStatus: AiStatus;
   syncStatus: SyncStatus;
@@ -50,6 +53,7 @@ const RAW_MATERIALS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-raw-materials-migrate
 const SUPPLIERS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-suppliers-migrated-v1";
 const SOCIAL_STATS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-social-stats-migrated-v1";
 const BUDGETS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-budgets-migrated-v1";
+const CUSTOMERS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-customers-migrated-v1";
 const SYNC_POLL_INTERVAL_MS = 30_000;
 
 // Different expense categories naturally need different amounts planned for
@@ -72,6 +76,7 @@ function defaultState(): StoreState {
     suppliers: initialSuppliers,
     socialStats: initialSocialStats,
     categoryBudgets: { ...DEFAULT_CATEGORY_BUDGETS },
+    customers: initialCustomers,
     tokenUsage: {
       totalInputTokens: 0,
       totalOutputTokens: 0,
@@ -313,6 +318,13 @@ async function loadAllFromServer() {
       recordToBudgetRows(state.categoryBudgets),
     );
 
+    const customersMigration = await migrateCollectionIfEmpty<Customer>(
+      "customers",
+      CUSTOMERS_MIGRATION_FLAG_KEY,
+      Array.isArray(json.customers) ? json.customers : [],
+      state.customers,
+    );
+
     const serverEntries = entriesMigration.items;
     const serverIds = new Set(serverEntries.map((e) => e.id));
 
@@ -329,6 +341,7 @@ async function loadAllFromServer() {
         suppliers: suppliersMigration.items.map((row) => assembleSupplier(row, historyRows)),
         socialStats: socialStatsMigration.items,
         categoryBudgets: budgetRowsToRecord(budgetsMigration.items),
+        customers: customersMigration.items,
       };
     });
   } catch {
@@ -412,6 +425,15 @@ function findRawMaterialByName(materials: RawMaterialStock[], name: string | nul
   );
 }
 
+/** Exact match only (unlike the fuzzy substring matching above) — this drives automatic
+ * customerId linking on every new/edited entry, and a false-positive substring match here
+ * would silently mis-link one buyer's history onto a different, similarly-named customer. */
+function findCustomerByName(customers: Customer[], name: string | null): Customer | undefined {
+  if (!name) return undefined;
+  const n = normalize(name);
+  return customers.find((c) => normalize(c.name) === n);
+}
+
 // --- Entries -----------------------------------------------------------
 //
 // Every entry can affect product stock and/or raw-material stock. To support
@@ -448,7 +470,11 @@ function applyEntrySideEffects(
 }
 
 export function addEntry(input: Omit<Entry, "id"> & { id?: string }): Entry {
-  const entry: Entry = { ...input, id: input.id ?? genId("entry") };
+  // Auto-link to an existing Customer by exact name match unless the caller already set
+  // one explicitly — keeps the free-text counterparty flow working exactly as before while
+  // giving named/recurring customers a real id-based link with zero new UI required.
+  const customerId = input.customerId ?? findCustomerByName(state.customers, input.counterparty)?.id ?? null;
+  const entry: Entry = { ...input, customerId, id: input.id ?? genId("entry") };
   pendingLocalEntryIds.add(entry.id);
   setState((prev) => {
     const { products, rawMaterials } = applyEntrySideEffects(entry, 1, prev.products, prev.rawMaterials);
@@ -478,7 +504,8 @@ export function replaceEntry(id: string, next: Omit<Entry, "id">) {
     const old = prev.entries.find((e) => e.id === id);
     if (!old) return prev;
     const reversed = applyEntrySideEffects(old, -1, prev.products, prev.rawMaterials);
-    updatedEntry = { ...next, id };
+    const customerId = next.customerId ?? findCustomerByName(prev.customers, next.counterparty)?.id ?? null;
+    updatedEntry = { ...next, customerId, id };
     const applied = applyEntrySideEffects(updatedEntry, 1, reversed.products, reversed.rawMaterials);
     return {
       ...prev,
@@ -624,6 +651,35 @@ export function addSocialStat(input: Omit<SocialStatEntry, "id">): SocialStatEnt
   return stat;
 }
 
+// --- Customers -------------------------------------------------------------
+
+export function addCustomer(input: Omit<Customer, "id">): Customer {
+  const customer: Customer = { ...input, id: genId("cust") };
+  setState((prev) => ({ ...prev, customers: [...prev.customers, customer] }));
+  void mirrorOp("customers", "append", { item: customer });
+  return customer;
+}
+
+export function updateCustomer(id: string, patch: Partial<Customer>) {
+  let updated: Customer | undefined;
+  setState((prev) => ({
+    ...prev,
+    customers: prev.customers.map((c) => {
+      if (c.id !== id) return c;
+      updated = { ...c, ...patch };
+      return updated;
+    }),
+  }));
+  if (updated) void mirrorOp("customers", "update", { id, item: updated });
+}
+
+/** Only removes the Customer record — entries already linked to it (by customerId or by
+ * a matching counterparty name) are untouched and keep displaying that name as before. */
+export function deleteCustomer(id: string) {
+  setState((prev) => ({ ...prev, customers: prev.customers.filter((c) => c.id !== id) }));
+  void mirrorOp("customers", "delete", { id });
+}
+
 // --- Token usage ------------------------------------------------------------
 
 export function addTokenUsage(inputTokens: number, outputTokens: number) {
@@ -675,6 +731,7 @@ export function restoreLocalCollections(data: {
   suppliers?: Supplier[];
   socialStats?: SocialStatEntry[];
   categoryBudgets?: Partial<Record<ExpenseCategory, number>>;
+  customers?: Customer[];
 }) {
   setState((prev) => ({
     ...prev,
@@ -683,6 +740,7 @@ export function restoreLocalCollections(data: {
     suppliers: data.suppliers ?? prev.suppliers,
     socialStats: data.socialStats ?? prev.socialStats,
     categoryBudgets: data.categoryBudgets ?? prev.categoryBudgets,
+    customers: data.customers ?? prev.customers,
   }));
 
   data.products?.forEach((p) => {
@@ -700,4 +758,5 @@ export function restoreLocalCollections(data: {
       void mirrorOp("budgets", "update", { id: category, item: { category, monthlyBudget: amount } });
     }
   }
+  data.customers?.forEach((c) => void mirrorOp("customers", "update", { id: c.id, item: c }));
 }

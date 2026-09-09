@@ -38,6 +38,11 @@ export interface Entry {
   rawText: string;
   confidence: number; // 0-1
   notes?: string | null;
+  /** Links this entry to a Customer record when `counterparty` matches one by name
+   * (resolved automatically in store.ts, or set explicitly). Historical entries logged
+   * before Customers existed stay matched by `counterparty` name alone — this is an
+   * additive linkage, not a replacement for it. */
+  customerId?: string | null;
 }
 
 export interface RecipeIngredientRow {
@@ -116,6 +121,13 @@ export interface TokenUsage {
 
 export interface AiStatus {
   apiKeyMissing: boolean;
+}
+
+export interface Customer {
+  id: string;
+  name: string;
+  contact: string;
+  notes: string;
 }
 
 export interface SyncStatus {

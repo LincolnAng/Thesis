@@ -5,6 +5,7 @@ import { rawMaterialsCollection } from "@/lib/sheets/raw-materials";
 import { suppliersCollection, supplierPriceHistoryCollection } from "@/lib/sheets/suppliers";
 import { socialStatsCollection } from "@/lib/sheets/marketing";
 import { budgetsCollection } from "@/lib/sheets/budgets";
+import { customersCollection } from "@/lib/sheets/customers";
 import type { SheetCollection } from "@/lib/sheets/collection";
 
 const COLLECTIONS = {
@@ -16,6 +17,7 @@ const COLLECTIONS = {
   supplierPriceHistory: supplierPriceHistoryCollection,
   socialStats: socialStatsCollection,
   budgets: budgetsCollection,
+  customers: customersCollection,
 } as const;
 
 type CollectionName = keyof typeof COLLECTIONS;
@@ -26,16 +28,18 @@ function isCollectionName(value: unknown): value is CollectionName {
 
 export async function GET() {
   try {
-    const [entries, products, recipes, rawMaterials, suppliers, supplierPriceHistory, socialStats, budgets] = await Promise.all([
-      entriesCollection.getAll(),
-      productsCollection.getAll(),
-      recipesCollection.getAll(),
-      rawMaterialsCollection.getAll(),
-      suppliersCollection.getAll(),
-      supplierPriceHistoryCollection.getAll(),
-      socialStatsCollection.getAll(),
-      budgetsCollection.getAll(),
-    ]);
+    const [entries, products, recipes, rawMaterials, suppliers, supplierPriceHistory, socialStats, budgets, customers] =
+      await Promise.all([
+        entriesCollection.getAll(),
+        productsCollection.getAll(),
+        recipesCollection.getAll(),
+        rawMaterialsCollection.getAll(),
+        suppliersCollection.getAll(),
+        supplierPriceHistoryCollection.getAll(),
+        socialStatsCollection.getAll(),
+        budgetsCollection.getAll(),
+        customersCollection.getAll(),
+      ]);
     return NextResponse.json({
       success: true,
       entries,
@@ -46,6 +50,7 @@ export async function GET() {
       supplierPriceHistory,
       socialStats,
       budgets,
+      customers,
     });
   } catch (err) {
     return NextResponse.json({ success: false, detail: err instanceof Error ? err.message : String(err) });
