@@ -1,7 +1,6 @@
-import { getAiSettings } from "@/lib/sheets/settings";
-
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 export const CLAUDE_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
+const REQUEST_TIMEOUT_MS = 20_000;
 
 export interface AnthropicUsage {
   input_tokens: number;
@@ -15,20 +14,31 @@ export interface AnthropicCallResult {
   error?: string;
 }
 
+/** A system-prompt block. Marking the large static block `cache_control: ephemeral` lets
+ * Anthropic reuse it across requests instead of reprocessing it every message. */
+export interface AnthropicSystemBlock {
+  type: "text";
+  text: string;
+  cache_control?: { type: "ephemeral" };
+}
+
+export interface AnthropicMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+/** The caller resolves apiKey/model (from Sheets settings) once and passes them in — this
+ * used to re-read settings from Sheets internally on every call, duplicating a round trip
+ * the caller had already made and serializing it ahead of the Anthropic request. */
 export async function callClaude(params: {
-  system: string;
-  prompt: string;
+  system: string | AnthropicSystemBlock[];
+  messages: AnthropicMessage[];
   maxTokens?: number;
+  apiKey?: string | null;
+  model?: string | null;
 }): Promise<AnthropicCallResult> {
-  let apiKey = process.env.ANTHROPIC_API_KEY;
-  let model = CLAUDE_MODEL;
-  try {
-    const sheetSettings = await getAiSettings();
-    if (sheetSettings.apiKey) apiKey = sheetSettings.apiKey;
-    if (sheetSettings.model) model = sheetSettings.model;
-  } catch {
-    // Sheets not configured or unreachable — fall back to env vars silently.
-  }
+  const apiKey = params.apiKey || process.env.ANTHROPIC_API_KEY;
+  const model = params.model || CLAUDE_MODEL;
 
   if (!apiKey) {
     return {
@@ -38,6 +48,11 @@ export async function callClaude(params: {
       error: "missing_api_key",
     };
   }
+
+  // Without this a hung Anthropic response leaves the request (and the chat UI's typing
+  // indicator) spinning indefinitely, with no way back to the manual-entry fallback.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
     const res = await fetch(ANTHROPIC_API_URL, {
@@ -51,8 +66,9 @@ export async function callClaude(params: {
         model,
         max_tokens: params.maxTokens ?? 1000,
         system: params.system,
-        messages: [{ role: "user", content: params.prompt }],
+        messages: params.messages,
       }),
+      signal: controller.signal,
     });
 
     if (!res.ok) {
@@ -72,18 +88,27 @@ export async function callClaude(params: {
       ? json.content.find((block: { type?: string }) => block?.type === "text")
       : undefined;
     const text: string = textBlock?.text ?? "";
+    // Cached prompt tokens are reported separately from input_tokens. They're still billed
+    // (writes at a premium, reads at a discount), so fold them in — otherwise enabling prompt
+    // caching would silently make the app's own token budget tracking under-count every call.
     const usage: AnthropicUsage = {
-      input_tokens: json?.usage?.input_tokens ?? 0,
+      input_tokens:
+        (json?.usage?.input_tokens ?? 0) +
+        (json?.usage?.cache_creation_input_tokens ?? 0) +
+        (json?.usage?.cache_read_input_tokens ?? 0),
       output_tokens: json?.usage?.output_tokens ?? 0,
     };
     return { ok: true, text, usage };
   } catch (err) {
+    const timedOut = err instanceof Error && err.name === "AbortError";
     return {
       ok: false,
       text: "",
       usage: { input_tokens: 0, output_tokens: 0 },
-      error: `network_error: ${err instanceof Error ? err.message : String(err)}`,
+      error: timedOut ? "network_error: request timed out" : `network_error: ${err instanceof Error ? err.message : String(err)}`,
     };
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

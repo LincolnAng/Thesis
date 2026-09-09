@@ -1,4 +1,5 @@
 import type { BotLanguage } from "@/lib/sheets/settings";
+import { ALL_UNITS } from "@/lib/units";
 
 const LANGUAGE_INSTRUCTION: Record<BotLanguage, string> = {
   english: "Always write your \"reply\", \"clarifyQuestion\", and clarifyOptions \"label\" text in English only.",
@@ -10,9 +11,11 @@ const LANGUAGE_INSTRUCTION: Record<BotLanguage, string> = {
 
 const DEFAULT_EXPENSE_CATEGORIES = ["raw_materials", "labor", "utilities", "packaging", "transport", "misc"];
 
-export function assistantSystemPrompt(
-  dataSummary: string,
-  today: string,
+// Split into a static half (persona, glossary, field rules, output shape — byte-identical
+// across requests for a given language + category set) and a dynamic half (the live data
+// summary). The API only reuses a cached prompt block when its content matches exactly, which
+// one interpolated string mixing instructions with per-request data can never do.
+export function assistantSystemPromptStatic(
   botLanguage: BotLanguage = "english",
   expenseCategories: string[] = DEFAULT_EXPENSE_CATEGORIES,
 ): string {
@@ -55,13 +58,14 @@ Fill the "entry" object with these fields:
 - type: one of the entry types above
 - amount: total peso value as a number, or null if not mentioned (no currency symbols or commas)
 - quantity: numeric quantity, or null
-- unit: unit of the quantity (e.g. "jars", "kg", "pcs", "L"), or null
+- unit: the unit the quantity is measured in. Use EXACTLY one of these spellings when it fits: ${ALL_UNITS.join(", ")}. Map what the owner says onto one of them ("kilo"/"kilos" => "kg", "grams" => "g", "milliliters"/"cc" => "ml", "liter"/"litro" => "L", "piece"/"pcs" => "pcs", "bote" => "bottles"). Only invent a different unit if none of these genuinely fit. Null if no unit was stated.
+- IMPORTANT on sizes: when the owner names a product size like "250ml", "500 ml", "1kg", or "half kilo", that is the SIZE OF THE PRODUCT, and the count is what they sold. "Sold 3 of the 250ml" means quantity 3, unit "bottles"/"jars" (whatever the container is), and the size belongs in "notes" as "250ml". Never record the size digits as the quantity.
 - sku: product name or ingredient name mentioned, or null if unclear
 - counterparty: buyer, supplier, or person's name mentioned, or null
 - location: place mentioned (city/area), or null
 - priceType: "standard", "friend", or "wholesale" for sales — infer from context (bulk/tali/wholesale => wholesale; friend/libre/kaibigan => friend; otherwise standard) or null if not a sale or ambiguous whether it was paid for
 - category: for EXPENSE entries only, one of ${expenseCategories.map((c) => `"${c}"`).join(", ")} (the owner's own tracked expense categories — pick the closest match) — otherwise null
-- date: ISO 8601 date. If no date is mentioned, use today's date, ${today}.
+- date: ISO 8601 date. If no date is mentioned, use today's date (stated at the top of the owner's message).
 - confidence: your confidence in this extraction from 0 to 1. Use a LOW confidence (below 0.6) whenever the entry is genuinely ambiguous — e.g. unclear whether stock left as a paid sale or a free giveaway, or the entry type itself is unclear.
 - notes: a short optional clarifying note (e.g. "marked as utang/credit"), or null
 
@@ -73,16 +77,19 @@ Rules:
 
 --- MODE 2: "chat" ---
 
-Write a natural, warm "reply" as if you were a real consultant chatting with the owner. Respond to greetings and small talk in kind — don't force them into a business record, and don't be stiff or robotic. When asked a question about the business, answer using ONLY the data summary below — never invent numbers, always state the actual figure. If the data needed isn't in the summary, say you're not sure and suggest checking the Summary tab. You may also offer brief, friendly encouragement or a light business tip when it fits naturally. Keep replies under 60 words.
-
-Current business data summary (as of now):
-${dataSummary}
+Write a natural, warm "reply" as if you were a real consultant chatting with the owner. Respond to greetings and small talk in kind — don't force them into a business record, and don't be stiff or robotic. When asked a question about the business, answer using ONLY the data summary provided in the block after this one — never invent numbers, always state the actual figure. If the data needed isn't in the summary, say you're not sure and suggest checking the Summary tab. You may also offer brief, friendly encouragement or a light business tip when it fits naturally. Keep replies under 60 words.
 
 Output shape exactly — fill only the fields for whichever mode applies, set the rest to null:
-{"mode":"entry","reply":null,"entry":{"type":"SALE","amount":1800,"quantity":12,"unit":"jars","sku":"Classic Cocoa Spread","counterparty":"Aling Nena","location":null,"priceType":"wholesale","category":null,"date":"${today}","confidence":0.94,"notes":null},"clarifyQuestion":null,"clarifyOptions":null}
+{"mode":"entry","reply":null,"entry":{"type":"SALE","amount":1800,"quantity":12,"unit":"jars","sku":"Classic Cocoa Spread","counterparty":"Aling Nena","location":null,"priceType":"wholesale","category":null,"date":"2026-01-15","confidence":0.94,"notes":null},"clarifyQuestion":null,"clarifyOptions":null}
 
 or, for chat mode:
 {"mode":"chat","reply":"Hi there! Anything to log today, or want to check how things are going?","entry":null,"clarifyQuestion":null,"clarifyOptions":null}`;
+}
+
+/** The per-request half of the system prompt: changes every message, so it is sent as its own
+ * trailing block with no cache_control, leaving the big static block above it cacheable. */
+export function assistantSystemPromptDynamic(dataSummary: string): string {
+  return `Current business data summary (as of now):\n${dataSummary}`;
 }
 
 export function buildAssistantPrompt(rawText: string, today: string): string {

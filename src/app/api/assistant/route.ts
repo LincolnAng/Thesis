@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { callClaude, stripJsonFences } from "@/lib/ai/client";
-import { assistantSystemPrompt, buildAssistantPrompt } from "@/lib/ai/prompts";
+import { callClaude, stripJsonFences, type AnthropicMessage } from "@/lib/ai/client";
+import { assistantSystemPromptStatic, assistantSystemPromptDynamic, buildAssistantPrompt } from "@/lib/ai/prompts";
 import { getAiSettings } from "@/lib/sheets/settings";
+import { normalizeUnit } from "@/lib/units";
 import type { Entry } from "@/lib/store/types";
 
 const VALID_TYPES = ["SALE", "EXPENSE", "INVENTORY_IN", "INVENTORY_OUT", "WASTE", "SUPPLIER", "NOTE"];
@@ -33,6 +34,21 @@ interface ChatTurn {
   content: string;
 }
 
+/** The Messages API requires strictly alternating roles starting with "user". History
+ * rebuilt from the chat thread can have two owner messages in a row (when the assistant
+ * answered the first with an entry card rather than text), so collapse runs of the same
+ * role before sending. */
+function mergeConsecutiveRoles(messages: AnthropicMessage[]): AnthropicMessage[] {
+  const merged: AnthropicMessage[] = [];
+  for (const m of messages) {
+    const last = merged[merged.length - 1];
+    if (last && last.role === m.role) last.content = `${last.content}\n${m.content}`;
+    else merged.push({ ...m });
+  }
+  while (merged.length > 0 && merged[0].role === "assistant") merged.shift();
+  return merged;
+}
+
 function num(v: unknown): number | null {
   if (typeof v === "number" && Number.isFinite(v)) return v;
   if (typeof v === "string") {
@@ -58,7 +74,7 @@ function coerceEntry(parsed: Record<string, unknown>, today: string, validCatego
     type,
     amount: num(parsed.amount),
     quantity: num(parsed.quantity),
-    unit: str(parsed.unit),
+    unit: normalizeUnit(str(parsed.unit)),
     sku: str(parsed.sku),
     counterparty: str(parsed.counterparty),
     location: str(parsed.location),
@@ -75,7 +91,7 @@ function coercePatch(parsed: Record<string, unknown>, validCategories: string[])
   if ("type" in parsed && VALID_TYPES.includes(parsed.type as string)) patch.type = parsed.type as Entry["type"];
   if ("amount" in parsed) patch.amount = num(parsed.amount);
   if ("quantity" in parsed) patch.quantity = num(parsed.quantity);
-  if ("unit" in parsed) patch.unit = str(parsed.unit);
+  if ("unit" in parsed) patch.unit = normalizeUnit(str(parsed.unit));
   if ("sku" in parsed) patch.sku = str(parsed.sku);
   if ("counterparty" in parsed) patch.counterparty = str(parsed.counterparty);
   if ("location" in parsed) patch.location = str(parsed.location);
@@ -110,22 +126,37 @@ export async function POST(req: NextRequest) {
     Array.isArray(body.categories) && body.categories.length > 0 ? body.categories : DEFAULT_VALID_CATEGORIES;
 
   const today = new Date().toISOString().slice(0, 10);
+  // One settings read for the whole request (and cached in-process for a minute) — this used
+  // to be fetched here AND again inside callClaude, two serial Sheets round trips before the
+  // Anthropic request could even begin.
+  let apiKey: string | null = null;
+  let model: string | null = null;
   let botLanguage: Awaited<ReturnType<typeof getAiSettings>>["botLanguage"] = "english";
   try {
-    botLanguage = (await getAiSettings()).botLanguage;
+    const settings = await getAiSettings();
+    apiKey = settings.apiKey;
+    model = settings.model;
+    botLanguage = settings.botLanguage;
   } catch {
-    // Sheets unavailable — fall back to English rather than failing the whole request.
+    // Sheets unavailable — fall back to English/env defaults rather than failing the request.
   }
-  const system = assistantSystemPrompt(body.dataSummary ?? "No data available.", today, botLanguage, validCategories);
 
-  const history = (body.history ?? [])
+  const system = [
+    {
+      type: "text" as const,
+      text: assistantSystemPromptStatic(botLanguage, validCategories),
+      cache_control: { type: "ephemeral" as const },
+    },
+    { type: "text" as const, text: assistantSystemPromptDynamic(body.dataSummary ?? "No data available.") },
+  ];
+
+  // Real alternating turns instead of one flattened "Owner: ... / Kuya AI: ..." blob.
+  const historyMessages: AnthropicMessage[] = (body.history ?? [])
     .slice(-6)
-    .map((m) => `${m.role === "user" ? "Owner" : "Kuya AI"}: ${m.content}`)
-    .join("\n");
-  const userPrompt = buildAssistantPrompt(text, today);
-  const prompt = history ? `${history}\n${userPrompt}` : userPrompt;
+    .map((m) => ({ role: m.role, content: m.content }));
+  const messages = mergeConsecutiveRoles([...historyMessages, { role: "user", content: buildAssistantPrompt(text, today) }]);
 
-  const result = await callClaude({ system, prompt, maxTokens: 600 });
+  const result = await callClaude({ system, messages, maxTokens: 600, apiKey, model });
 
   if (!result.ok) {
     return NextResponse.json(

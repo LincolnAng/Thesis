@@ -104,7 +104,14 @@ function HomePageInner() {
 
     setSubmitting(true);
     const summary = buildDataSummary(state);
-    const outcome = await requestAssistant(rawText, summary, [], allExpenseCategories(state.categoryBudgets));
+    // Only plain text turns carry usable conversation context; entry cards, clarify prompts
+    // and quick-edit forms aren't turns. `messages` is this render's snapshot, so it excludes
+    // the owner message pushed above — which is correct, that one is sent as `rawText`.
+    const history = messages
+      .filter((m) => m.kind === "text")
+      .slice(-6)
+      .map((m) => ({ role: m.role, content: m.text }));
+    const outcome = await requestAssistant(rawText, summary, history, allExpenseCategories(state.categoryBudgets));
     setSubmitting(false);
 
     if (outcome.status === "unavailable") {

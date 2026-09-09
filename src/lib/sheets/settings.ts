@@ -15,7 +15,26 @@ export interface AiSettings {
   botLanguage: BotLanguage;
 }
 
+// These settings (API key, model, bot language) change maybe a handful of times ever, but
+// they were being read from Sheets on the hot path of every single chat message — a full
+// HTTP round trip to Google before the Anthropic request could even start. Caching them in
+// module scope for a short window removes that from nearly every request; saveAiSettings()
+// below clears it immediately so a change still takes effect right away.
+const SETTINGS_CACHE_TTL_MS = 60_000;
+let cachedSettings: { value: AiSettings; expiresAt: number } | null = null;
+
+export function clearAiSettingsCache(): void {
+  cachedSettings = null;
+}
+
 export async function getAiSettings(): Promise<AiSettings> {
+  if (cachedSettings && Date.now() < cachedSettings.expiresAt) return cachedSettings.value;
+  const settings = await readAiSettings();
+  cachedSettings = { value: settings, expiresAt: Date.now() + SETTINGS_CACHE_TTL_MS };
+  return settings;
+}
+
+async function readAiSettings(): Promise<AiSettings> {
   const rows = await getSheetValues(`${SETTINGS_SHEET}!A:B`);
   const byKey = new Map<string, string>();
   for (const [key, value] of rows) {
@@ -30,6 +49,7 @@ export async function getAiSettings(): Promise<AiSettings> {
 }
 
 export async function saveAiSettings(patch: { apiKey?: string; model?: string; botLanguage?: BotLanguage }): Promise<void> {
+  clearAiSettingsCache();
   await ensureSheetExists(SETTINGS_SHEET, SETTINGS_HEADER);
   const rows = await getSheetValues(`${SETTINGS_SHEET}!A:B`);
 
