@@ -47,6 +47,14 @@ export interface Entry {
    * was sold), when the product has variants and one could be resolved. Null for products
    * with no variants, or when the size genuinely wasn't stated/resolvable. */
   variantId?: string | null;
+  /** Tags this entry as counting against one Allocation's reserved quantity (e.g. this sale
+   * came out of the "Nomad" allocation, not the general pool). Manually selected only — the
+   * AI parser doesn't infer this in v1. Null means "counts against the general pool", same
+   * as every entry before Allocations existed. */
+  allocationId?: string | null;
+  /** Tags this entry as part of one time-boxed sales Event (e.g. a mall fiesta week), for
+   * filtering — independent of allocationId, though the two are often used together. */
+  eventId?: string | null;
 }
 
 export interface RecipeIngredientRow {
@@ -167,6 +175,25 @@ export interface PriceTier {
   dimensionValue: string;
   price: number;
   label: string; // display label, e.g. "Manila", "10+ jars", or a customer's name
+}
+
+/**
+ * A soft reservation of some of a product's stock for one distributor/event (e.g. "30 jars
+ * for Nomad", "20 jars for the IFEX trade show") — bookkeeping only. allocatedQty is never
+ * subtracted from Product.stockQty; the physical stock pool and its mutation (in
+ * applyEntrySideEffects) are completely unaffected by allocations existing. "Used" and
+ * "remaining" are computed by summing entries tagged with this allocation's id (see
+ * lib/summary/allocations.ts) — the allocation itself never stores a running total, so
+ * there's nothing here that can drift out of sync with the entries that reference it.
+ */
+export interface Allocation {
+  id: string;
+  productId: string;
+  variantId: string | null;
+  label: string; // e.g. "Nomad", "IFEX trade show"
+  allocatedQty: number;
+  eventId: string | null;
+  createdAt: string;
 }
 
 export interface SyncStatus {

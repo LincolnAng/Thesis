@@ -21,6 +21,7 @@ import {
 } from "./sheet-shapes";
 import type {
   AiStatus,
+  Allocation,
   Customer,
   Entry,
   ExpenseCategory,
@@ -44,6 +45,7 @@ export interface StoreState {
   categoryBudgets: Partial<Record<ExpenseCategory, number>>;
   customers: Customer[];
   priceTiers: PriceTier[];
+  allocations: Allocation[];
   tokenUsage: TokenUsage;
   aiStatus: AiStatus;
   syncStatus: SyncStatus;
@@ -59,6 +61,7 @@ const SOCIAL_STATS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-social-stats-migrated-
 const BUDGETS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-budgets-migrated-v1";
 const CUSTOMERS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-customers-migrated-v1";
 const PRICE_TIERS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-price-tiers-migrated-v1";
+const ALLOCATIONS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-allocations-migrated-v1";
 const SYNC_POLL_INTERVAL_MS = 30_000;
 
 // Different expense categories naturally need different amounts planned for
@@ -83,6 +86,7 @@ function defaultState(): StoreState {
     categoryBudgets: { ...DEFAULT_CATEGORY_BUDGETS },
     customers: initialCustomers,
     priceTiers: [],
+    allocations: [],
     tokenUsage: {
       totalInputTokens: 0,
       totalOutputTokens: 0,
@@ -341,6 +345,13 @@ async function loadAllFromServer() {
       state.priceTiers,
     );
 
+    const allocationsMigration = await migrateCollectionIfEmpty<Allocation>(
+      "allocations",
+      ALLOCATIONS_MIGRATION_FLAG_KEY,
+      Array.isArray(json.allocations) ? json.allocations : [],
+      state.allocations,
+    );
+
     const serverEntries = entriesMigration.items;
     const serverIds = new Set(serverEntries.map((e) => e.id));
 
@@ -359,6 +370,7 @@ async function loadAllFromServer() {
         categoryBudgets: budgetRowsToRecord(budgetsMigration.items),
         customers: customersMigration.items,
         priceTiers: priceTiersMigration.items,
+        allocations: allocationsMigration.items,
       };
     });
   } catch {
@@ -764,6 +776,40 @@ export function updatePriceTier(id: string, patch: Partial<PriceTier>) {
 export function deletePriceTier(id: string) {
   setState((prev) => ({ ...prev, priceTiers: prev.priceTiers.filter((t) => t.id !== id) }));
   void mirrorOp("priceTiers", "delete", { id });
+}
+
+// --- Allocations -------------------------------------------------------------
+//
+// Soft reservations only — see the Allocation type comment. allocatedQty is never
+// subtracted from Product/ProductVariant stockQty by anything here; "used"/"remaining"
+// are computed by summing tagged entries (lib/summary/allocations.ts), read-only.
+
+export function addAllocation(input: Omit<Allocation, "id" | "createdAt">): Allocation {
+  const allocation: Allocation = { ...input, id: genId("alloc"), createdAt: new Date().toISOString() };
+  setState((prev) => ({ ...prev, allocations: [...prev.allocations, allocation] }));
+  void mirrorOp("allocations", "append", { item: allocation });
+  return allocation;
+}
+
+export function updateAllocation(id: string, patch: Partial<Allocation>) {
+  let updated: Allocation | undefined;
+  setState((prev) => ({
+    ...prev,
+    allocations: prev.allocations.map((a) => {
+      if (a.id !== id) return a;
+      updated = { ...a, ...patch };
+      return updated;
+    }),
+  }));
+  if (updated) void mirrorOp("allocations", "update", { id, item: updated });
+}
+
+/** Only removes the Allocation record — entries already tagged with this allocationId keep
+ * that tag (it just no longer resolves to a visible allocation), same one-way-delete
+ * principle as deleteCustomer. */
+export function deleteAllocation(id: string) {
+  setState((prev) => ({ ...prev, allocations: prev.allocations.filter((a) => a.id !== id) }));
+  void mirrorOp("allocations", "delete", { id });
 }
 
 // --- Token usage ------------------------------------------------------------
