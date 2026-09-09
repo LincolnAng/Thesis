@@ -104,7 +104,14 @@ function HomePageInner() {
 
     setSubmitting(true);
     const summary = buildDataSummary(state);
-    const outcome = await requestAssistant(rawText, summary, [], allExpenseCategories(state.categoryBudgets));
+    // Only plain text turns carry natural-language content the model can use as conversation
+    // context — entry cards/clarify prompts/etc. aren't turns in that sense. Excludes the
+    // owner's message just pushed above (kind "text", but it's the new message, not history).
+    const history = messages
+      .filter((m) => m.kind === "text")
+      .slice(-6)
+      .map((m) => ({ role: m.role, content: m.text }));
+    const outcome = await requestAssistant(rawText, summary, history, allExpenseCategories(state.categoryBudgets));
     setSubmitting(false);
 
     if (outcome.status === "unavailable") {

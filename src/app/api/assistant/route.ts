@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { callClaude, stripJsonFences } from "@/lib/ai/client";
-import { assistantSystemPrompt, buildAssistantPrompt } from "@/lib/ai/prompts";
+import { callClaude, stripJsonFences, type AnthropicMessage } from "@/lib/ai/client";
+import { assistantSystemPromptStatic, assistantSystemPromptDynamic, buildAssistantPrompt } from "@/lib/ai/prompts";
 import { getAiSettings } from "@/lib/sheets/settings";
 import type { Entry } from "@/lib/store/types";
 
@@ -31,6 +31,25 @@ export interface AssistantClarifyOption {
 interface ChatTurn {
   role: "user" | "assistant";
   content: string;
+}
+
+/** The Anthropic Messages API requires messages to strictly alternate role, starting with
+ * "user" — history reconstructed from the chat thread can have consecutive same-role turns
+ * (e.g. two owner messages in a row when the assistant's reply to the first was an entry card,
+ * not a text message). Collapse consecutive same-role turns into one before sending. */
+function mergeConsecutiveRoles(messages: AnthropicMessage[]): AnthropicMessage[] {
+  const merged: AnthropicMessage[] = [];
+  for (const m of messages) {
+    const last = merged[merged.length - 1];
+    if (last && last.role === m.role) {
+      last.content = `${last.content}\n${m.content}`;
+    } else {
+      merged.push({ ...m });
+    }
+  }
+  // Must start with "user" — drop any leading assistant turn(s) rather than error out.
+  while (merged.length > 0 && merged[0].role === "assistant") merged.shift();
+  return merged;
 }
 
 function num(v: unknown): number | null {
@@ -110,22 +129,42 @@ export async function POST(req: NextRequest) {
     Array.isArray(body.categories) && body.categories.length > 0 ? body.categories : DEFAULT_VALID_CATEGORIES;
 
   const today = new Date().toISOString().slice(0, 10);
+  // One settings read for the whole request — this used to be fetched a second time inside
+  // callClaude() itself, adding a redundant, fully-serial Sheets round trip before every
+  // Anthropic call. apiKey/model are now passed straight through instead.
+  let apiKey: string | null = null;
+  let model: string | null = null;
   let botLanguage: Awaited<ReturnType<typeof getAiSettings>>["botLanguage"] = "english";
   try {
-    botLanguage = (await getAiSettings()).botLanguage;
+    const settings = await getAiSettings();
+    apiKey = settings.apiKey;
+    model = settings.model;
+    botLanguage = settings.botLanguage;
   } catch {
-    // Sheets unavailable — fall back to English rather than failing the whole request.
+    // Sheets unavailable — fall back to English/env defaults rather than failing the whole request.
   }
-  const system = assistantSystemPrompt(body.dataSummary ?? "No data available.", today, botLanguage, validCategories);
 
-  const history = (body.history ?? [])
-    .slice(-6)
-    .map((m) => `${m.role === "user" ? "Owner" : "Kuya AI"}: ${m.content}`)
-    .join("\n");
-  const userPrompt = buildAssistantPrompt(text, today);
-  const prompt = history ? `${history}\n${userPrompt}` : userPrompt;
+  // Static instructions/persona/glossary as their own cache_control block (identical across
+  // requests for a given language+category set, so Anthropic can cache it), the live data
+  // summary as a separate small trailing block that changes every request.
+  const system = [
+    { type: "text" as const, text: assistantSystemPromptStatic(botLanguage, validCategories), cache_control: { type: "ephemeral" as const } },
+    { type: "text" as const, text: assistantSystemPromptDynamic(body.dataSummary ?? "No data available.") },
+  ];
 
-  const result = await callClaude({ system, prompt, maxTokens: 600 });
+  // Real multi-turn messages instead of flattening history into one text blob — the last 6
+  // turns come straight through as alternating user/assistant turns, with only the newest
+  // message appended last.
+  const historyMessages: AnthropicMessage[] = (body.history ?? []).slice(-6).map((m) => ({
+    role: m.role,
+    content: m.content,
+  }));
+  const messages = mergeConsecutiveRoles([
+    ...historyMessages,
+    { role: "user", content: buildAssistantPrompt(text, today) },
+  ]);
+
+  const result = await callClaude({ system, messages, maxTokens: 600, apiKey, model });
 
   if (!result.ok) {
     return NextResponse.json(
