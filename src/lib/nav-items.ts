@@ -1,4 +1,4 @@
-import { Bot, Box, Calculator, Home, Receipt, Settings, Truck, Users, Wallet, type LucideIcon } from "lucide-react";
+import { Bot, Box, Calculator, Home, Receipt, Settings, Store, Truck, Users, Wallet, type LucideIcon } from "lucide-react";
 
 export interface NavItem {
   href: string;
@@ -12,6 +12,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/expenses", label: "Expenses", icon: Wallet },
   { href: "/stock", label: "Stock", icon: Box },
   { href: "/customers", label: "Customers", icon: Users },
+  { href: "/events", label: "Events", icon: Store },
   { href: "/suppliers", label: "Suppliers", icon: Truck },
   { href: "/pricing", label: "Pricing", icon: Calculator },
   { href: "/chat", label: "Ask AI", icon: Bot },

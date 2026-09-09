@@ -47,7 +47,7 @@ export function QuickEditForm({
   /** Overrides the default chat-bubble width — pass "max-w-none" when this fills a full-width page column. */
   className?: string;
 }) {
-  const { products, rawMaterials, categoryBudgets } = useStore();
+  const { products, rawMaterials, categoryBudgets, events } = useStore();
   const [draft, setDraft] = useState<EntryDraft>(initial);
   // Buffered as text, not the parsed number, so typing a decimal point doesn't get
   // silently eaten (Number("12.") rounds to 12, so re-deriving the field from
@@ -65,6 +65,10 @@ export function QuickEditForm({
   );
   const typeOptions = allowedTypes ?? ENTRY_TYPES;
   const expenseCategories = allExpenseCategories(categoryBudgets);
+  // Only stock-moving entries can belong to an event, and only somewhere still running —
+  // plus whichever event this entry is already tagged to, so editing an old one still shows it.
+  const canTagEvent = draft.type === "SALE" || draft.type === "WASTE" || draft.type === "INVENTORY_OUT";
+  const eventOptions = events.filter((e) => e.status === "open" || e.id === draft.eventId);
 
   return (
     <div className={cn("w-full max-w-sm space-y-3 rounded-2xl border border-border bg-card p-3", className)}>
@@ -132,6 +136,29 @@ export function QuickEditForm({
         <Label className="text-xs text-muted-foreground">Buyer</Label>
         <CustomerNameInput value={draft.counterparty ?? null} onChange={(name) => set("counterparty", name)} />
       </div>
+
+      {canTagEvent && eventOptions.length > 0 && (
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Where did this happen?</Label>
+          <select
+            className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
+            value={draft.eventId ?? ""}
+            onChange={(e) => set("eventId", e.target.value || null)}
+          >
+            <option value="">Normal business</option>
+            {eventOptions.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.name}
+              </option>
+            ))}
+          </select>
+          {draft.eventId && (
+            <p className="text-xs text-muted-foreground">
+              This comes out of what that place is holding, not your main stock.
+            </p>
+          )}
+        </div>
+      )}
 
       {draft.type === "SALE" && (
         <div className="space-y-1.5">

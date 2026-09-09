@@ -38,6 +38,11 @@ export interface Entry {
   rawText: string;
   confidence: number; // 0-1
   notes?: string | null;
+  /** Set when this sale/removal happened at an event or distributor rather than through
+   * normal business operations. Stock for these was already taken out of the main pool when
+   * it was borrowed, so an event-tagged entry draws down that event's holdings instead of
+   * deducting from main stock a second time — see applyEntrySideEffects in store.ts. */
+  eventId?: string | null;
 }
 
 export interface RecipeIngredientRow {
@@ -116,6 +121,32 @@ export interface TokenUsage {
 
 export interface AiStatus {
   apiKeyMissing: boolean;
+}
+
+/** A sales channel that holds its own stock: a one-off event (Ayala Mall, IFEX) or an
+ * ongoing distributor (Nomad, Bandera, Otop Ginhawa). Named BusinessEvent rather than Event
+ * so it doesn't shadow the DOM's global Event type. */
+export interface BusinessEvent {
+  id: string;
+  name: string;
+  kind: "event" | "distributor";
+  startDate: string | null; // ISO date; distributors are usually open-ended
+  endDate: string | null;
+  status: "open" | "closed";
+  notes: string;
+  createdAt: string;
+}
+
+/** One movement of stock between the main inventory pool and an event's holdings. Holdings
+ * are always recomputed from these rows plus the event's sales — never stored as a running
+ * total, so they can't drift. */
+export interface EventStockMovement {
+  id: string;
+  eventId: string;
+  productId: string;
+  type: "borrow" | "return";
+  quantity: number;
+  createdAt: string;
 }
 
 export interface SyncStatus {

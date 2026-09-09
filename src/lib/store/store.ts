@@ -19,6 +19,8 @@ import {
 } from "./sheet-shapes";
 import type {
   AiStatus,
+  BusinessEvent,
+  EventStockMovement,
   Entry,
   ExpenseCategory,
   PriceHistoryPoint,
@@ -37,6 +39,8 @@ export interface StoreState {
   suppliers: Supplier[];
   socialStats: SocialStatEntry[];
   categoryBudgets: Partial<Record<ExpenseCategory, number>>;
+  events: BusinessEvent[];
+  eventStock: EventStockMovement[];
   tokenUsage: TokenUsage;
   aiStatus: AiStatus;
   syncStatus: SyncStatus;
@@ -50,6 +54,8 @@ const RAW_MATERIALS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-raw-materials-migrate
 const SUPPLIERS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-suppliers-migrated-v1";
 const SOCIAL_STATS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-social-stats-migrated-v1";
 const BUDGETS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-budgets-migrated-v1";
+const EVENTS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-events-migrated-v1";
+const EVENT_STOCK_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-event-stock-migrated-v1";
 const SYNC_POLL_INTERVAL_MS = 30_000;
 
 // Different expense categories naturally need different amounts planned for
@@ -72,6 +78,8 @@ function defaultState(): StoreState {
     suppliers: initialSuppliers,
     socialStats: initialSocialStats,
     categoryBudgets: { ...DEFAULT_CATEGORY_BUDGETS },
+    events: [],
+    eventStock: [],
     tokenUsage: {
       totalInputTokens: 0,
       totalOutputTokens: 0,
@@ -313,6 +321,20 @@ async function loadAllFromServer() {
       recordToBudgetRows(state.categoryBudgets),
     );
 
+    const eventsMigration = await migrateCollectionIfEmpty<BusinessEvent>(
+      "events",
+      EVENTS_MIGRATION_FLAG_KEY,
+      Array.isArray(json.events) ? json.events : [],
+      state.events,
+    );
+
+    const eventStockMigration = await migrateCollectionIfEmpty<EventStockMovement>(
+      "eventStock",
+      EVENT_STOCK_MIGRATION_FLAG_KEY,
+      Array.isArray(json.eventStock) ? json.eventStock : [],
+      state.eventStock,
+    );
+
     const serverEntries = entriesMigration.items;
     const serverIds = new Set(serverEntries.map((e) => e.id));
 
@@ -329,6 +351,8 @@ async function loadAllFromServer() {
         suppliers: suppliersMigration.items.map((row) => assembleSupplier(row, historyRows)),
         socialStats: socialStatsMigration.items,
         categoryBudgets: budgetRowsToRecord(budgetsMigration.items),
+        events: eventsMigration.items,
+        eventStock: eventStockMigration.items,
       };
     });
   } catch {
@@ -418,43 +442,86 @@ function findRawMaterialByName(materials: RawMaterialStock[], name: string | nul
 // Undo and Edit in the chat UI, side effects are applied via a signed
 // direction (+1 to log, -1 to reverse) so they can be cleanly undone.
 
+interface SideEffectResult {
+  products: Product[];
+  rawMaterials: RawMaterialStock[];
+  /** Rows whose stock changed, so callers can push just those back to Sheets. */
+  touchedProductIds: string[];
+  touchedMaterialIds: string[];
+}
+
 function applyEntrySideEffects(
   entry: Entry,
   direction: 1 | -1,
   products: Product[],
   rawMaterials: RawMaterialStock[],
-): { products: Product[]; rawMaterials: RawMaterialStock[] } {
-  if (!entry.quantity) return { products, rawMaterials };
+): SideEffectResult {
+  const touchedProductIds: string[] = [];
+  const touchedMaterialIds: string[] = [];
+  if (!entry.quantity) return { products, rawMaterials, touchedProductIds, touchedMaterialIds };
   const delta = entry.quantity * direction;
 
+  // Anything sold or lost at an event/distributor comes out of the stock that was already
+  // moved there when it was borrowed — deducting from main stock again would double-count it.
+  // Its effect on the event's holdings is derived from the entry itself (see summary/events.ts).
+  const drawsFromEventHoldings = Boolean(entry.eventId);
+
   if (entry.type === "SALE" || entry.type === "INVENTORY_OUT" || entry.type === "WASTE") {
+    if (drawsFromEventHoldings) return { products, rawMaterials, touchedProductIds, touchedMaterialIds };
     const product = findProductBySku(products, entry.sku);
     if (product) {
       products = products.map((p) => (p.id === product.id ? { ...p, stockQty: Math.max(0, p.stockQty - delta) } : p));
+      touchedProductIds.push(product.id);
     }
   } else if (entry.type === "INVENTORY_IN") {
     const product = findProductBySku(products, entry.sku);
     if (product) {
       products = products.map((p) => (p.id === product.id ? { ...p, stockQty: Math.max(0, p.stockQty + delta) } : p));
+      touchedProductIds.push(product.id);
     }
   } else if (entry.type === "EXPENSE" && (entry.category === "raw_materials" || entry.category === "packaging")) {
     const material = findRawMaterialByName(rawMaterials, entry.sku);
     if (material) {
       rawMaterials = rawMaterials.map((m) => (m.id === material.id ? { ...m, qty: Math.max(0, m.qty + delta) } : m));
+      touchedMaterialIds.push(material.id);
     }
   }
 
-  return { products, rawMaterials };
+  return { products, rawMaterials, touchedProductIds, touchedMaterialIds };
+}
+
+/**
+ * Pushes stock rows that an entry just changed back to Sheets.
+ *
+ * Without this, logging a sale only ever moved stock in this browser's memory: the entry was
+ * mirrored but the product's new stockQty never was, so the 30-second sync poll — which
+ * overwrites products with whatever Sheets still says — silently undid every stock deduction.
+ * Reads module `state`, so call it after setState has applied the change.
+ */
+function mirrorStockRows(productIds: string[], materialIds: string[]) {
+  for (const id of new Set(productIds)) {
+    const product = state.products.find((p) => p.id === id);
+    if (product) void mirrorOp("products", "update", { id, item: toProductRow(product) });
+  }
+  for (const id of new Set(materialIds)) {
+    const material = state.rawMaterials.find((m) => m.id === id);
+    if (material) void mirrorOp("rawMaterials", "update", { id, item: material });
+  }
 }
 
 export function addEntry(input: Omit<Entry, "id"> & { id?: string }): Entry {
   const entry: Entry = { ...input, id: input.id ?? genId("entry") };
   pendingLocalEntryIds.add(entry.id);
+  let touchedProductIds: string[] = [];
+  let touchedMaterialIds: string[] = [];
   setState((prev) => {
-    const { products, rawMaterials } = applyEntrySideEffects(entry, 1, prev.products, prev.rawMaterials);
-    return { ...prev, entries: [entry, ...prev.entries], products, rawMaterials };
+    const result = applyEntrySideEffects(entry, 1, prev.products, prev.rawMaterials);
+    touchedProductIds = result.touchedProductIds;
+    touchedMaterialIds = result.touchedMaterialIds;
+    return { ...prev, entries: [entry, ...prev.entries], products: result.products, rawMaterials: result.rawMaterials };
   });
   void mirrorEntryAppend(entry);
+  mirrorStockRows(touchedProductIds, touchedMaterialIds);
   return entry;
 }
 
@@ -462,24 +529,38 @@ export function addEntry(input: Omit<Entry, "id"> & { id?: string }): Entry {
 export function deleteEntry(id: string) {
   if (!state.entries.some((e) => e.id === id)) return;
   pendingLocalEntryIds.delete(id);
+  let touchedProductIds: string[] = [];
+  let touchedMaterialIds: string[] = [];
   setState((prev) => {
     const entry = prev.entries.find((e) => e.id === id);
     if (!entry) return prev;
-    const { products, rawMaterials } = applyEntrySideEffects(entry, -1, prev.products, prev.rawMaterials);
-    return { ...prev, entries: prev.entries.filter((e) => e.id !== id), products, rawMaterials };
+    const result = applyEntrySideEffects(entry, -1, prev.products, prev.rawMaterials);
+    touchedProductIds = result.touchedProductIds;
+    touchedMaterialIds = result.touchedMaterialIds;
+    return {
+      ...prev,
+      entries: prev.entries.filter((e) => e.id !== id),
+      products: result.products,
+      rawMaterials: result.rawMaterials,
+    };
   });
   void mirrorEntryDelete(id);
+  mirrorStockRows(touchedProductIds, touchedMaterialIds);
 }
 
 /** Replaces an entry's fields, reversing the old side effects and applying the new ones. Used by Edit. */
 export function replaceEntry(id: string, next: Omit<Entry, "id">) {
   let updatedEntry: Entry | null = null;
+  let touchedProductIds: string[] = [];
+  let touchedMaterialIds: string[] = [];
   setState((prev) => {
     const old = prev.entries.find((e) => e.id === id);
     if (!old) return prev;
     const reversed = applyEntrySideEffects(old, -1, prev.products, prev.rawMaterials);
     updatedEntry = { ...next, id };
     const applied = applyEntrySideEffects(updatedEntry, 1, reversed.products, reversed.rawMaterials);
+    touchedProductIds = [...reversed.touchedProductIds, ...applied.touchedProductIds];
+    touchedMaterialIds = [...reversed.touchedMaterialIds, ...applied.touchedMaterialIds];
     return {
       ...prev,
       entries: prev.entries.map((e) => (e.id === id ? (updatedEntry as Entry) : e)),
@@ -488,6 +569,7 @@ export function replaceEntry(id: string, next: Omit<Entry, "id">) {
     };
   });
   if (updatedEntry) void mirrorEntryUpdate(id, updatedEntry);
+  mirrorStockRows(touchedProductIds, touchedMaterialIds);
 }
 
 // --- Products ------------------------------------------------------------
@@ -700,4 +782,70 @@ export function restoreLocalCollections(data: {
       void mirrorOp("budgets", "update", { id: category, item: { category, monthlyBudget: amount } });
     }
   }
+}
+
+// --- Events & event stock ----------------------------------------------------
+
+export function addEvent(input: Omit<BusinessEvent, "id" | "createdAt">): BusinessEvent {
+  const event: BusinessEvent = { ...input, id: genId("evt"), createdAt: new Date().toISOString() };
+  setState((prev) => ({ ...prev, events: [...prev.events, event] }));
+  void mirrorOp("events", "append", { item: event });
+  return event;
+}
+
+export function updateEvent(id: string, patch: Partial<BusinessEvent>) {
+  let updated: BusinessEvent | undefined;
+  setState((prev) => ({
+    ...prev,
+    events: prev.events.map((e) => {
+      if (e.id !== id) return e;
+      updated = { ...e, ...patch };
+      return updated;
+    }),
+  }));
+  if (updated) void mirrorOp("events", "update", { id, item: updated });
+}
+
+export function deleteEvent(id: string) {
+  setState((prev) => ({ ...prev, events: prev.events.filter((e) => e.id !== id) }));
+  void mirrorOp("events", "delete", { id });
+}
+
+/**
+ * Moves stock out of the main pool and into an event's holdings, or back again.
+ *
+ * Both directions are recorded as movement rows rather than adjusting a stored per-event
+ * total, so an event's on-hand count is always recomputable from its movements and its
+ * tagged sales (see summary/events.ts) and can never drift out of step with them.
+ */
+function moveEventStock(eventId: string, productId: string, type: "borrow" | "return", quantity: number) {
+  if (quantity <= 0) return;
+  const movement: EventStockMovement = {
+    id: genId("evtstk"),
+    eventId,
+    productId,
+    type,
+    quantity,
+    createdAt: new Date().toISOString(),
+  };
+  // Borrowing takes the stock out of main inventory now; from here on the event's own sales
+  // draw it down instead of touching main stock again (see applyEntrySideEffects).
+  const direction = type === "borrow" ? -1 : 1;
+  setState((prev) => ({
+    ...prev,
+    eventStock: [...prev.eventStock, movement],
+    products: prev.products.map((p) =>
+      p.id === productId ? { ...p, stockQty: Math.max(0, p.stockQty + direction * quantity) } : p,
+    ),
+  }));
+  void mirrorOp("eventStock", "append", { item: movement });
+  mirrorStockRows([productId], []);
+}
+
+export function borrowStockForEvent(eventId: string, productId: string, quantity: number) {
+  moveEventStock(eventId, productId, "borrow", quantity);
+}
+
+export function returnStockFromEvent(eventId: string, productId: string, quantity: number) {
+  moveEventStock(eventId, productId, "return", quantity);
 }
