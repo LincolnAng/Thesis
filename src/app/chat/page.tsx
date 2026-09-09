@@ -6,15 +6,13 @@ import { ChatThread } from "@/components/home/chat-thread";
 import { ChatSidebarDesktop, ChatSidebarMobileTrigger } from "@/components/home/chat-sidebar";
 import { ChatInputBar } from "@/components/home/chat-input-bar";
 import type { ClarifyOption } from "@/lib/home/chat-types";
-import { findProduct, findVariant, type EntryDraft } from "@/lib/home/describe-entry";
+import type { EntryDraft } from "@/lib/home/describe-entry";
 import { useAiStatus } from "@/lib/ai/use-ai-status";
 import { useStore } from "@/lib/store/use-store";
 import { requestAssistant } from "@/lib/ai/assistant-client";
 import { localAnswer } from "@/lib/ai/local-fallback";
 import { buildDataSummary } from "@/lib/ai/data-summary";
 import { allExpenseCategories } from "@/lib/summary/expenses-summary";
-import { resolvePriceTier } from "@/lib/summary/price-tiers";
-import { formatPeso } from "@/lib/format";
 import { addEntry, deleteEntry, replaceEntry } from "@/lib/store/store";
 import { buildClarifyPrompt } from "@/lib/home/clarify";
 import { computeInsight } from "@/lib/home/insights";
@@ -106,14 +104,7 @@ function HomePageInner() {
 
     setSubmitting(true);
     const summary = buildDataSummary(state);
-    // Only plain text turns carry natural-language content the model can use as conversation
-    // context — entry cards/clarify prompts/etc. aren't turns in that sense. Excludes the
-    // owner's message just pushed above (kind "text", but it's the new message, not history).
-    const history = messages
-      .filter((m) => m.kind === "text")
-      .slice(-6)
-      .map((m) => ({ role: m.role, content: m.text }));
-    const outcome = await requestAssistant(rawText, summary, history, allExpenseCategories(state.categoryBudgets));
+    const outcome = await requestAssistant(rawText, summary, [], allExpenseCategories(state.categoryBudgets));
     setSubmitting(false);
 
     if (outcome.status === "unavailable") {
@@ -161,12 +152,6 @@ function HomePageInner() {
     }
 
     // outcome.status === "entry"
-    // The model has no visibility into the product catalog, so it can only report the size it
-    // heard (e.g. "250ml") as free text — resolve that against the matched product's actual
-    // variants here, client-side, where the catalog is available.
-    const matchedProduct = findProduct(state.products, outcome.entry.sku);
-    const variantId = findVariant(matchedProduct, outcome.entry.variant)?.id ?? null;
-
     const draft: EntryDraft = {
       timestamp: new Date(outcome.entry.date).toISOString(),
       type: outcome.entry.type,
@@ -174,7 +159,6 @@ function HomePageInner() {
       quantity: outcome.entry.quantity,
       unit: outcome.entry.unit,
       sku: outcome.entry.sku,
-      variantId,
       counterparty: outcome.entry.counterparty,
       location: outcome.entry.location,
       priceType: outcome.entry.priceType,
@@ -200,61 +184,6 @@ function HomePageInner() {
         createdAt: nowIso(),
       });
       return;
-    }
-
-    // The product has sizes tracked but the model couldn't tell which one was meant (and
-    // didn't already ask its own clarifying question above) — ask directly, with one tap
-    // per size, rather than silently logging the sale against no size in particular.
-    const stockAffectingTypes = new Set(["SALE", "INVENTORY_OUT", "WASTE", "INVENTORY_IN"]);
-    if (matchedProduct && matchedProduct.variants.length > 0 && !variantId && stockAffectingTypes.has(draft.type)) {
-      const options: ClarifyOption[] = [
-        ...matchedProduct.variants.map((v) => ({ label: v.label || "Unlabeled size", patch: { variantId: v.id } })),
-        { label: "Something else", openEdit: true },
-      ];
-      push({
-        id: genId(),
-        role: "assistant",
-        kind: "clarify",
-        rawText,
-        question: `Which size — ${matchedProduct.variants.map((v) => v.label || "unlabeled").join(" or ")}?`,
-        draft,
-        options,
-        createdAt: nowIso(),
-      });
-      return;
-    }
-
-    // No price was stated, but a price rule (quantity break or region) matches this sale —
-    // offer the rule's price as a one-tap suggestion instead of leaving amount blank, or
-    // silently guessing a number the owner never actually said.
-    if (draft.type === "SALE" && draft.amount === null && draft.quantity && matchedProduct) {
-      const tier = resolvePriceTier(matchedProduct, state.priceTiers, {
-        quantity: draft.quantity,
-        location: draft.location,
-        customerId: null,
-        variantId,
-      });
-      if (tier) {
-        const suggestedAmount = Math.round(tier.price * draft.quantity * 100) / 100;
-        const options: ClarifyOption[] = [
-          {
-            label: `Yes, ${formatPeso(suggestedAmount)} (${tier.label || "matching rule"})`,
-            patch: { amount: suggestedAmount },
-          },
-          { label: "No, let me enter the amount", openEdit: true },
-        ];
-        push({
-          id: genId(),
-          role: "assistant",
-          kind: "clarify",
-          rawText,
-          question: `Didn't catch the price — use the ${tier.label || "matching"} rate of ${formatPeso(tier.price)}/unit (${formatPeso(suggestedAmount)} total)?`,
-          draft,
-          options,
-          createdAt: nowIso(),
-        });
-        return;
-      }
     }
 
     if (draft.confidence < CONFIDENCE_THRESHOLD) {

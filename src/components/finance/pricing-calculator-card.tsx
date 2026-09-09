@@ -7,65 +7,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { formatPeso } from "@/lib/format";
-import { addPriceTier, deletePriceTier, updatePriceTier, updateProduct } from "@/lib/store/store";
+import { updateProduct } from "@/lib/store/store";
 import { useStore } from "@/lib/store/use-store";
 import { effectiveProductPrice, ingredientRowCost, productCostPerJar } from "@/lib/summary/recipe-cost";
 import { CostBreakdownChart } from "@/components/finance/cost-breakdown-chart";
 import { useViewMode } from "@/lib/summary/view-mode";
 import { useNumericDraft } from "@/lib/use-numeric-draft";
-import type {
-  PriceTier,
-  PriceTierDimension,
-  PricingMode,
-  Product,
-  ProductVariant,
-  RawMaterialStock,
-  RecipeExtraRow,
-  RecipeIngredientRow,
-} from "@/lib/store/types";
+import type { PricingMode, Product, RawMaterialStock, RecipeExtraRow, RecipeIngredientRow } from "@/lib/store/types";
 import { cn } from "@/lib/utils";
 
 function genRowId(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
-/** Best-effort numeric size parsed out of a free-text variant label like "250ml" — kept as
- * a secondary matching hint (see findVariant in describe-entry.ts) alongside the label text. */
-function parseSizeMl(label: string): number | null {
-  const match = label.match(/(\d+(?:\.\d+)?)\s*ml/i);
-  return match ? Number(match[1]) : null;
-}
-
-function VariantRowEditor({
-  row,
-  onChange,
-  onRemove,
-}: {
-  row: ProductVariant;
-  onChange: (id: string, patch: Partial<ProductVariant>) => void;
-  onRemove: (id: string) => void;
-}) {
-  const stockField = useNumericDraft(row.stockQty, (n) => onChange(row.id, { stockQty: n }));
-  return (
-    <div className="flex items-center gap-2">
-      <Input
-        placeholder="e.g. 250ml"
-        value={row.label}
-        onChange={(e) => onChange(row.id, { label: e.target.value, sizeMl: parseSizeMl(e.target.value) })}
-        className="h-8 flex-1 text-sm"
-      />
-      <Input
-        type="number"
-        placeholder="Stock"
-        value={stockField.value}
-        onChange={(e) => stockField.onChange(e.target.value)}
-        className="h-8 w-20 text-sm"
-      />
-      <Button size="icon-sm" variant="ghost" className="text-muted-foreground" onClick={() => onRemove(row.id)}>
-        <Trash2 className="h-3.5 w-3.5" />
-      </Button>
-    </div>
-  );
 }
 
 function ExtraRow({
@@ -183,56 +135,6 @@ function IngredientRowEditor({
   );
 }
 
-function PriceTierRowEditor({
-  tier,
-  onChange,
-  onRemove,
-}: {
-  tier: PriceTier;
-  onChange: (id: string, patch: Partial<PriceTier>) => void;
-  onRemove: (id: string) => void;
-}) {
-  const priceField = useNumericDraft(tier.price, (n) => onChange(tier.id, { price: n }));
-  return (
-    <div className="space-y-1.5 rounded-xl border border-border p-2.5">
-      <div className="flex items-center gap-2">
-        <select
-          value={tier.dimensionType}
-          onChange={(e) => onChange(tier.id, { dimensionType: e.target.value as PriceTierDimension })}
-          className="h-8 shrink-0 rounded-md border border-input bg-transparent px-1.5 text-xs"
-        >
-          <option value="quantity_break">Qty break</option>
-          <option value="region">Region</option>
-        </select>
-        <Input
-          placeholder={tier.dimensionType === "region" ? "e.g. Manila" : "Min qty, e.g. 10"}
-          value={tier.dimensionValue}
-          onChange={(e) => onChange(tier.id, { dimensionValue: e.target.value })}
-          className="h-8 flex-1 text-sm"
-        />
-        <Button size="icon-sm" variant="ghost" className="text-muted-foreground" onClick={() => onRemove(tier.id)}>
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
-      </div>
-      <div className="flex items-center gap-2">
-        <Input
-          placeholder="Label, e.g. Manila or 10+ jars"
-          value={tier.label}
-          onChange={(e) => onChange(tier.id, { label: e.target.value })}
-          className="h-8 flex-1 text-sm"
-        />
-        <Input
-          type="number"
-          placeholder="₱/unit"
-          value={priceField.value}
-          onChange={(e) => priceField.onChange(e.target.value)}
-          className="h-8 w-24 text-sm"
-        />
-      </div>
-    </div>
-  );
-}
-
 function TierRow({
   tier,
 }: {
@@ -259,7 +161,7 @@ function TierRow({
 }
 
 export function PricingCalculatorCard({ product }: { product: Product }) {
-  const { rawMaterials, priceTiers } = useStore();
+  const { rawMaterials } = useStore();
   const [showMore, setShowMore] = useState(false);
   const [batchCount, setBatchCount] = useState(1);
   const [viewMode] = useViewMode();
@@ -375,33 +277,6 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
     );
   }
 
-  const variants = product.variants;
-  function addVariant() {
-    updateProduct(product.id, {
-      variants: [...variants, { id: genRowId("var"), productId: product.id, label: "", sizeMl: null, stockQty: 0, priceOverride: null }],
-    });
-  }
-  function updateVariant(id: string, patch: Partial<ProductVariant>) {
-    updateProduct(product.id, { variants: variants.map((v) => (v.id === id ? { ...v, ...patch } : v)) });
-  }
-  function removeVariant(id: string) {
-    updateProduct(product.id, { variants: variants.filter((v) => v.id !== id) });
-  }
-
-  // Product-level only in this editor (not scoped to a specific size) — variant-scoped
-  // tiers are supported by the data model/resolver but not exposed here yet.
-  const productTiers = priceTiers.filter((t) => t.productId === product.id);
-  function addTier() {
-    addPriceTier({
-      productId: product.id,
-      variantId: null,
-      dimensionType: "quantity_break",
-      dimensionValue: "10",
-      price: product.wholesalePrice || product.standardPrice,
-      label: "",
-    });
-  }
-
   function addMisc() {
     persist(ingredients, labor, [...misc, { id: genRowId("misc"), label: "", cost: 0 }], product.batchYield);
   }
@@ -504,27 +379,6 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
 
         {showMore && (
           <div className="space-y-5 border-t border-border pt-4">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-xs font-semibold text-muted-foreground">Sizes</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Track stock separately per size (e.g. 250ml vs 500ml). Leave empty if this only comes in one size.
-                  </p>
-                </div>
-                <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" onClick={addVariant}>
-                  <Plus className="h-3.5 w-3.5" /> Add size
-                </Button>
-              </div>
-              {variants.length > 0 && (
-                <div className="space-y-2">
-                  {variants.map((v) => (
-                    <VariantRowEditor key={v.id} row={v} onChange={updateVariant} onRemove={removeVariant} />
-                  ))}
-                </div>
-              )}
-            </div>
-
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold text-muted-foreground">Other prices</Label>
               <div className="space-y-1.5">
@@ -532,34 +386,6 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
                   <TierRow key={tier.label} tier={tier} />
                 ))}
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-xs font-semibold text-muted-foreground">Price rules</Label>
-                  <p className="text-xs text-muted-foreground">
-                    A price that kicks in by order size or by region — e.g. ₱120/jar for orders of 10+, or a
-                    different rate for Manila vs provincial. When logging a sale, a matching rule is offered as a
-                    suggested price.
-                  </p>
-                </div>
-                <Button size="sm" variant="ghost" className="h-7 shrink-0 gap-1 px-2 text-xs" onClick={addTier}>
-                  <Plus className="h-3.5 w-3.5" /> Add rule
-                </Button>
-              </div>
-              {productTiers.length > 0 && (
-                <div className="space-y-2">
-                  {productTiers.map((t) => (
-                    <PriceTierRowEditor
-                      key={t.id}
-                      tier={t}
-                      onChange={(id, patch) => updatePriceTier(id, patch)}
-                      onRemove={(id) => deletePriceTier(id)}
-                    />
-                  ))}
-                </div>
-              )}
             </div>
 
             <div className="space-y-2">

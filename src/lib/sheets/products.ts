@@ -1,6 +1,5 @@
 import { createSheetCollection } from "./collection";
 import type { ProductRow, RecipeRow } from "@/lib/store/sheet-shapes";
-import type { ProductVariant } from "@/lib/store/types";
 
 export type { ProductRow, RecipeRow };
 
@@ -116,40 +115,4 @@ export const recipesCollection = createSheetCollection<RecipeRow>({
   deletedColumn: "deletedAt",
   toRow: recipeToRow,
   fromRow: recipeFromRow,
-});
-
-const PRODUCT_VARIANT_HEADER = ["id", "productId", "label", "sizeMl", "stockQty", "priceOverride", "deletedAt"];
-
-function productVariantToRow(v: ProductVariant): string[] {
-  return [
-    v.id,
-    v.productId,
-    v.label,
-    v.sizeMl === null ? "" : String(v.sizeMl),
-    String(v.stockQty),
-    v.priceOverride === null ? "" : String(v.priceOverride),
-    "",
-  ];
-}
-
-function productVariantFromRow(row: string[]): ProductVariant | null {
-  const [id, productId, label, sizeMl, stockQty, priceOverride] = row;
-  if (!id) return null;
-  return {
-    id,
-    productId,
-    label: label ?? "",
-    sizeMl: sizeMl ? Number(sizeMl) : null,
-    stockQty: Number(stockQty) || 0,
-    priceOverride: priceOverride ? Number(priceOverride) : null,
-  };
-}
-
-export const productVariantsCollection = createSheetCollection<ProductVariant>({
-  sheetName: "Product Variants",
-  header: PRODUCT_VARIANT_HEADER,
-  idColumn: "id",
-  deletedColumn: "deletedAt",
-  toRow: productVariantToRow,
-  fromRow: productVariantFromRow,
 });

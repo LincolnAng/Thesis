@@ -1,30 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { entriesCollection } from "@/lib/sheets/entries";
-import { productsCollection, recipesCollection, productVariantsCollection } from "@/lib/sheets/products";
+import { productsCollection, recipesCollection } from "@/lib/sheets/products";
 import { rawMaterialsCollection } from "@/lib/sheets/raw-materials";
 import { suppliersCollection, supplierPriceHistoryCollection } from "@/lib/sheets/suppliers";
 import { socialStatsCollection } from "@/lib/sheets/marketing";
 import { budgetsCollection } from "@/lib/sheets/budgets";
-import { customersCollection } from "@/lib/sheets/customers";
-import { priceTiersCollection } from "@/lib/sheets/price-tiers";
-import { allocationsCollection } from "@/lib/sheets/allocations";
-import { eventsCollection } from "@/lib/sheets/events";
 import type { SheetCollection } from "@/lib/sheets/collection";
 
 const COLLECTIONS = {
   entries: entriesCollection,
   products: productsCollection,
   recipes: recipesCollection,
-  productVariants: productVariantsCollection,
   rawMaterials: rawMaterialsCollection,
   suppliers: suppliersCollection,
   supplierPriceHistory: supplierPriceHistoryCollection,
   socialStats: socialStatsCollection,
   budgets: budgetsCollection,
-  customers: customersCollection,
-  priceTiers: priceTiersCollection,
-  allocations: allocationsCollection,
-  events: eventsCollection,
 } as const;
 
 type CollectionName = keyof typeof COLLECTIONS;
@@ -35,50 +26,26 @@ function isCollectionName(value: unknown): value is CollectionName {
 
 export async function GET() {
   try {
-    const [
-      entries,
-      products,
-      recipes,
-      productVariants,
-      rawMaterials,
-      suppliers,
-      supplierPriceHistory,
-      socialStats,
-      budgets,
-      customers,
-      priceTiers,
-      allocations,
-      events,
-    ] = await Promise.all([
+    const [entries, products, recipes, rawMaterials, suppliers, supplierPriceHistory, socialStats, budgets] = await Promise.all([
       entriesCollection.getAll(),
       productsCollection.getAll(),
       recipesCollection.getAll(),
-      productVariantsCollection.getAll(),
       rawMaterialsCollection.getAll(),
       suppliersCollection.getAll(),
       supplierPriceHistoryCollection.getAll(),
       socialStatsCollection.getAll(),
       budgetsCollection.getAll(),
-      customersCollection.getAll(),
-      priceTiersCollection.getAll(),
-      allocationsCollection.getAll(),
-      eventsCollection.getAll(),
     ]);
     return NextResponse.json({
       success: true,
       entries,
       products,
       recipes,
-      productVariants,
       rawMaterials,
       suppliers,
       supplierPriceHistory,
       socialStats,
       budgets,
-      customers,
-      priceTiers,
-      allocations,
-      events,
     });
   } catch (err) {
     return NextResponse.json({ success: false, detail: err instanceof Error ? err.message : String(err) });

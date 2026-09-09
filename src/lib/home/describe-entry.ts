@@ -1,6 +1,6 @@
 import { formatPeso } from "@/lib/format";
 import { EXPENSE_CATEGORY_LABELS, ENTRY_TYPE_LABELS, PRICE_TYPE_LABELS } from "@/lib/format";
-import type { Entry, Product, ProductVariant, RawMaterialStock } from "@/lib/store/types";
+import type { Entry, Product, RawMaterialStock } from "@/lib/store/types";
 
 export type EntryDraft = Omit<Entry, "id">;
 
@@ -48,31 +48,12 @@ function normalize(text: string | null | undefined): string {
   return (text ?? "").trim().toLowerCase();
 }
 
-export function findProduct(products: Product[], sku: string | null): Product | undefined {
+function findProduct(products: Product[], sku: string | null): Product | undefined {
   if (!sku) return undefined;
   const n = normalize(sku);
   return (
     products.find((p) => normalize(p.name) === n) ??
     products.find((p) => normalize(p.name).includes(n) || n.includes(normalize(p.name)))
-  );
-}
-
-/** Strips whitespace so "250 ml" and "250ml" compare equal. */
-function normalizeSize(text: string): string {
-  return text.trim().toLowerCase().replace(/\s+/g, "");
-}
-
-/** Resolves the AI's (or a manual editor's) free-text size mention against one product's
- * variants — first by label text, then loosely by the numeric size alone (so "250" alone
- * still matches a "250ml" variant). Returns undefined rather than guessing when nothing
- * matches, same principle as findProduct above — an unresolved size just leaves the entry's
- * variantId null instead of silently misattributing stock to the wrong size. */
-export function findVariant(product: Product | undefined, variantText: string | null): ProductVariant | undefined {
-  if (!product || !variantText || product.variants.length === 0) return undefined;
-  const n = normalizeSize(variantText);
-  return (
-    product.variants.find((v) => normalizeSize(v.label) === n) ??
-    product.variants.find((v) => v.sizeMl !== null && (n === `${v.sizeMl}ml` || n === String(v.sizeMl)))
   );
 }
 

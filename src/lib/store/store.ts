@@ -1,5 +1,4 @@
 import {
-  initialCustomers,
   initialEntries,
   initialProducts,
   initialRawMaterials,
@@ -11,7 +10,6 @@ import {
   assembleSupplier,
   budgetRowsToRecord,
   flattenProductRecipe,
-  flattenProductVariants,
   recordToBudgetRows,
   type BudgetRow,
   type ProductRow,
@@ -21,15 +19,10 @@ import {
 } from "./sheet-shapes";
 import type {
   AiStatus,
-  Allocation,
-  Customer,
   Entry,
-  Event,
   ExpenseCategory,
   PriceHistoryPoint,
-  PriceTier,
   Product,
-  ProductVariant,
   RawMaterialStock,
   SocialStatEntry,
   Supplier,
@@ -44,10 +37,6 @@ export interface StoreState {
   suppliers: Supplier[];
   socialStats: SocialStatEntry[];
   categoryBudgets: Partial<Record<ExpenseCategory, number>>;
-  customers: Customer[];
-  priceTiers: PriceTier[];
-  allocations: Allocation[];
-  events: Event[];
   tokenUsage: TokenUsage;
   aiStatus: AiStatus;
   syncStatus: SyncStatus;
@@ -61,10 +50,6 @@ const RAW_MATERIALS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-raw-materials-migrate
 const SUPPLIERS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-suppliers-migrated-v1";
 const SOCIAL_STATS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-social-stats-migrated-v1";
 const BUDGETS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-budgets-migrated-v1";
-const CUSTOMERS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-customers-migrated-v1";
-const PRICE_TIERS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-price-tiers-migrated-v1";
-const ALLOCATIONS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-allocations-migrated-v1";
-const EVENTS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-events-migrated-v1";
 const SYNC_POLL_INTERVAL_MS = 30_000;
 
 // Different expense categories naturally need different amounts planned for
@@ -87,10 +72,6 @@ function defaultState(): StoreState {
     suppliers: initialSuppliers,
     socialStats: initialSocialStats,
     categoryBudgets: { ...DEFAULT_CATEGORY_BUDGETS },
-    customers: initialCustomers,
-    priceTiers: [],
-    allocations: [],
-    events: [],
     tokenUsage: {
       totalInputTokens: 0,
       totalOutputTokens: 0,
@@ -294,12 +275,9 @@ async function loadAllFromServer() {
       state.products.map(toProductRow),
     );
     let recipeRows: RecipeRow[] = Array.isArray(json.recipes) ? json.recipes : [];
-    let variantRows: ProductVariant[] = Array.isArray(json.productVariants) ? json.productVariants : [];
     if (productsMigration.migrated) {
       recipeRows = state.products.flatMap(flattenProductRecipe);
       await migrateChildRows("recipes", recipeRows);
-      variantRows = state.products.flatMap(flattenProductVariants);
-      await migrateChildRows("productVariants", variantRows);
     }
 
     const rawMaterialsMigration = await migrateCollectionIfEmpty<RawMaterialStock>(
@@ -335,34 +313,6 @@ async function loadAllFromServer() {
       recordToBudgetRows(state.categoryBudgets),
     );
 
-    const customersMigration = await migrateCollectionIfEmpty<Customer>(
-      "customers",
-      CUSTOMERS_MIGRATION_FLAG_KEY,
-      Array.isArray(json.customers) ? json.customers : [],
-      state.customers,
-    );
-
-    const priceTiersMigration = await migrateCollectionIfEmpty<PriceTier>(
-      "priceTiers",
-      PRICE_TIERS_MIGRATION_FLAG_KEY,
-      Array.isArray(json.priceTiers) ? json.priceTiers : [],
-      state.priceTiers,
-    );
-
-    const allocationsMigration = await migrateCollectionIfEmpty<Allocation>(
-      "allocations",
-      ALLOCATIONS_MIGRATION_FLAG_KEY,
-      Array.isArray(json.allocations) ? json.allocations : [],
-      state.allocations,
-    );
-
-    const eventsMigration = await migrateCollectionIfEmpty<Event>(
-      "events",
-      EVENTS_MIGRATION_FLAG_KEY,
-      Array.isArray(json.events) ? json.events : [],
-      state.events,
-    );
-
     const serverEntries = entriesMigration.items;
     const serverIds = new Set(serverEntries.map((e) => e.id));
 
@@ -374,15 +324,11 @@ async function loadAllFromServer() {
       return {
         ...prev,
         entries: mergedEntries,
-        products: productsMigration.items.map((row) => assembleProduct(row, recipeRows, variantRows)),
+        products: productsMigration.items.map((row) => assembleProduct(row, recipeRows)),
         rawMaterials: rawMaterialsMigration.items,
         suppliers: suppliersMigration.items.map((row) => assembleSupplier(row, historyRows)),
         socialStats: socialStatsMigration.items,
         categoryBudgets: budgetRowsToRecord(budgetsMigration.items),
-        customers: customersMigration.items,
-        priceTiers: priceTiersMigration.items,
-        allocations: allocationsMigration.items,
-        events: eventsMigration.items,
       };
     });
   } catch {
@@ -466,40 +412,6 @@ function findRawMaterialByName(materials: RawMaterialStock[], name: string | nul
   );
 }
 
-/** Exact match only (unlike the fuzzy substring matching above) — this drives automatic
- * customerId linking on every new/edited entry, and a false-positive substring match here
- * would silently mis-link one buyer's history onto a different, similarly-named customer. */
-function findCustomerByName(customers: Customer[], name: string | null): Customer | undefined {
-  if (!name) return undefined;
-  const n = normalize(name);
-  return customers.find((c) => normalize(c.name) === n);
-}
-
-function findVariantById(product: Product, variantId: string | null | undefined): ProductVariant | undefined {
-  if (!variantId) return undefined;
-  return product.variants.find((v) => v.id === variantId);
-}
-
-/** Adjusts one product's stockQty by `change` (positive = add, negative = remove, clamped at
- * 0 either way — same as always), and — if the entry resolved a specific variant — also
- * adjusts that variant's own stockQty by the same change. product.stockQty is never derived
- * from the variants; it stays the real, directly mutated total it always was, so every
- * existing single-size product is completely unaffected. A variant-tagged sale just
- * additionally records which size moved. */
-function adjustProductStock(products: Product[], productId: string, change: number, variantId: string | null | undefined): Product[] {
-  return products.map((p) => {
-    if (p.id !== productId) return p;
-    const variant = findVariantById(p, variantId);
-    return {
-      ...p,
-      stockQty: Math.max(0, p.stockQty + change),
-      variants: variant
-        ? p.variants.map((v) => (v.id === variant.id ? { ...v, stockQty: Math.max(0, v.stockQty + change) } : v))
-        : p.variants,
-    };
-  });
-}
-
 // --- Entries -----------------------------------------------------------
 //
 // Every entry can affect product stock and/or raw-material stock. To support
@@ -518,12 +430,12 @@ function applyEntrySideEffects(
   if (entry.type === "SALE" || entry.type === "INVENTORY_OUT" || entry.type === "WASTE") {
     const product = findProductBySku(products, entry.sku);
     if (product) {
-      products = adjustProductStock(products, product.id, -delta, entry.variantId);
+      products = products.map((p) => (p.id === product.id ? { ...p, stockQty: Math.max(0, p.stockQty - delta) } : p));
     }
   } else if (entry.type === "INVENTORY_IN") {
     const product = findProductBySku(products, entry.sku);
     if (product) {
-      products = adjustProductStock(products, product.id, delta, entry.variantId);
+      products = products.map((p) => (p.id === product.id ? { ...p, stockQty: Math.max(0, p.stockQty + delta) } : p));
     }
   } else if (entry.type === "EXPENSE" && (entry.category === "raw_materials" || entry.category === "packaging")) {
     const material = findRawMaterialByName(rawMaterials, entry.sku);
@@ -536,11 +448,7 @@ function applyEntrySideEffects(
 }
 
 export function addEntry(input: Omit<Entry, "id"> & { id?: string }): Entry {
-  // Auto-link to an existing Customer by exact name match unless the caller already set
-  // one explicitly — keeps the free-text counterparty flow working exactly as before while
-  // giving named/recurring customers a real id-based link with zero new UI required.
-  const customerId = input.customerId ?? findCustomerByName(state.customers, input.counterparty)?.id ?? null;
-  const entry: Entry = { ...input, customerId, id: input.id ?? genId("entry") };
+  const entry: Entry = { ...input, id: input.id ?? genId("entry") };
   pendingLocalEntryIds.add(entry.id);
   setState((prev) => {
     const { products, rawMaterials } = applyEntrySideEffects(entry, 1, prev.products, prev.rawMaterials);
@@ -570,8 +478,7 @@ export function replaceEntry(id: string, next: Omit<Entry, "id">) {
     const old = prev.entries.find((e) => e.id === id);
     if (!old) return prev;
     const reversed = applyEntrySideEffects(old, -1, prev.products, prev.rawMaterials);
-    const customerId = next.customerId ?? findCustomerByName(prev.customers, next.counterparty)?.id ?? null;
-    updatedEntry = { ...next, customerId, id };
+    updatedEntry = { ...next, id };
     const applied = applyEntrySideEffects(updatedEntry, 1, reversed.products, reversed.rawMaterials);
     return {
       ...prev,
@@ -616,19 +523,6 @@ function mirrorProductRecipeDiff(oldProduct: Product, newProduct: Product) {
   }
 }
 
-/** Same diff-and-mirror pattern as recipes above, for a product's variants child rows. */
-function mirrorProductVariantDiff(oldProduct: Product, newProduct: Product) {
-  const oldRows = flattenProductVariants(oldProduct);
-  const newRows = flattenProductVariants(newProduct);
-  const newIds = new Set(newRows.map((r) => r.id));
-  for (const row of oldRows) {
-    if (!newIds.has(row.id)) void mirrorOp("productVariants", "delete", { id: row.id });
-  }
-  for (const row of newRows) {
-    void mirrorOp("productVariants", "update", { id: row.id, item: row });
-  }
-}
-
 export function updateProduct(id: string, patch: Partial<Product>) {
   let oldProduct: Product | undefined;
   let newProduct: Product | undefined;
@@ -646,9 +540,6 @@ export function updateProduct(id: string, patch: Partial<Product>) {
   if (patch.recipeIngredients || patch.recipeLabor || patch.recipeMisc) {
     mirrorProductRecipeDiff(oldProduct, newProduct);
   }
-  if (patch.variants) {
-    mirrorProductVariantDiff(oldProduct, newProduct);
-  }
 }
 
 export function addProduct(input: Omit<Product, "id">): Product {
@@ -656,7 +547,6 @@ export function addProduct(input: Omit<Product, "id">): Product {
   setState((prev) => ({ ...prev, products: [...prev.products, product] }));
   void mirrorOp("products", "append", { item: toProductRow(product) });
   void migrateChildRows("recipes", flattenProductRecipe(product));
-  void migrateChildRows("productVariants", flattenProductVariants(product));
   return product;
 }
 
@@ -734,126 +624,6 @@ export function addSocialStat(input: Omit<SocialStatEntry, "id">): SocialStatEnt
   return stat;
 }
 
-// --- Customers -------------------------------------------------------------
-
-export function addCustomer(input: Omit<Customer, "id">): Customer {
-  const customer: Customer = { ...input, id: genId("cust") };
-  setState((prev) => ({ ...prev, customers: [...prev.customers, customer] }));
-  void mirrorOp("customers", "append", { item: customer });
-  return customer;
-}
-
-export function updateCustomer(id: string, patch: Partial<Customer>) {
-  let updated: Customer | undefined;
-  setState((prev) => ({
-    ...prev,
-    customers: prev.customers.map((c) => {
-      if (c.id !== id) return c;
-      updated = { ...c, ...patch };
-      return updated;
-    }),
-  }));
-  if (updated) void mirrorOp("customers", "update", { id, item: updated });
-}
-
-/** Only removes the Customer record — entries already linked to it (by customerId or by
- * a matching counterparty name) are untouched and keep displaying that name as before. */
-export function deleteCustomer(id: string) {
-  setState((prev) => ({ ...prev, customers: prev.customers.filter((c) => c.id !== id) }));
-  void mirrorOp("customers", "delete", { id });
-}
-
-// --- Price tiers -----------------------------------------------------------
-
-export function addPriceTier(input: Omit<PriceTier, "id">): PriceTier {
-  const tier: PriceTier = { ...input, id: genId("tier") };
-  setState((prev) => ({ ...prev, priceTiers: [...prev.priceTiers, tier] }));
-  void mirrorOp("priceTiers", "append", { item: tier });
-  return tier;
-}
-
-export function updatePriceTier(id: string, patch: Partial<PriceTier>) {
-  let updated: PriceTier | undefined;
-  setState((prev) => ({
-    ...prev,
-    priceTiers: prev.priceTiers.map((t) => {
-      if (t.id !== id) return t;
-      updated = { ...t, ...patch };
-      return updated;
-    }),
-  }));
-  if (updated) void mirrorOp("priceTiers", "update", { id, item: updated });
-}
-
-export function deletePriceTier(id: string) {
-  setState((prev) => ({ ...prev, priceTiers: prev.priceTiers.filter((t) => t.id !== id) }));
-  void mirrorOp("priceTiers", "delete", { id });
-}
-
-// --- Allocations -------------------------------------------------------------
-//
-// Soft reservations only — see the Allocation type comment. allocatedQty is never
-// subtracted from Product/ProductVariant stockQty by anything here; "used"/"remaining"
-// are computed by summing tagged entries (lib/summary/allocations.ts), read-only.
-
-export function addAllocation(input: Omit<Allocation, "id" | "createdAt">): Allocation {
-  const allocation: Allocation = { ...input, id: genId("alloc"), createdAt: new Date().toISOString() };
-  setState((prev) => ({ ...prev, allocations: [...prev.allocations, allocation] }));
-  void mirrorOp("allocations", "append", { item: allocation });
-  return allocation;
-}
-
-export function updateAllocation(id: string, patch: Partial<Allocation>) {
-  let updated: Allocation | undefined;
-  setState((prev) => ({
-    ...prev,
-    allocations: prev.allocations.map((a) => {
-      if (a.id !== id) return a;
-      updated = { ...a, ...patch };
-      return updated;
-    }),
-  }));
-  if (updated) void mirrorOp("allocations", "update", { id, item: updated });
-}
-
-/** Only removes the Allocation record — entries already tagged with this allocationId keep
- * that tag (it just no longer resolves to a visible allocation), same one-way-delete
- * principle as deleteCustomer. */
-export function deleteAllocation(id: string) {
-  setState((prev) => ({ ...prev, allocations: prev.allocations.filter((a) => a.id !== id) }));
-  void mirrorOp("allocations", "delete", { id });
-}
-
-// --- Events ------------------------------------------------------------------
-
-export function addEvent(input: Omit<Event, "id">): Event {
-  const event: Event = { ...input, id: genId("event") };
-  setState((prev) => ({ ...prev, events: [...prev.events, event] }));
-  void mirrorOp("events", "append", { item: event });
-  return event;
-}
-
-export function updateEvent(id: string, patch: Partial<Event>) {
-  let updated: Event | undefined;
-  setState((prev) => ({
-    ...prev,
-    events: prev.events.map((e) => {
-      if (e.id !== id) return e;
-      updated = { ...e, ...patch };
-      return updated;
-    }),
-  }));
-  if (updated) void mirrorOp("events", "update", { id, item: updated });
-}
-
-/** Only removes the Event record — entries/allocations already tagged with this eventId keep
- * that tag (it just no longer resolves to a visible event), same one-way-delete principle as
- * deleteCustomer/deleteAllocation. */
-export function deleteEvent(id: string) {
-  setState((prev) => ({ ...prev, events: prev.events.filter((e) => e.id !== id) }));
-  void mirrorOp("events", "delete", { id });
-}
-
 // --- Token usage ------------------------------------------------------------
 
 export function addTokenUsage(inputTokens: number, outputTokens: number) {
@@ -905,7 +675,6 @@ export function restoreLocalCollections(data: {
   suppliers?: Supplier[];
   socialStats?: SocialStatEntry[];
   categoryBudgets?: Partial<Record<ExpenseCategory, number>>;
-  customers?: Customer[];
 }) {
   setState((prev) => ({
     ...prev,
@@ -914,13 +683,11 @@ export function restoreLocalCollections(data: {
     suppliers: data.suppliers ?? prev.suppliers,
     socialStats: data.socialStats ?? prev.socialStats,
     categoryBudgets: data.categoryBudgets ?? prev.categoryBudgets,
-    customers: data.customers ?? prev.customers,
   }));
 
   data.products?.forEach((p) => {
     void mirrorOp("products", "update", { id: p.id, item: toProductRow(p) });
     void migrateChildRows("recipes", flattenProductRecipe(p));
-    void migrateChildRows("productVariants", flattenProductVariants(p));
   });
   data.rawMaterials?.forEach((m) => void mirrorOp("rawMaterials", "update", { id: m.id, item: m }));
   data.suppliers?.forEach((s) => {
@@ -933,5 +700,4 @@ export function restoreLocalCollections(data: {
       void mirrorOp("budgets", "update", { id: category, item: { category, monthlyBudget: amount } });
     }
   }
-  data.customers?.forEach((c) => void mirrorOp("customers", "update", { id: c.id, item: c }));
 }

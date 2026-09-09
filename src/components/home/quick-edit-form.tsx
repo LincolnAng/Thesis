@@ -45,7 +45,7 @@ export function QuickEditForm({
   /** Overrides the default chat-bubble width — pass "max-w-none" when this fills a full-width page column. */
   className?: string;
 }) {
-  const { products, rawMaterials, categoryBudgets, allocations, events } = useStore();
+  const { products, rawMaterials, categoryBudgets } = useStore();
   const [draft, setDraft] = useState<EntryDraft>(initial);
   // Buffered as text, not the parsed number, so typing a decimal point doesn't get
   // silently eaten (Number("12.") rounds to 12, so re-deriving the field from
@@ -61,8 +61,6 @@ export function QuickEditForm({
   const skuOptions = Array.from(
     new Set([...(draft.sku ? [draft.sku] : []), ...products.map((p) => p.name), ...rawMaterials.map((m) => m.name)]),
   );
-  const selectedProduct = products.find((p) => p.name === draft.sku);
-  const productAllocations = selectedProduct ? allocations.filter((a) => a.productId === selectedProduct.id) : [];
   const typeOptions = allowedTypes ?? ENTRY_TYPES;
   const expenseCategories = allExpenseCategories(categoryBudgets);
 
@@ -121,12 +119,7 @@ export function QuickEditForm({
           <select
             className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
             value={draft.sku ?? ""}
-            onChange={(e) => {
-              set("sku", e.target.value || null);
-              // Switching products invalidates whatever size/allocation was picked for the old one.
-              set("variantId", null);
-              set("allocationId", null);
-            }}
+            onChange={(e) => set("sku", e.target.value || null)}
           >
             <option value="">Select…</option>
             {skuOptions.map((s) => (
@@ -137,60 +130,6 @@ export function QuickEditForm({
           </select>
         </div>
       </div>
-
-      {selectedProduct && selectedProduct.variants.length > 0 && (
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Size</Label>
-          <select
-            className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
-            value={draft.variantId ?? ""}
-            onChange={(e) => set("variantId", e.target.value || null)}
-          >
-            <option value="">Not specified</option>
-            {selectedProduct.variants.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.label || "Unlabeled size"}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
-      {productAllocations.length > 0 && (draft.type === "SALE" || draft.type === "INVENTORY_OUT" || draft.type === "WASTE") && (
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Counts against</Label>
-          <select
-            className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
-            value={draft.allocationId ?? ""}
-            onChange={(e) => set("allocationId", e.target.value || null)}
-          >
-            <option value="">General stock</option>
-            {productAllocations.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.label}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
-      {events.length > 0 && (
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Event (optional)</Label>
-          <select
-            className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
-            value={draft.eventId ?? ""}
-            onChange={(e) => set("eventId", e.target.value || null)}
-          >
-            <option value="">None</option>
-            {events.map((ev) => (
-              <option key={ev.id} value={ev.id}>
-                {ev.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
 
       <div className="space-y-1">
         <Label className="text-xs text-muted-foreground">Buyer</Label>

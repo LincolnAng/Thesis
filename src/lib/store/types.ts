@@ -38,23 +38,6 @@ export interface Entry {
   rawText: string;
   confidence: number; // 0-1
   notes?: string | null;
-  /** Links this entry to a Customer record when `counterparty` matches one by name
-   * (resolved automatically in store.ts, or set explicitly). Historical entries logged
-   * before Customers existed stay matched by `counterparty` name alone — this is an
-   * additive linkage, not a replacement for it. */
-  customerId?: string | null;
-  /** Links this entry to one of the matched product's ProductVariant rows (e.g. which size
-   * was sold), when the product has variants and one could be resolved. Null for products
-   * with no variants, or when the size genuinely wasn't stated/resolvable. */
-  variantId?: string | null;
-  /** Tags this entry as counting against one Allocation's reserved quantity (e.g. this sale
-   * came out of the "Nomad" allocation, not the general pool). Manually selected only — the
-   * AI parser doesn't infer this in v1. Null means "counts against the general pool", same
-   * as every entry before Allocations existed. */
-  allocationId?: string | null;
-  /** Tags this entry as part of one time-boxed sales Event (e.g. a mall fiesta week), for
-   * filtering — independent of allocationId, though the two are often used together. */
-  eventId?: string | null;
 }
 
 export interface RecipeIngredientRow {
@@ -71,20 +54,6 @@ export interface RecipeExtraRow {
 
 export type PricingMode = "manual" | "cost_percent" | "competitive" | "suggested";
 
-/** An optional per-size/variant breakdown for a product (e.g. 250ml vs 500ml jars of the
- * same spread). Most products have none — `stockQty` on the Product itself stays the real,
- * directly-mutated total either way (see applyEntrySideEffects in store.ts); a variant's own
- * stockQty is an additional, opt-in breakdown of that same total by size, not a replacement
- * for it, so nothing about existing single-size products' stock tracking changes. */
-export interface ProductVariant {
-  id: string;
-  productId: string;
-  label: string; // free text, e.g. "250ml" — matched against both manual selection and the AI's free-text size mention
-  sizeMl: number | null; // best-effort numeric size parsed from label, for looser AI-text matching (e.g. "250" alone)
-  stockQty: number;
-  priceOverride: number | null; // reserved for a future per-size price (null = uses the product's normal price)
-}
-
 export interface Product {
   id: string;
   name: string;
@@ -100,7 +69,6 @@ export interface Product {
   recipeIngredients: RecipeIngredientRow[];
   recipeLabor: RecipeExtraRow[];
   recipeMisc: RecipeExtraRow[];
-  variants: ProductVariant[];
 }
 
 export type SupplierType = "packaging" | "raw_materials";
@@ -148,65 +116,6 @@ export interface TokenUsage {
 
 export interface AiStatus {
   apiKeyMissing: boolean;
-}
-
-export interface Customer {
-  id: string;
-  name: string;
-  contact: string;
-  notes: string;
-}
-
-export type PriceTierDimension = "region" | "quantity_break" | "customer";
-
-/** One overlay price rule for a product (optionally scoped to one of its variants) — covers
- * both "tiered/regional pricing" and "wholesale/bulk pricing" with a single mechanism, since
- * they're the same shape: a price that depends on one dimension. dimensionValue holds a
- * region name (dimensionType "region"), a minimum quantity as a numeric string
- * (dimensionType "quantity_break" — meets or exceeds this qty), or a Customer id
- * (dimensionType "customer"). price is per unit, same convention as
- * Product.standardPrice/friendPrice/wholesalePrice. Products with no PriceTier rows behave
- * exactly as before — this is an optional overlay, not a replacement for those flat fields. */
-export interface PriceTier {
-  id: string;
-  productId: string;
-  variantId: string | null; // null = applies at the whole-product level regardless of size
-  dimensionType: PriceTierDimension;
-  dimensionValue: string;
-  price: number;
-  label: string; // display label, e.g. "Manila", "10+ jars", or a customer's name
-}
-
-/**
- * A soft reservation of some of a product's stock for one distributor/event (e.g. "30 jars
- * for Nomad", "20 jars for the IFEX trade show") — bookkeeping only. allocatedQty is never
- * subtracted from Product.stockQty; the physical stock pool and its mutation (in
- * applyEntrySideEffects) are completely unaffected by allocations existing. "Used" and
- * "remaining" are computed by summing entries tagged with this allocation's id (see
- * lib/summary/allocations.ts) — the allocation itself never stores a running total, so
- * there's nothing here that can drift out of sync with the entries that reference it.
- */
-export interface Allocation {
-  id: string;
-  productId: string;
-  variantId: string | null;
-  label: string; // e.g. "Nomad", "IFEX trade show"
-  allocatedQty: number;
-  eventId: string | null;
-  createdAt: string;
-}
-
-/** A time-boxed sales period (a one-week mall fiesta, a holiday promo, a trade show) — a
- * thin, standalone entity, not a subsystem. Its only real behavior is being something
- * entries and allocations can optionally tag (Entry.eventId, Allocation.eventId), so
- * activity during it can be viewed separately from ordinary day-to-day tracking — see
- * lib/summary/event-summary.ts. */
-export interface Event {
-  id: string;
-  name: string;
-  startDate: string; // ISO date
-  endDate: string; // ISO date
-  notes: string;
 }
 
 export interface SyncStatus {

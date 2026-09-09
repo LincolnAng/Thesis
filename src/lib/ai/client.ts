@@ -1,6 +1,7 @@
+import { getAiSettings } from "@/lib/sheets/settings";
+
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 export const CLAUDE_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
-const REQUEST_TIMEOUT_MS = 20_000;
 
 export interface AnthropicUsage {
   input_tokens: number;
@@ -14,29 +15,20 @@ export interface AnthropicCallResult {
   error?: string;
 }
 
-export interface AnthropicSystemBlock {
-  type: "text";
-  text: string;
-  cache_control?: { type: "ephemeral" };
-}
-
-export interface AnthropicMessage {
-  role: "user" | "assistant";
-  content: string;
-}
-
-/** Caller resolves apiKey/model (e.g. from Sheets settings) once and passes them in here —
- * this used to re-fetch settings from Sheets internally on every call, duplicating a read the
- * caller had usually already done. */
 export async function callClaude(params: {
-  system: string | AnthropicSystemBlock[];
-  messages: AnthropicMessage[];
+  system: string;
+  prompt: string;
   maxTokens?: number;
-  apiKey?: string | null;
-  model?: string | null;
 }): Promise<AnthropicCallResult> {
-  const apiKey = params.apiKey || process.env.ANTHROPIC_API_KEY;
-  const model = params.model || CLAUDE_MODEL;
+  let apiKey = process.env.ANTHROPIC_API_KEY;
+  let model = CLAUDE_MODEL;
+  try {
+    const sheetSettings = await getAiSettings();
+    if (sheetSettings.apiKey) apiKey = sheetSettings.apiKey;
+    if (sheetSettings.model) model = sheetSettings.model;
+  } catch {
+    // Sheets not configured or unreachable — fall back to env vars silently.
+  }
 
   if (!apiKey) {
     return {
@@ -46,9 +38,6 @@ export async function callClaude(params: {
       error: "missing_api_key",
     };
   }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
     const res = await fetch(ANTHROPIC_API_URL, {
@@ -62,9 +51,8 @@ export async function callClaude(params: {
         model,
         max_tokens: params.maxTokens ?? 1000,
         system: params.system,
-        messages: params.messages,
+        messages: [{ role: "user", content: params.prompt }],
       }),
-      signal: controller.signal,
     });
 
     if (!res.ok) {
@@ -90,17 +78,12 @@ export async function callClaude(params: {
     };
     return { ok: true, text, usage };
   } catch (err) {
-    const timedOut = err instanceof Error && err.name === "AbortError";
     return {
       ok: false,
       text: "",
       usage: { input_tokens: 0, output_tokens: 0 },
-      error: timedOut
-        ? "network_error: request timed out"
-        : `network_error: ${err instanceof Error ? err.message : String(err)}`,
+      error: `network_error: ${err instanceof Error ? err.message : String(err)}`,
     };
-  } finally {
-    clearTimeout(timeout);
   }
 }
 

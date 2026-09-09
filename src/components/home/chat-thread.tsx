@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ChatMessage, ClarifyOption } from "@/lib/home/chat-types";
@@ -9,38 +9,6 @@ import type { EntryDraft } from "@/lib/home/describe-entry";
 import { EntryCard } from "@/components/home/entry-card";
 import { ClarifyCard } from "@/components/home/clarify-card";
 import { QuickEditForm } from "@/components/home/quick-edit-form";
-
-// Non-streaming responses give no real progress to report, so this doesn't reflect actual
-// request phases — it's purely to make the wait feel shorter than one static bubble would.
-const TYPING_STAGES = ["Reading your message…", "Checking your numbers…", "Almost done…"];
-const TYPING_STAGE_MS = 2200;
-
-// Mounted only while isTyping is true (see the call site below), so each appearance starts
-// fresh at stage 0 with no reset-on-stop logic needed — cleaner than a hook that has to
-// distinguish "just started" from "still running" across isTyping toggling on the same instance.
-function TypingIndicator() {
-  const [stage, setStage] = useState(0);
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      setStage((s) => Math.min(s + 1, TYPING_STAGES.length - 1));
-    }, TYPING_STAGE_MS);
-    return () => clearInterval(id);
-  }, []);
-
-  return (
-    <div className="flex justify-start">
-      <div className="flex items-center gap-2 rounded-2xl bg-secondary px-4 py-3">
-        <span className="flex items-center gap-1">
-          <span className="h-2 w-2 animate-bounce rounded-full bg-secondary-foreground/50 [animation-delay:-0.3s]" />
-          <span className="h-2 w-2 animate-bounce rounded-full bg-secondary-foreground/50 [animation-delay:-0.15s]" />
-          <span className="h-2 w-2 animate-bounce rounded-full bg-secondary-foreground/50" />
-        </span>
-        <span className="text-xs text-secondary-foreground/70">{TYPING_STAGES[stage]}</span>
-      </div>
-    </div>
-  );
-}
 
 export function ChatThread({
   messages,
@@ -126,7 +94,15 @@ export function ChatThread({
         </div>
         );
       })}
-      {isTyping && <TypingIndicator />}
+      {isTyping && (
+        <div className="flex justify-start">
+          <div className="flex items-center gap-1 rounded-2xl bg-secondary px-4 py-3">
+            <span className="h-2 w-2 animate-bounce rounded-full bg-secondary-foreground/50 [animation-delay:-0.3s]" />
+            <span className="h-2 w-2 animate-bounce rounded-full bg-secondary-foreground/50 [animation-delay:-0.15s]" />
+            <span className="h-2 w-2 animate-bounce rounded-full bg-secondary-foreground/50" />
+          </div>
+        </div>
+      )}
       <div ref={bottomRef} />
     </div>
   );

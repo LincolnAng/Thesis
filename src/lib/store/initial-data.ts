@@ -1,4 +1,4 @@
-import type { Customer, Entry, Product, RawMaterialStock, SocialStatEntry, Supplier } from "./types";
+import type { Entry, Product, RawMaterialStock, SocialStatEntry, Supplier } from "./types";
 
 function daysAgo(n: number): string {
   const d = new Date("2026-07-10T09:00:00.000Z");
@@ -19,7 +19,6 @@ export const initialProducts: Product[] = [
     stockQty: 42,
     lowStockThreshold: 15,
     batchYield: 40,
-    variants: [],
     recipeIngredients: [
       { id: "ri-classic-cocoa", materialId: "rm-cocoa", quantity: 2 },
       { id: "ri-classic-sugar", materialId: "rm-sugar", quantity: 1.5 },
@@ -42,7 +41,6 @@ export const initialProducts: Product[] = [
     stockQty: 25,
     lowStockThreshold: 15,
     batchYield: 35,
-    variants: [],
     recipeIngredients: [
       { id: "ri-dark-cocoa", materialId: "rm-cocoa", quantity: 2.5 },
       { id: "ri-dark-sugar", materialId: "rm-sugar", quantity: 1 },
@@ -65,7 +63,6 @@ export const initialProducts: Product[] = [
     stockQty: 12,
     lowStockThreshold: 15,
     batchYield: 40,
-    variants: [],
     recipeIngredients: [
       { id: "ri-crunch-cocoa", materialId: "rm-cocoa", quantity: 2 },
       { id: "ri-crunch-sugar", materialId: "rm-sugar", quantity: 1.5 },
@@ -297,16 +294,4 @@ export const initialEntries: Entry[] = [
     rawText: "Delivery fares this week, 600",
     confidence: 0.8,
   },
-];
-
-// Seeded from the distinct buyer names in initialEntries above (SALE entries only —
-// suppliers/expense counterparties like "the market" or "Manila Glass & Jar Co." aren't
-// customers). Once this migrates to Sheets on first load, the owner's real spreadsheet
-// becomes the source of truth going forward.
-export const initialCustomers: Customer[] = [
-  { id: "cust-aling-nena", name: "Aling Nena", contact: "0917-555-0142", notes: "Regular wholesale buyer." },
-  { id: "cust-walkin", name: "Walk-in customers", contact: "", notes: "Not a single person — groups retail buyers with no name given." },
-  { id: "cust-marco", name: "Marco", contact: "", notes: "Friend rate." },
-  { id: "cust-tita-baby", name: "Sari-sari store - Tita Baby", contact: "", notes: "Wholesale, resells at her store." },
-  { id: "cust-ana", name: "Ana", contact: "", notes: "" },
 ];

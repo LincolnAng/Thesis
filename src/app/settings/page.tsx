@@ -162,7 +162,6 @@ export default function SettingsPage() {
       suppliers: snapshot.suppliers,
       socialStats: snapshot.socialStats,
       categoryBudgets: snapshot.categoryBudgets,
-      customers: snapshot.customers,
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
