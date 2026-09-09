@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { UnitSelect } from "@/components/ui/unit-select";
 import { useNumericDraft } from "@/lib/use-numeric-draft";
 import { updateRawMaterial } from "@/lib/store/store";
 import type { RawMaterialStock } from "@/lib/store/types";
@@ -24,6 +25,14 @@ export function EditRawMaterialDialog({ material, onClose }: { material: RawMate
           <DialogTitle>{material.name}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Unit</Label>
+            <UnitSelect
+              value={material.unit}
+              onChange={(unit) => updateRawMaterial(material.id, { unit: unit ?? material.unit })}
+              allowEmpty={false}
+            />
+          </div>
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">On hand ({material.unit})</Label>
             <Input

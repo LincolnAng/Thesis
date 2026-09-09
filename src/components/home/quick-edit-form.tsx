@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { ChipGroup } from "@/components/ui/chip-group";
+import { UnitSelect } from "@/components/ui/unit-select";
+import { CustomerNameInput } from "@/components/customers/customer-name-input";
 import { ConfirmDeleteButton } from "@/components/data-table/confirm-delete-button";
 import { useStore } from "@/lib/store/use-store";
 import { EXPENSE_CATEGORY_LABELS, ENTRY_TYPE_LABELS, PRICE_TYPE_LABELS } from "@/lib/format";
@@ -107,12 +109,7 @@ export function QuickEditForm({
         </div>
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">Unit</Label>
-          <Input
-            className="h-9"
-            value={draft.unit ?? ""}
-            onChange={(e) => set("unit", e.target.value || null)}
-            placeholder="jars, kg..."
-          />
+          <UnitSelect value={draft.unit ?? null} onChange={(unit) => set("unit", unit)} />
         </div>
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">Product / item</Label>
@@ -133,11 +130,7 @@ export function QuickEditForm({
 
       <div className="space-y-1">
         <Label className="text-xs text-muted-foreground">Buyer</Label>
-        <Input
-          className="h-9"
-          value={draft.counterparty ?? ""}
-          onChange={(e) => set("counterparty", e.target.value || null)}
-        />
+        <CustomerNameInput value={draft.counterparty ?? null} onChange={(name) => set("counterparty", name)} />
       </div>
 
       {draft.type === "SALE" && (

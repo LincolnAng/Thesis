@@ -8,6 +8,7 @@ import { procurementHistoryFor, weightedAverageUnitCost } from "@/lib/summary/pr
 import { formatPeso } from "@/lib/format";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { UnitSelect } from "@/components/ui/unit-select";
 import { useNumericDraft } from "@/lib/use-numeric-draft";
 import type { RawMaterialStock } from "@/lib/store/types";
 
@@ -39,7 +40,7 @@ function AddIngredientForm({ onDone }: { onDone: () => void }) {
           onChange={(e) => setName(e.target.value)}
           className="col-span-3 h-8 text-sm"
         />
-        <Input placeholder="Unit (kg, pcs...)" value={unit} onChange={(e) => setUnit(e.target.value)} className="h-8 text-sm" />
+        <UnitSelect value={unit} onChange={(u) => setUnit(u ?? "kg")} allowEmpty={false} className="h-8" />
         <Input
           type="number"
           placeholder="Cost per unit (₱)"
