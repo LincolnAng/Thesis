@@ -13,6 +13,8 @@ import { requestAssistant } from "@/lib/ai/assistant-client";
 import { localAnswer } from "@/lib/ai/local-fallback";
 import { buildDataSummary } from "@/lib/ai/data-summary";
 import { allExpenseCategories } from "@/lib/summary/expenses-summary";
+import { resolvePriceTier } from "@/lib/summary/price-tiers";
+import { formatPeso } from "@/lib/format";
 import { addEntry, deleteEntry, replaceEntry } from "@/lib/store/store";
 import { buildClarifyPrompt } from "@/lib/home/clarify";
 import { computeInsight } from "@/lib/home/insights";
@@ -220,6 +222,39 @@ function HomePageInner() {
         createdAt: nowIso(),
       });
       return;
+    }
+
+    // No price was stated, but a price rule (quantity break or region) matches this sale —
+    // offer the rule's price as a one-tap suggestion instead of leaving amount blank, or
+    // silently guessing a number the owner never actually said.
+    if (draft.type === "SALE" && draft.amount === null && draft.quantity && matchedProduct) {
+      const tier = resolvePriceTier(matchedProduct, state.priceTiers, {
+        quantity: draft.quantity,
+        location: draft.location,
+        customerId: null,
+        variantId,
+      });
+      if (tier) {
+        const suggestedAmount = Math.round(tier.price * draft.quantity * 100) / 100;
+        const options: ClarifyOption[] = [
+          {
+            label: `Yes, ${formatPeso(suggestedAmount)} (${tier.label || "matching rule"})`,
+            patch: { amount: suggestedAmount },
+          },
+          { label: "No, let me enter the amount", openEdit: true },
+        ];
+        push({
+          id: genId(),
+          role: "assistant",
+          kind: "clarify",
+          rawText,
+          question: `Didn't catch the price — use the ${tier.label || "matching"} rate of ${formatPeso(tier.price)}/unit (${formatPeso(suggestedAmount)} total)?`,
+          draft,
+          options,
+          createdAt: nowIso(),
+        });
+        return;
+      }
     }
 
     if (draft.confidence < CONFIDENCE_THRESHOLD) {

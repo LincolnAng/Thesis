@@ -149,6 +149,26 @@ export interface Customer {
   notes: string;
 }
 
+export type PriceTierDimension = "region" | "quantity_break" | "customer";
+
+/** One overlay price rule for a product (optionally scoped to one of its variants) — covers
+ * both "tiered/regional pricing" and "wholesale/bulk pricing" with a single mechanism, since
+ * they're the same shape: a price that depends on one dimension. dimensionValue holds a
+ * region name (dimensionType "region"), a minimum quantity as a numeric string
+ * (dimensionType "quantity_break" — meets or exceeds this qty), or a Customer id
+ * (dimensionType "customer"). price is per unit, same convention as
+ * Product.standardPrice/friendPrice/wholesalePrice. Products with no PriceTier rows behave
+ * exactly as before — this is an optional overlay, not a replacement for those flat fields. */
+export interface PriceTier {
+  id: string;
+  productId: string;
+  variantId: string | null; // null = applies at the whole-product level regardless of size
+  dimensionType: PriceTierDimension;
+  dimensionValue: string;
+  price: number;
+  label: string; // display label, e.g. "Manila", "10+ jars", or a customer's name
+}
+
 export interface SyncStatus {
   /** True if the most recently settled write to Google Sheets failed. Clears
    * on the next write that succeeds — it does not mean the failed write was

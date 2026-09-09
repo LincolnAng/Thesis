@@ -6,6 +6,7 @@ import { suppliersCollection, supplierPriceHistoryCollection } from "@/lib/sheet
 import { socialStatsCollection } from "@/lib/sheets/marketing";
 import { budgetsCollection } from "@/lib/sheets/budgets";
 import { customersCollection } from "@/lib/sheets/customers";
+import { priceTiersCollection } from "@/lib/sheets/price-tiers";
 import type { SheetCollection } from "@/lib/sheets/collection";
 
 const COLLECTIONS = {
@@ -19,6 +20,7 @@ const COLLECTIONS = {
   socialStats: socialStatsCollection,
   budgets: budgetsCollection,
   customers: customersCollection,
+  priceTiers: priceTiersCollection,
 } as const;
 
 type CollectionName = keyof typeof COLLECTIONS;
@@ -29,19 +31,31 @@ function isCollectionName(value: unknown): value is CollectionName {
 
 export async function GET() {
   try {
-    const [entries, products, recipes, productVariants, rawMaterials, suppliers, supplierPriceHistory, socialStats, budgets, customers] =
-      await Promise.all([
-        entriesCollection.getAll(),
-        productsCollection.getAll(),
-        recipesCollection.getAll(),
-        productVariantsCollection.getAll(),
-        rawMaterialsCollection.getAll(),
-        suppliersCollection.getAll(),
-        supplierPriceHistoryCollection.getAll(),
-        socialStatsCollection.getAll(),
-        budgetsCollection.getAll(),
-        customersCollection.getAll(),
-      ]);
+    const [
+      entries,
+      products,
+      recipes,
+      productVariants,
+      rawMaterials,
+      suppliers,
+      supplierPriceHistory,
+      socialStats,
+      budgets,
+      customers,
+      priceTiers,
+    ] = await Promise.all([
+      entriesCollection.getAll(),
+      productsCollection.getAll(),
+      recipesCollection.getAll(),
+      productVariantsCollection.getAll(),
+      rawMaterialsCollection.getAll(),
+      suppliersCollection.getAll(),
+      supplierPriceHistoryCollection.getAll(),
+      socialStatsCollection.getAll(),
+      budgetsCollection.getAll(),
+      customersCollection.getAll(),
+      priceTiersCollection.getAll(),
+    ]);
     return NextResponse.json({
       success: true,
       entries,
@@ -54,6 +68,7 @@ export async function GET() {
       socialStats,
       budgets,
       customers,
+      priceTiers,
     });
   } catch (err) {
     return NextResponse.json({ success: false, detail: err instanceof Error ? err.message : String(err) });

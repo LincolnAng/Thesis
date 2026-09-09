@@ -25,6 +25,7 @@ import type {
   Entry,
   ExpenseCategory,
   PriceHistoryPoint,
+  PriceTier,
   Product,
   ProductVariant,
   RawMaterialStock,
@@ -42,6 +43,7 @@ export interface StoreState {
   socialStats: SocialStatEntry[];
   categoryBudgets: Partial<Record<ExpenseCategory, number>>;
   customers: Customer[];
+  priceTiers: PriceTier[];
   tokenUsage: TokenUsage;
   aiStatus: AiStatus;
   syncStatus: SyncStatus;
@@ -56,6 +58,7 @@ const SUPPLIERS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-suppliers-migrated-v1";
 const SOCIAL_STATS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-social-stats-migrated-v1";
 const BUDGETS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-budgets-migrated-v1";
 const CUSTOMERS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-customers-migrated-v1";
+const PRICE_TIERS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-price-tiers-migrated-v1";
 const SYNC_POLL_INTERVAL_MS = 30_000;
 
 // Different expense categories naturally need different amounts planned for
@@ -79,6 +82,7 @@ function defaultState(): StoreState {
     socialStats: initialSocialStats,
     categoryBudgets: { ...DEFAULT_CATEGORY_BUDGETS },
     customers: initialCustomers,
+    priceTiers: [],
     tokenUsage: {
       totalInputTokens: 0,
       totalOutputTokens: 0,
@@ -330,6 +334,13 @@ async function loadAllFromServer() {
       state.customers,
     );
 
+    const priceTiersMigration = await migrateCollectionIfEmpty<PriceTier>(
+      "priceTiers",
+      PRICE_TIERS_MIGRATION_FLAG_KEY,
+      Array.isArray(json.priceTiers) ? json.priceTiers : [],
+      state.priceTiers,
+    );
+
     const serverEntries = entriesMigration.items;
     const serverIds = new Set(serverEntries.map((e) => e.id));
 
@@ -347,6 +358,7 @@ async function loadAllFromServer() {
         socialStats: socialStatsMigration.items,
         categoryBudgets: budgetRowsToRecord(budgetsMigration.items),
         customers: customersMigration.items,
+        priceTiers: priceTiersMigration.items,
       };
     });
   } catch {
@@ -725,6 +737,33 @@ export function updateCustomer(id: string, patch: Partial<Customer>) {
 export function deleteCustomer(id: string) {
   setState((prev) => ({ ...prev, customers: prev.customers.filter((c) => c.id !== id) }));
   void mirrorOp("customers", "delete", { id });
+}
+
+// --- Price tiers -----------------------------------------------------------
+
+export function addPriceTier(input: Omit<PriceTier, "id">): PriceTier {
+  const tier: PriceTier = { ...input, id: genId("tier") };
+  setState((prev) => ({ ...prev, priceTiers: [...prev.priceTiers, tier] }));
+  void mirrorOp("priceTiers", "append", { item: tier });
+  return tier;
+}
+
+export function updatePriceTier(id: string, patch: Partial<PriceTier>) {
+  let updated: PriceTier | undefined;
+  setState((prev) => ({
+    ...prev,
+    priceTiers: prev.priceTiers.map((t) => {
+      if (t.id !== id) return t;
+      updated = { ...t, ...patch };
+      return updated;
+    }),
+  }));
+  if (updated) void mirrorOp("priceTiers", "update", { id, item: updated });
+}
+
+export function deletePriceTier(id: string) {
+  setState((prev) => ({ ...prev, priceTiers: prev.priceTiers.filter((t) => t.id !== id) }));
+  void mirrorOp("priceTiers", "delete", { id });
 }
 
 // --- Token usage ------------------------------------------------------------
