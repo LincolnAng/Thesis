@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { entriesCollection } from "@/lib/sheets/entries";
-import { productsCollection, recipesCollection } from "@/lib/sheets/products";
+import { productsCollection, recipesCollection, productVariantsCollection } from "@/lib/sheets/products";
 import { rawMaterialsCollection } from "@/lib/sheets/raw-materials";
 import { suppliersCollection, supplierPriceHistoryCollection } from "@/lib/sheets/suppliers";
 import { socialStatsCollection } from "@/lib/sheets/marketing";
@@ -12,6 +12,7 @@ const COLLECTIONS = {
   entries: entriesCollection,
   products: productsCollection,
   recipes: recipesCollection,
+  productVariants: productVariantsCollection,
   rawMaterials: rawMaterialsCollection,
   suppliers: suppliersCollection,
   supplierPriceHistory: supplierPriceHistoryCollection,
@@ -28,11 +29,12 @@ function isCollectionName(value: unknown): value is CollectionName {
 
 export async function GET() {
   try {
-    const [entries, products, recipes, rawMaterials, suppliers, supplierPriceHistory, socialStats, budgets, customers] =
+    const [entries, products, recipes, productVariants, rawMaterials, suppliers, supplierPriceHistory, socialStats, budgets, customers] =
       await Promise.all([
         entriesCollection.getAll(),
         productsCollection.getAll(),
         recipesCollection.getAll(),
+        productVariantsCollection.getAll(),
         rawMaterialsCollection.getAll(),
         suppliersCollection.getAll(),
         supplierPriceHistoryCollection.getAll(),
@@ -45,6 +47,7 @@ export async function GET() {
       entries,
       products,
       recipes,
+      productVariants,
       rawMaterials,
       suppliers,
       supplierPriceHistory,

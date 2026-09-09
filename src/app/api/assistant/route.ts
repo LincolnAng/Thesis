@@ -14,6 +14,9 @@ export interface AssistantEntryResult {
   quantity: number | null;
   unit: string | null;
   sku: string | null;
+  /** Free-text size/volume mention (e.g. "250ml") — resolved client-side against the matched
+   * product's ProductVariant rows, since the model has no visibility into that catalog. */
+  variant: string | null;
   counterparty: string | null;
   location: string | null;
   priceType: Entry["priceType"];
@@ -79,6 +82,7 @@ function coerceEntry(parsed: Record<string, unknown>, today: string, validCatego
     quantity: num(parsed.quantity),
     unit: str(parsed.unit),
     sku: str(parsed.sku),
+    variant: str(parsed.variant),
     counterparty: str(parsed.counterparty),
     location: str(parsed.location),
     priceType,
@@ -96,6 +100,7 @@ function coercePatch(parsed: Record<string, unknown>, validCategories: string[])
   if ("quantity" in parsed) patch.quantity = num(parsed.quantity);
   if ("unit" in parsed) patch.unit = str(parsed.unit);
   if ("sku" in parsed) patch.sku = str(parsed.sku);
+  if ("variant" in parsed) patch.variant = str(parsed.variant);
   if ("counterparty" in parsed) patch.counterparty = str(parsed.counterparty);
   if ("location" in parsed) patch.location = str(parsed.location);
   if ("priceType" in parsed && VALID_PRICE_TYPES.includes(parsed.priceType as string)) {

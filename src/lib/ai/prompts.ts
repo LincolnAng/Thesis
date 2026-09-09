@@ -61,6 +61,7 @@ Fill the "entry" object with these fields:
 - quantity: numeric quantity, or null
 - unit: unit of the quantity (e.g. "jars", "kg", "pcs", "L"), or null
 - sku: product name or ingredient name mentioned, or null if unclear
+- variant: the specific size/volume of the product mentioned, if any (e.g. "250ml", "500ml", "1L", "small", "large") — null if no size was stated. This is separate from "unit", which describes how the quantity is counted (jars, kg, pcs), not which size variant of the product.
 - counterparty: buyer, supplier, or person's name mentioned, or null
 - location: place mentioned (city/area), or null
 - priceType: "standard", "friend", or "wholesale" for sales — infer from context (bulk/tali/wholesale => wholesale; friend/libre/kaibigan => friend; otherwise standard) or null if not a sale or ambiguous whether it was paid for
@@ -80,7 +81,7 @@ Rules:
 Write a natural, warm "reply" as if you were a real consultant chatting with the owner. Respond to greetings and small talk in kind — don't force them into a business record, and don't be stiff or robotic. When asked a question about the business, answer using ONLY the data summary provided further below (in a separate block, after this one) — never invent numbers, always state the actual figure. If the data needed isn't in the summary, say you're not sure and suggest checking the Summary tab. You may also offer brief, friendly encouragement or a light business tip when it fits naturally. Keep replies under 60 words.
 
 Output shape exactly — fill only the fields for whichever mode applies, set the rest to null:
-{"mode":"entry","reply":null,"entry":{"type":"SALE","amount":1800,"quantity":12,"unit":"jars","sku":"Classic Cocoa Spread","counterparty":"Aling Nena","location":null,"priceType":"wholesale","category":null,"date":"2026-01-15","confidence":0.94,"notes":null},"clarifyQuestion":null,"clarifyOptions":null}
+{"mode":"entry","reply":null,"entry":{"type":"SALE","amount":1800,"quantity":12,"unit":"jars","sku":"Classic Cocoa Spread","variant":null,"counterparty":"Aling Nena","location":null,"priceType":"wholesale","category":null,"date":"2026-01-15","confidence":0.94,"notes":null},"clarifyQuestion":null,"clarifyOptions":null}
 
 or, for chat mode:
 {"mode":"chat","reply":"Hi there! Anything to log today, or want to check how things are going?","entry":null,"clarifyQuestion":null,"clarifyOptions":null}`;

@@ -61,6 +61,7 @@ export function QuickEditForm({
   const skuOptions = Array.from(
     new Set([...(draft.sku ? [draft.sku] : []), ...products.map((p) => p.name), ...rawMaterials.map((m) => m.name)]),
   );
+  const selectedProduct = products.find((p) => p.name === draft.sku);
   const typeOptions = allowedTypes ?? ENTRY_TYPES;
   const expenseCategories = allExpenseCategories(categoryBudgets);
 
@@ -119,7 +120,10 @@ export function QuickEditForm({
           <select
             className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
             value={draft.sku ?? ""}
-            onChange={(e) => set("sku", e.target.value || null)}
+            onChange={(e) => {
+              set("sku", e.target.value || null);
+              set("variantId", null); // switching products invalidates whatever size was picked for the old one
+            }}
           >
             <option value="">Select…</option>
             {skuOptions.map((s) => (
@@ -130,6 +134,24 @@ export function QuickEditForm({
           </select>
         </div>
       </div>
+
+      {selectedProduct && selectedProduct.variants.length > 0 && (
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Size</Label>
+          <select
+            className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
+            value={draft.variantId ?? ""}
+            onChange={(e) => set("variantId", e.target.value || null)}
+          >
+            <option value="">Not specified</option>
+            {selectedProduct.variants.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.label || "Unlabeled size"}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className="space-y-1">
         <Label className="text-xs text-muted-foreground">Buyer</Label>

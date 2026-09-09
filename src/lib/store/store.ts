@@ -11,6 +11,7 @@ import {
   assembleSupplier,
   budgetRowsToRecord,
   flattenProductRecipe,
+  flattenProductVariants,
   recordToBudgetRows,
   type BudgetRow,
   type ProductRow,
@@ -25,6 +26,7 @@ import type {
   ExpenseCategory,
   PriceHistoryPoint,
   Product,
+  ProductVariant,
   RawMaterialStock,
   SocialStatEntry,
   Supplier,
@@ -280,9 +282,12 @@ async function loadAllFromServer() {
       state.products.map(toProductRow),
     );
     let recipeRows: RecipeRow[] = Array.isArray(json.recipes) ? json.recipes : [];
+    let variantRows: ProductVariant[] = Array.isArray(json.productVariants) ? json.productVariants : [];
     if (productsMigration.migrated) {
       recipeRows = state.products.flatMap(flattenProductRecipe);
       await migrateChildRows("recipes", recipeRows);
+      variantRows = state.products.flatMap(flattenProductVariants);
+      await migrateChildRows("productVariants", variantRows);
     }
 
     const rawMaterialsMigration = await migrateCollectionIfEmpty<RawMaterialStock>(
@@ -336,7 +341,7 @@ async function loadAllFromServer() {
       return {
         ...prev,
         entries: mergedEntries,
-        products: productsMigration.items.map((row) => assembleProduct(row, recipeRows)),
+        products: productsMigration.items.map((row) => assembleProduct(row, recipeRows, variantRows)),
         rawMaterials: rawMaterialsMigration.items,
         suppliers: suppliersMigration.items.map((row) => assembleSupplier(row, historyRows)),
         socialStats: socialStatsMigration.items,
@@ -434,6 +439,31 @@ function findCustomerByName(customers: Customer[], name: string | null): Custome
   return customers.find((c) => normalize(c.name) === n);
 }
 
+function findVariantById(product: Product, variantId: string | null | undefined): ProductVariant | undefined {
+  if (!variantId) return undefined;
+  return product.variants.find((v) => v.id === variantId);
+}
+
+/** Adjusts one product's stockQty by `change` (positive = add, negative = remove, clamped at
+ * 0 either way — same as always), and — if the entry resolved a specific variant — also
+ * adjusts that variant's own stockQty by the same change. product.stockQty is never derived
+ * from the variants; it stays the real, directly mutated total it always was, so every
+ * existing single-size product is completely unaffected. A variant-tagged sale just
+ * additionally records which size moved. */
+function adjustProductStock(products: Product[], productId: string, change: number, variantId: string | null | undefined): Product[] {
+  return products.map((p) => {
+    if (p.id !== productId) return p;
+    const variant = findVariantById(p, variantId);
+    return {
+      ...p,
+      stockQty: Math.max(0, p.stockQty + change),
+      variants: variant
+        ? p.variants.map((v) => (v.id === variant.id ? { ...v, stockQty: Math.max(0, v.stockQty + change) } : v))
+        : p.variants,
+    };
+  });
+}
+
 // --- Entries -----------------------------------------------------------
 //
 // Every entry can affect product stock and/or raw-material stock. To support
@@ -452,12 +482,12 @@ function applyEntrySideEffects(
   if (entry.type === "SALE" || entry.type === "INVENTORY_OUT" || entry.type === "WASTE") {
     const product = findProductBySku(products, entry.sku);
     if (product) {
-      products = products.map((p) => (p.id === product.id ? { ...p, stockQty: Math.max(0, p.stockQty - delta) } : p));
+      products = adjustProductStock(products, product.id, -delta, entry.variantId);
     }
   } else if (entry.type === "INVENTORY_IN") {
     const product = findProductBySku(products, entry.sku);
     if (product) {
-      products = products.map((p) => (p.id === product.id ? { ...p, stockQty: Math.max(0, p.stockQty + delta) } : p));
+      products = adjustProductStock(products, product.id, delta, entry.variantId);
     }
   } else if (entry.type === "EXPENSE" && (entry.category === "raw_materials" || entry.category === "packaging")) {
     const material = findRawMaterialByName(rawMaterials, entry.sku);
@@ -550,6 +580,19 @@ function mirrorProductRecipeDiff(oldProduct: Product, newProduct: Product) {
   }
 }
 
+/** Same diff-and-mirror pattern as recipes above, for a product's variants child rows. */
+function mirrorProductVariantDiff(oldProduct: Product, newProduct: Product) {
+  const oldRows = flattenProductVariants(oldProduct);
+  const newRows = flattenProductVariants(newProduct);
+  const newIds = new Set(newRows.map((r) => r.id));
+  for (const row of oldRows) {
+    if (!newIds.has(row.id)) void mirrorOp("productVariants", "delete", { id: row.id });
+  }
+  for (const row of newRows) {
+    void mirrorOp("productVariants", "update", { id: row.id, item: row });
+  }
+}
+
 export function updateProduct(id: string, patch: Partial<Product>) {
   let oldProduct: Product | undefined;
   let newProduct: Product | undefined;
@@ -567,6 +610,9 @@ export function updateProduct(id: string, patch: Partial<Product>) {
   if (patch.recipeIngredients || patch.recipeLabor || patch.recipeMisc) {
     mirrorProductRecipeDiff(oldProduct, newProduct);
   }
+  if (patch.variants) {
+    mirrorProductVariantDiff(oldProduct, newProduct);
+  }
 }
 
 export function addProduct(input: Omit<Product, "id">): Product {
@@ -574,6 +620,7 @@ export function addProduct(input: Omit<Product, "id">): Product {
   setState((prev) => ({ ...prev, products: [...prev.products, product] }));
   void mirrorOp("products", "append", { item: toProductRow(product) });
   void migrateChildRows("recipes", flattenProductRecipe(product));
+  void migrateChildRows("productVariants", flattenProductVariants(product));
   return product;
 }
 
@@ -746,6 +793,7 @@ export function restoreLocalCollections(data: {
   data.products?.forEach((p) => {
     void mirrorOp("products", "update", { id: p.id, item: toProductRow(p) });
     void migrateChildRows("recipes", flattenProductRecipe(p));
+    void migrateChildRows("productVariants", flattenProductVariants(p));
   });
   data.rawMaterials?.forEach((m) => void mirrorOp("rawMaterials", "update", { id: m.id, item: m }));
   data.suppliers?.forEach((s) => {

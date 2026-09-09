@@ -6,7 +6,7 @@ import { ChatThread } from "@/components/home/chat-thread";
 import { ChatSidebarDesktop, ChatSidebarMobileTrigger } from "@/components/home/chat-sidebar";
 import { ChatInputBar } from "@/components/home/chat-input-bar";
 import type { ClarifyOption } from "@/lib/home/chat-types";
-import type { EntryDraft } from "@/lib/home/describe-entry";
+import { findProduct, findVariant, type EntryDraft } from "@/lib/home/describe-entry";
 import { useAiStatus } from "@/lib/ai/use-ai-status";
 import { useStore } from "@/lib/store/use-store";
 import { requestAssistant } from "@/lib/ai/assistant-client";
@@ -159,6 +159,12 @@ function HomePageInner() {
     }
 
     // outcome.status === "entry"
+    // The model has no visibility into the product catalog, so it can only report the size it
+    // heard (e.g. "250ml") as free text — resolve that against the matched product's actual
+    // variants here, client-side, where the catalog is available.
+    const matchedProduct = findProduct(state.products, outcome.entry.sku);
+    const variantId = findVariant(matchedProduct, outcome.entry.variant)?.id ?? null;
+
     const draft: EntryDraft = {
       timestamp: new Date(outcome.entry.date).toISOString(),
       type: outcome.entry.type,
@@ -166,6 +172,7 @@ function HomePageInner() {
       quantity: outcome.entry.quantity,
       unit: outcome.entry.unit,
       sku: outcome.entry.sku,
+      variantId,
       counterparty: outcome.entry.counterparty,
       location: outcome.entry.location,
       priceType: outcome.entry.priceType,
@@ -186,6 +193,28 @@ function HomePageInner() {
         kind: "clarify",
         rawText,
         question: outcome.clarifyQuestion,
+        draft,
+        options,
+        createdAt: nowIso(),
+      });
+      return;
+    }
+
+    // The product has sizes tracked but the model couldn't tell which one was meant (and
+    // didn't already ask its own clarifying question above) — ask directly, with one tap
+    // per size, rather than silently logging the sale against no size in particular.
+    const stockAffectingTypes = new Set(["SALE", "INVENTORY_OUT", "WASTE", "INVENTORY_IN"]);
+    if (matchedProduct && matchedProduct.variants.length > 0 && !variantId && stockAffectingTypes.has(draft.type)) {
+      const options: ClarifyOption[] = [
+        ...matchedProduct.variants.map((v) => ({ label: v.label || "Unlabeled size", patch: { variantId: v.id } })),
+        { label: "Something else", openEdit: true },
+      ];
+      push({
+        id: genId(),
+        role: "assistant",
+        kind: "clarify",
+        rawText,
+        question: `Which size — ${matchedProduct.variants.map((v) => v.label || "unlabeled").join(" or ")}?`,
         draft,
         options,
         createdAt: nowIso(),

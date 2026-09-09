@@ -1,9 +1,9 @@
 import { createSheetCollection } from "./collection";
 import type { Entry } from "@/lib/store/types";
 
-// customerId is appended strictly after deletedAt (the prior last column) — see the
-// same convention documented in products.ts — so every existing row's positional
-// read stays intact; old rows just read back customerId as empty/null.
+// customerId and variantId are appended strictly after deletedAt (the prior last column,
+// in the order they were each added) — see the same convention documented in products.ts —
+// so every existing row's positional read stays intact; old rows just read these back empty/null.
 const HEADER = [
   "id",
   "timestamp",
@@ -21,6 +21,7 @@ const HEADER = [
   "notes",
   "deletedAt",
   "customerId",
+  "variantId",
 ];
 
 function toRow(e: Entry): string[] {
@@ -41,6 +42,7 @@ function toRow(e: Entry): string[] {
     e.notes ?? "",
     "", // deletedAt — append/update always write the live (non-deleted) state
     e.customerId ?? "",
+    e.variantId ?? "",
   ];
 }
 
@@ -62,6 +64,7 @@ function fromRow(row: string[]): Entry | null {
     notes,
     ,
     customerId,
+    variantId,
   ] = row;
   if (!id) return null;
   return {
@@ -80,6 +83,7 @@ function fromRow(row: string[]): Entry | null {
     confidence: confidence ? Number(confidence) : 0,
     notes: notes || null,
     customerId: customerId || null,
+    variantId: variantId || null,
   };
 }
 

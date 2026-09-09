@@ -19,6 +19,7 @@ export const initialProducts: Product[] = [
     stockQty: 42,
     lowStockThreshold: 15,
     batchYield: 40,
+    variants: [],
     recipeIngredients: [
       { id: "ri-classic-cocoa", materialId: "rm-cocoa", quantity: 2 },
       { id: "ri-classic-sugar", materialId: "rm-sugar", quantity: 1.5 },
@@ -41,6 +42,7 @@ export const initialProducts: Product[] = [
     stockQty: 25,
     lowStockThreshold: 15,
     batchYield: 35,
+    variants: [],
     recipeIngredients: [
       { id: "ri-dark-cocoa", materialId: "rm-cocoa", quantity: 2.5 },
       { id: "ri-dark-sugar", materialId: "rm-sugar", quantity: 1 },
@@ -63,6 +65,7 @@ export const initialProducts: Product[] = [
     stockQty: 12,
     lowStockThreshold: 15,
     batchYield: 40,
+    variants: [],
     recipeIngredients: [
       { id: "ri-crunch-cocoa", materialId: "rm-cocoa", quantity: 2 },
       { id: "ri-crunch-sugar", materialId: "rm-sugar", quantity: 1.5 },

@@ -13,11 +13,50 @@ import { effectiveProductPrice, ingredientRowCost, productCostPerJar } from "@/l
 import { CostBreakdownChart } from "@/components/finance/cost-breakdown-chart";
 import { useViewMode } from "@/lib/summary/view-mode";
 import { useNumericDraft } from "@/lib/use-numeric-draft";
-import type { PricingMode, Product, RawMaterialStock, RecipeExtraRow, RecipeIngredientRow } from "@/lib/store/types";
+import type { PricingMode, Product, ProductVariant, RawMaterialStock, RecipeExtraRow, RecipeIngredientRow } from "@/lib/store/types";
 import { cn } from "@/lib/utils";
 
 function genRowId(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/** Best-effort numeric size parsed out of a free-text variant label like "250ml" — kept as
+ * a secondary matching hint (see findVariant in describe-entry.ts) alongside the label text. */
+function parseSizeMl(label: string): number | null {
+  const match = label.match(/(\d+(?:\.\d+)?)\s*ml/i);
+  return match ? Number(match[1]) : null;
+}
+
+function VariantRowEditor({
+  row,
+  onChange,
+  onRemove,
+}: {
+  row: ProductVariant;
+  onChange: (id: string, patch: Partial<ProductVariant>) => void;
+  onRemove: (id: string) => void;
+}) {
+  const stockField = useNumericDraft(row.stockQty, (n) => onChange(row.id, { stockQty: n }));
+  return (
+    <div className="flex items-center gap-2">
+      <Input
+        placeholder="e.g. 250ml"
+        value={row.label}
+        onChange={(e) => onChange(row.id, { label: e.target.value, sizeMl: parseSizeMl(e.target.value) })}
+        className="h-8 flex-1 text-sm"
+      />
+      <Input
+        type="number"
+        placeholder="Stock"
+        value={stockField.value}
+        onChange={(e) => stockField.onChange(e.target.value)}
+        className="h-8 w-20 text-sm"
+      />
+      <Button size="icon-sm" variant="ghost" className="text-muted-foreground" onClick={() => onRemove(row.id)}>
+        <Trash2 className="h-3.5 w-3.5" />
+      </Button>
+    </div>
+  );
 }
 
 function ExtraRow({
@@ -277,6 +316,19 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
     );
   }
 
+  const variants = product.variants;
+  function addVariant() {
+    updateProduct(product.id, {
+      variants: [...variants, { id: genRowId("var"), productId: product.id, label: "", sizeMl: null, stockQty: 0, priceOverride: null }],
+    });
+  }
+  function updateVariant(id: string, patch: Partial<ProductVariant>) {
+    updateProduct(product.id, { variants: variants.map((v) => (v.id === id ? { ...v, ...patch } : v)) });
+  }
+  function removeVariant(id: string) {
+    updateProduct(product.id, { variants: variants.filter((v) => v.id !== id) });
+  }
+
   function addMisc() {
     persist(ingredients, labor, [...misc, { id: genRowId("misc"), label: "", cost: 0 }], product.batchYield);
   }
@@ -379,6 +431,27 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
 
         {showMore && (
           <div className="space-y-5 border-t border-border pt-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-xs font-semibold text-muted-foreground">Sizes</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Track stock separately per size (e.g. 250ml vs 500ml). Leave empty if this only comes in one size.
+                  </p>
+                </div>
+                <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" onClick={addVariant}>
+                  <Plus className="h-3.5 w-3.5" /> Add size
+                </Button>
+              </div>
+              {variants.length > 0 && (
+                <div className="space-y-2">
+                  {variants.map((v) => (
+                    <VariantRowEditor key={v.id} row={v} onChange={updateVariant} onRemove={removeVariant} />
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold text-muted-foreground">Other prices</Label>
               <div className="space-y-1.5">

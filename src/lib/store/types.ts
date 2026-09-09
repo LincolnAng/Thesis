@@ -43,6 +43,10 @@ export interface Entry {
    * before Customers existed stay matched by `counterparty` name alone — this is an
    * additive linkage, not a replacement for it. */
   customerId?: string | null;
+  /** Links this entry to one of the matched product's ProductVariant rows (e.g. which size
+   * was sold), when the product has variants and one could be resolved. Null for products
+   * with no variants, or when the size genuinely wasn't stated/resolvable. */
+  variantId?: string | null;
 }
 
 export interface RecipeIngredientRow {
@@ -59,6 +63,20 @@ export interface RecipeExtraRow {
 
 export type PricingMode = "manual" | "cost_percent" | "competitive" | "suggested";
 
+/** An optional per-size/variant breakdown for a product (e.g. 250ml vs 500ml jars of the
+ * same spread). Most products have none — `stockQty` on the Product itself stays the real,
+ * directly-mutated total either way (see applyEntrySideEffects in store.ts); a variant's own
+ * stockQty is an additional, opt-in breakdown of that same total by size, not a replacement
+ * for it, so nothing about existing single-size products' stock tracking changes. */
+export interface ProductVariant {
+  id: string;
+  productId: string;
+  label: string; // free text, e.g. "250ml" — matched against both manual selection and the AI's free-text size mention
+  sizeMl: number | null; // best-effort numeric size parsed from label, for looser AI-text matching (e.g. "250" alone)
+  stockQty: number;
+  priceOverride: number | null; // reserved for a future per-size price (null = uses the product's normal price)
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -74,6 +92,7 @@ export interface Product {
   recipeIngredients: RecipeIngredientRow[];
   recipeLabor: RecipeExtraRow[];
   recipeMisc: RecipeExtraRow[];
+  variants: ProductVariant[];
 }
 
 export type SupplierType = "packaging" | "raw_materials";
