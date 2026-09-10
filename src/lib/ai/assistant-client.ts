@@ -3,7 +3,13 @@ import type { AssistantClarifyOption, AssistantEntryResult } from "@/app/api/ass
 
 export type AssistantOutcome =
   | { status: "chat"; reply: string }
-  | { status: "entry"; entry: AssistantEntryResult; clarifyQuestion: string | null; clarifyOptions: AssistantClarifyOption[] | null }
+  | {
+      status: "entry";
+      entry: AssistantEntryResult;
+      stated: string[];
+      clarifyQuestion: string | null;
+      clarifyOptions: AssistantClarifyOption[] | null;
+    }
   | { status: "unavailable" }
   | { status: "failed" };
 
@@ -33,6 +39,7 @@ export async function requestAssistant(
       return {
         status: "entry",
         entry: json.entry as AssistantEntryResult,
+        stated: Array.isArray(json.stated) ? (json.stated as string[]) : [],
         clarifyQuestion: (json.clarifyQuestion as string | null) ?? null,
         clarifyOptions: (json.clarifyOptions as AssistantClarifyOption[] | null) ?? null,
       };

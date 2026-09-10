@@ -7,6 +7,8 @@ import type { Entry } from "@/lib/store/types";
 
 const VALID_TYPES = ["SALE", "EXPENSE", "INVENTORY_IN", "INVENTORY_OUT", "WASTE", "SUPPLIER", "NOTE"];
 const VALID_PRICE_TYPES = ["standard", "friend", "wholesale"];
+const STATED_FIELDS = ["amount", "quantity", "unit", "sku", "counterparty", "category", "priceType", "notes"];
+
 const DEFAULT_VALID_CATEGORIES = ["raw_materials", "labor", "utilities", "packaging", "transport", "misc"];
 
 export interface AssistantEntryResult {
@@ -175,6 +177,10 @@ export async function POST(req: NextRequest) {
     }
 
     const entry = coerceEntry(isRecord(parsed.entry) ? parsed.entry : {}, today, validCategories);
+    // Which fields the owner actually said, so the review card can mark the rest as guesses.
+    // A model that omits this gets no benefit of the doubt: nothing counts as stated.
+    const statedRaw: unknown[] = Array.isArray(parsed.stated) ? parsed.stated : [];
+    const stated = statedRaw.filter((f): f is string => typeof f === "string" && STATED_FIELDS.includes(f));
     const clarifyQuestion = typeof parsed.clarifyQuestion === "string" ? parsed.clarifyQuestion : null;
     const clarifyOptionsRaw: unknown[] = Array.isArray(parsed.clarifyOptions) ? parsed.clarifyOptions : [];
     const clarifyOptions: AssistantClarifyOption[] = clarifyOptionsRaw
@@ -185,6 +191,7 @@ export async function POST(req: NextRequest) {
       success: true,
       mode: "entry",
       entry,
+      stated,
       clarifyQuestion,
       clarifyOptions: clarifyOptions.length > 0 ? clarifyOptions : null,
       usage: result.usage,

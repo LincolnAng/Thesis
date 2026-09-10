@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ArrowUpRight, Pencil, Plus } from "lucide-react";
 import { SalesDetail } from "@/components/summary/sales-detail";
+import { MissingProductBanner } from "@/components/sales/missing-product-banner";
 import { QuickEditDialog } from "@/components/home/quick-edit-dialog";
 import { StatTile } from "@/components/data-table/stat-tile";
 import { Toolbar } from "@/components/data-table/toolbar";
@@ -16,7 +17,7 @@ import { addEntry, deleteEntry, replaceEntry } from "@/lib/store/store";
 import { blankEntryDraft } from "@/lib/store/blank-draft";
 import { entryToDraft } from "@/lib/home/describe-entry";
 import { computeSalesSummary } from "@/lib/summary/sales-summary";
-import { currentMonthLabel, formatDate, formatPeso, PRICE_TYPE_LABELS } from "@/lib/format";
+import { currentMonthLabel, emptyPeriodReason, formatDate, formatPeso, PRICE_TYPE_LABELS } from "@/lib/format";
 import { useViewMode } from "@/lib/summary/view-mode";
 import { useCostContext } from "@/lib/summary/use-cost-context";
 import type { Entry } from "@/lib/store/types";
@@ -51,6 +52,12 @@ export default function SalesPage() {
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }, [entries, search, priceTypeFilter]);
 
+  const lastSale = entries
+    .filter((e) => e.type === "SALE")
+    .sort((a, b) => b.timestamp.localeCompare(a.timestamp))[0];
+  const emptyReason =
+    summary.revenue === 0 && lastSale ? emptyPeriodReason(lastSale.timestamp, currentMonthLabel()) : null;
+
   const columns: DataTableColumn<Entry>[] = [
     { key: "date", header: "Date", render: (e) => formatDate(e.timestamp) },
     { key: "item", header: "Item", render: (e) => <p className="font-medium text-foreground">{e.sku ?? "Sale"}</p> },
@@ -78,13 +85,17 @@ export default function SalesPage() {
         <p className="text-sm text-muted-foreground">{currentMonthLabel()}</p>
       </div>
 
+      <MissingProductBanner sales={entries.filter((e) => e.type === "SALE")} />
+
+      {emptyReason && <p className="text-sm text-muted-foreground">{emptyReason}</p>}
+
       {viewMode === "advanced" ? (
         <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatTile label="Revenue" value={formatPeso(summary.revenue)} sub="this month" tone="good" />
-            <StatTile label="Jars sold" value={String(summary.jarsSold)} sub="this month" />
-            <StatTile label="Avg / jar" value={formatPeso(summary.avgPerJar)} />
-            <StatTile label="Gross margin" value={`${Math.round(summary.grossMarginPct)}%`} />
+            <StatTile label={`Revenue · ${currentMonthLabel()}`} value={formatPeso(summary.revenue)} tone="good" />
+            <StatTile label={`Jars sold · ${currentMonthLabel()}`} value={String(summary.jarsSold)} />
+            <StatTile label={`Avg / jar · ${currentMonthLabel()}`} value={formatPeso(summary.avgPerJar)} />
+            <StatTile label={`Gross margin · ${currentMonthLabel()}`} value={`${Math.round(summary.grossMarginPct)}%`} />
           </div>
 
           <Toolbar

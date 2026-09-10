@@ -17,7 +17,7 @@ import { addEntry, deleteEntry, replaceEntry } from "@/lib/store/store";
 import { blankEntryDraft } from "@/lib/store/blank-draft";
 import { entryToDraft } from "@/lib/home/describe-entry";
 import { allExpenseCategories, computeExpensesSummary } from "@/lib/summary/expenses-summary";
-import { currentMonthLabel, EXPENSE_CATEGORY_LABELS, formatDate, formatPeso } from "@/lib/format";
+import { currentMonthLabel, emptyPeriodReason, EXPENSE_CATEGORY_LABELS, formatDate, formatPeso } from "@/lib/format";
 import { useViewMode } from "@/lib/summary/view-mode";
 import type { Entry } from "@/lib/store/types";
 
@@ -77,6 +77,13 @@ export default function ExpensesPage() {
     { key: "amount", header: "Amount", align: "right", render: (e) => formatPeso(e.amount) },
   ];
 
+  // A P0 month with records just outside the window is correct but reads as a bug.
+  const lastExpense = entries
+    .filter((e) => e.type === "EXPENSE")
+    .sort((a, b) => b.timestamp.localeCompare(a.timestamp))[0];
+  const emptyReason =
+    summary.total === 0 && lastExpense ? emptyPeriodReason(lastExpense.timestamp, currentMonthLabel()) : null;
+
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-8">
       <div className="flex items-baseline justify-between">
@@ -84,11 +91,18 @@ export default function ExpensesPage() {
         <p className="text-sm text-muted-foreground">{currentMonthLabel()}</p>
       </div>
 
+      {emptyReason && <p className="text-sm text-muted-foreground">{emptyReason}</p>}
+
       {viewMode === "advanced" && (
         <div className="grid grid-cols-2 gap-3">
-          <StatTile label="Total spent" value={formatPeso(summary.total)} sub="this month" tone="warning" />
           <StatTile
-            label="Budget remaining"
+            label={`Total spent · ${currentMonthLabel()}`}
+            value={formatPeso(summary.total)}
+            sub={emptyReason ?? "this month"}
+            tone="warning"
+          />
+          <StatTile
+            label={`Budget remaining · ${currentMonthLabel()}`}
             value={formatPeso(summary.remaining)}
             tone={summary.remaining < 0 ? "critical" : "neutral"}
           />

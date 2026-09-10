@@ -77,15 +77,47 @@ function HomePageInner() {
     push({ id: genId(), role: "assistant", kind: "insight", text, createdAt: nowIso() });
   }
 
-  function saveDraft(draft: EntryDraft) {
-    const entry = addEntry(draft);
-    push({ id: genId(), role: "assistant", kind: "entry", entryId: entry.id, draft, createdAt: nowIso() });
+  /** Proposes an entry without recording it. The ledger is only touched by handleConfirmReview. */
+  function proposeDraft(draft: EntryDraft, stated: string[], rawText: string) {
+    push({ id: genId(), role: "assistant", kind: "review", rawText, draft, stated, createdAt: nowIso() });
+  }
+
+  function handleRetry(text: string) {
+    setInput(text);
+    void handleSubmit(text);
+  }
+
+  function handleConfirmReview(id: string) {
+    const message = messages.find((m) => m.id === id);
+    if (!message || message.kind !== "review") return;
+    const entry = addEntry(message.draft);
+    replace(id, {
+      id,
+      role: "assistant",
+      kind: "entry",
+      entryId: entry.id,
+      draft: message.draft,
+      createdAt: message.createdAt,
+    });
     maybeAppendInsight();
   }
 
-  async function handleSubmit() {
+  function handleEditReview(id: string) {
+    const message = messages.find((m) => m.id === id);
+    if (!message || message.kind !== "review") return;
+    replace(id, {
+      id,
+      role: "assistant",
+      kind: "quick-edit",
+      entryId: null,
+      draft: message.draft,
+      createdAt: message.createdAt,
+    });
+  }
+
+  async function handleSubmit(override?: string) {
     if (!ready) return; // still loading history from Sheets — don't guess which chat this belongs to
-    const rawText = input.trim();
+    const rawText = (override ?? input).trim();
     if (!rawText) return;
     setInput("");
     push({ id: genId(), role: "user", kind: "text", text: rawText, createdAt: nowIso() });
@@ -119,7 +151,8 @@ function HomePageInner() {
         id: genId(),
         role: "assistant",
         kind: "text",
-        text: "The AI assistant isn't available right now, so here's a quick form to fill in instead.",
+        text: "I can't reach the assistant right now — that's a connection problem, not something you did. Try again, or fill this in and it'll still be recorded.",
+        retryText: rawText,
         createdAt: nowIso(),
       });
       push({
@@ -138,7 +171,8 @@ function HomePageInner() {
         id: genId(),
         role: "assistant",
         kind: "text",
-        text: "Something went wrong reading that — here's a quick form to fill in instead.",
+        text: "I couldn't read that into an entry — the assistant replied with something I couldn't parse. Try again, reword it, or fill this in yourself.",
+        retryText: rawText,
         createdAt: nowIso(),
       });
       push({
@@ -201,7 +235,7 @@ function HomePageInner() {
       return;
     }
 
-    saveDraft(draft);
+    proposeDraft(draft, outcome.stated, rawText);
   }
 
   function handleEdit(id: string) {
@@ -238,17 +272,18 @@ function HomePageInner() {
       });
       return;
     }
+    // Answering the clarifying question still doesn't record anything — it fills the gap and
+    // comes back for confirmation, so the review card stays the only path to the ledger.
     const finalDraft: EntryDraft = { ...message.draft, ...option.patch, confidence: 1 };
-    const entry = addEntry(finalDraft);
     replace(id, {
       id,
       role: "assistant",
-      kind: "entry",
-      entryId: entry.id,
+      kind: "review",
+      rawText: message.rawText,
       draft: finalDraft,
+      stated: Object.keys(option.patch ?? {}),
       createdAt: message.createdAt,
     });
-    maybeAppendInsight();
   }
 
   function handleSaveQuickEdit(id: string, draft: EntryDraft) {
@@ -283,6 +318,9 @@ function HomePageInner() {
             onPickClarify={handlePickClarify}
             onSaveQuickEdit={handleSaveQuickEdit}
             onCancelQuickEdit={handleCancelQuickEdit}
+            onConfirmReview={handleConfirmReview}
+            onEditReview={handleEditReview}
+            onRetry={handleRetry}
             isTyping={submitting}
           />
         </div>

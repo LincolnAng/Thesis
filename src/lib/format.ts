@@ -86,6 +86,15 @@ export const PRICING_MODE_LABELS: Record<string, string> = {
   suggested: "Suggested",
 };
 
+/**
+ * Explains a zero that isn't really zero. A month total of P0 with records sitting just
+ * outside the window reads as a bug — it's correct, but only if you can see why.
+ */
+export function emptyPeriodReason(lastRecordIso: string | null, periodLabel: string): string | null {
+  if (!lastRecordIso) return null;
+  return `Nothing logged in ${periodLabel} yet — your last was ${formatDate(lastRecordIso)}.`;
+}
+
 export function currentMonthLabel(now: Date = new Date()): string {
   return now.toLocaleDateString("en-PH", { month: "long", year: "numeric" });
 }

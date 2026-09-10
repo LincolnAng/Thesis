@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { Sparkles } from "lucide-react";
+import { RotateCw, Sparkles } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ChatMessage, ClarifyOption } from "@/lib/home/chat-types";
 import type { EntryDraft } from "@/lib/home/describe-entry";
 import { EntryCard } from "@/components/home/entry-card";
 import { ClarifyCard } from "@/components/home/clarify-card";
 import { QuickEditForm } from "@/components/home/quick-edit-form";
+import { ReviewCard } from "@/components/home/review-card";
 
 // A JSON-mode reply can't be streamed token by token, so there's no real progress to report —
 // this just makes the wait feel shorter than one motionless bubble does. Mounted only while a
@@ -45,6 +47,9 @@ export function ChatThread({
   onPickClarify,
   onSaveQuickEdit,
   onCancelQuickEdit,
+  onConfirmReview,
+  onEditReview,
+  onRetry,
   isTyping = false,
 }: {
   messages: ChatMessage[];
@@ -53,6 +58,10 @@ export function ChatThread({
   onPickClarify: (id: string, option: ClarifyOption) => void;
   onSaveQuickEdit: (id: string, draft: EntryDraft) => void;
   onCancelQuickEdit: (id: string) => void;
+  /** Writes the proposed entry to the ledger — nothing else in this thread does. */
+  onConfirmReview: (id: string) => void;
+  onEditReview: (id: string) => void;
+  onRetry: (text: string) => void;
   /** Shows a floating "Kuya AI is typing" bubble while a response is in flight. */
   isTyping?: boolean;
 }) {
@@ -80,15 +89,30 @@ export function ChatThread({
           {m.kind === "text" && (
             <div
               className={cn(
-                "max-w-[85%] whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-sm",
+                "max-w-[85%] space-y-2 rounded-2xl px-3.5 py-2 text-sm",
                 m.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground",
               )}
             >
-              {m.text}
+              <p className="whitespace-pre-wrap">{m.text}</p>
+              {m.role === "assistant" && m.retryText && (
+                <Button size="sm" variant="secondary" className="h-7 gap-1" onClick={() => onRetry(m.retryText!)}>
+                  <RotateCw className="h-3.5 w-3.5" />
+                  Try again
+                </Button>
+              )}
             </div>
           )}
 
           {m.kind === "entry" && <EntryCard draft={m.draft} onEdit={() => onEdit(m.id)} onUndo={() => onUndo(m.id)} />}
+
+          {m.kind === "review" && (
+            <ReviewCard
+              draft={m.draft}
+              stated={m.stated}
+              onConfirm={() => onConfirmReview(m.id)}
+              onEdit={() => onEditReview(m.id)}
+            />
+          )}
 
           {m.kind === "entry-undone" && (
             <div className="max-w-[85%] rounded-2xl bg-secondary px-3.5 py-2 text-sm text-muted-foreground">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { addProduct } from "@/lib/store/store";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -55,9 +56,39 @@ export function QuickEditForm({
   const [amountText, setAmountText] = useState(initial.amount == null ? "" : String(initial.amount));
   const [quantityText, setQuantityText] = useState(initial.quantity == null ? "" : String(initial.quantity));
   const [amountInvalid, setAmountInvalid] = useState(false);
+  const [addingProduct, setAddingProduct] = useState(false);
+  const [newProductName, setNewProductName] = useState("");
 
   function set<K extends keyof EntryDraft>(key: K, value: EntryDraft[K]) {
     setDraft((d) => ({ ...d, [key]: value }));
+  }
+
+  // A sale has to name a product or it can't come off stock, can't reach best sellers, and
+  // shows up in Customers as "Unspecified item".
+  const productRequired = draft.type === "SALE";
+  const missingProduct = productRequired && !draft.sku;
+
+  function createProduct(name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    addProduct({
+      name: trimmed,
+      standardPrice: 0,
+      pricingMode: "manual",
+      marginPercent: 0,
+      marketPrice: 0,
+      friendPrice: 0,
+      wholesalePrice: 0,
+      stockQty: 0,
+      lowStockThreshold: 0,
+      batchYield: 0,
+      recipeIngredients: [],
+      recipeLabor: [],
+      recipeMisc: [],
+    });
+    set("sku", trimmed);
+    setAddingProduct(false);
+    setNewProductName("");
   }
 
   const skuOptions = Array.from(
@@ -116,11 +147,20 @@ export function QuickEditForm({
           <UnitSelect value={draft.unit ?? null} onChange={(unit) => set("unit", unit)} />
         </div>
         <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Product / item</Label>
+          <Label className="text-xs text-muted-foreground">
+            Product / item{productRequired && <span className="text-destructive"> *</span>}
+          </Label>
           <select
             className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
+            aria-invalid={missingProduct}
             value={draft.sku ?? ""}
-            onChange={(e) => set("sku", e.target.value || null)}
+            onChange={(e) => {
+              if (e.target.value === "__new__") {
+                setAddingProduct(true);
+                return;
+              }
+              set("sku", e.target.value || null);
+            }}
           >
             <option value="">Select…</option>
             {skuOptions.map((s) => (
@@ -128,9 +168,38 @@ export function QuickEditForm({
                 {s}
               </option>
             ))}
+            <option value="__new__">+ Add a new product…</option>
           </select>
         </div>
       </div>
+
+      {addingProduct && (
+        <div className="space-y-1.5 rounded-xl border border-border p-2.5">
+          <Label className="text-xs text-muted-foreground">New product name</Label>
+          <Input
+            autoFocus
+            className="h-9"
+            placeholder="e.g. Ice Chocolate"
+            value={newProductName}
+            onChange={(e) => setNewProductName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && createProduct(newProductName)}
+          />
+          <div className="flex gap-2">
+            <Button size="sm" disabled={!newProductName.trim()} onClick={() => createProduct(newProductName)}>
+              Add product
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setAddingProduct(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {missingProduct && (
+        <p className="text-xs text-destructive">
+          Pick a product so this sale comes off your stock and shows in your best sellers.
+        </p>
+      )}
 
       <div className="space-y-1">
         <Label className="text-xs text-muted-foreground">Buyer</Label>
@@ -186,7 +255,7 @@ export function QuickEditForm({
 
       <div className="flex items-center gap-2 pt-1">
         {onDelete && <ConfirmDeleteButton onConfirm={onDelete} />}
-        <Button size="sm" className="flex-1" onClick={() => onSave(draft)}>
+        <Button size="sm" className="flex-1" disabled={missingProduct} onClick={() => onSave(draft)}>
           Save
         </Button>
         <Button size="sm" variant="ghost" className="flex-1" onClick={onCancel}>
