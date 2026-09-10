@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ConfirmDeleteButton } from "@/components/data-table/confirm-delete-button";
@@ -8,11 +9,16 @@ export interface BigRowListProps<T> {
   rows: T[];
   keyFor: (row: T) => string;
   title: (row: T) => string;
-  subtitle?: (row: T) => string | null | undefined;
+  /** A plain string renders muted, as a footnote. Return a node instead to emphasize part
+   * of it — a buyer's name carries as much weight as the item, and shouldn't read as fine print. */
+  subtitle?: (row: T) => ReactNode;
   trailing: (row: T) => string;
   trailingTone?: Tone | ((row: T) => Tone);
   icon?: LucideIcon;
-  iconTone?: "good" | "warning";
+  /** Picks the icon per row — a lucide component is itself a function, so this can't be
+   * folded into `icon` without the two becoming indistinguishable at runtime. */
+  iconFor?: (row: T) => LucideIcon;
+  iconTone?: "good" | "warning" | ((row: T) => "good" | "warning");
   onSelect: (row: T) => void;
   /** Shows a trash-can button on the right of each row that deletes without opening the edit dialog. */
   onDelete?: (row: T) => void;
@@ -28,7 +34,8 @@ export function BigRowList<T>({
   subtitle,
   trailing,
   trailingTone = "neutral",
-  icon: Icon,
+  icon,
+  iconFor,
   iconTone = "good",
   onSelect,
   onDelete,
@@ -47,6 +54,8 @@ export function BigRowList<T>({
       {rows.map((row) => {
         const sub = subtitle?.(row);
         const tone = typeof trailingTone === "function" ? trailingTone(row) : trailingTone;
+        const Icon = iconFor ? iconFor(row) : icon;
+        const itemTone = typeof iconTone === "function" ? iconTone(row) : iconTone;
         return (
           <div key={keyFor(row)} className="flex items-center transition-colors hover:bg-accent">
             <button
@@ -58,20 +67,24 @@ export function BigRowList<T>({
                 <span
                   className={cn(
                     "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
-                    iconTone === "good" ? "bg-[var(--status-good)]/15" : "bg-[var(--status-warning)]/15",
+                    itemTone === "good" ? "bg-[var(--status-good)]/15" : "bg-[var(--status-warning)]/15",
                   )}
                 >
                   <Icon
                     className={cn(
                       "h-4 w-4",
-                      iconTone === "good" ? "text-[var(--status-good)]" : "text-[var(--status-warning)]",
+                      itemTone === "good" ? "text-[var(--status-good)]" : "text-[var(--status-warning)]",
                     )}
                   />
                 </span>
               )}
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-base font-medium text-foreground">{title(row)}</span>
-                {sub && <span className="block truncate text-sm text-muted-foreground">{sub}</span>}
+                {sub != null && sub !== "" && (
+                  <span className="block truncate text-sm">
+                    {typeof sub === "string" ? <span className="text-muted-foreground">{sub}</span> : sub}
+                  </span>
+                )}
               </span>
               <span
                 className={cn(

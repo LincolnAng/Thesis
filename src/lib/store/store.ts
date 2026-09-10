@@ -30,6 +30,7 @@ import type {
   Supplier,
   SyncStatus,
   TokenUsage,
+  Machine,
 } from "./types";
 
 export interface StoreState {
@@ -41,6 +42,7 @@ export interface StoreState {
   categoryBudgets: Partial<Record<ExpenseCategory, number>>;
   events: BusinessEvent[];
   eventStock: EventStockMovement[];
+  machines: Machine[];
   tokenUsage: TokenUsage;
   aiStatus: AiStatus;
   syncStatus: SyncStatus;
@@ -55,6 +57,7 @@ const SUPPLIERS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-suppliers-migrated-v1";
 const SOCIAL_STATS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-social-stats-migrated-v1";
 const BUDGETS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-budgets-migrated-v1";
 const EVENTS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-events-migrated-v1";
+const MACHINES_MIGRATION_FLAG_KEY = "mangkiko.migrated.machines";
 const EVENT_STOCK_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-event-stock-migrated-v1";
 const SYNC_POLL_INTERVAL_MS = 30_000;
 
@@ -80,6 +83,7 @@ function defaultState(): StoreState {
     categoryBudgets: { ...DEFAULT_CATEGORY_BUDGETS },
     events: [],
     eventStock: [],
+    machines: [],
     tokenUsage: {
       totalInputTokens: 0,
       totalOutputTokens: 0,
@@ -335,6 +339,13 @@ async function loadAllFromServer() {
       state.eventStock,
     );
 
+    const machinesMigration = await migrateCollectionIfEmpty<Machine>(
+      "machines",
+      MACHINES_MIGRATION_FLAG_KEY,
+      Array.isArray(json.machines) ? json.machines : [],
+      state.machines,
+    );
+
     const serverEntries = entriesMigration.items;
     const serverIds = new Set(serverEntries.map((e) => e.id));
 
@@ -353,6 +364,7 @@ async function loadAllFromServer() {
         categoryBudgets: budgetRowsToRecord(budgetsMigration.items),
         events: eventsMigration.items,
         eventStock: eventStockMigration.items,
+        machines: machinesMigration.items,
       };
     });
   } catch {
@@ -848,4 +860,31 @@ export function borrowStockForEvent(eventId: string, productId: string, quantity
 
 export function returnStockFromEvent(eventId: string, productId: string, quantity: number) {
   moveEventStock(eventId, productId, "return", quantity);
+}
+
+// --- Machines ----------------------------------------------------------------
+
+export function addMachine(input: Omit<Machine, "id" | "createdAt">): Machine {
+  const machine: Machine = { ...input, id: genId("mch"), createdAt: new Date().toISOString() };
+  setState((prev) => ({ ...prev, machines: [...prev.machines, machine] }));
+  void mirrorOp("machines", "append", { item: machine });
+  return machine;
+}
+
+export function updateMachine(id: string, patch: Partial<Machine>) {
+  let updated: Machine | undefined;
+  setState((prev) => ({
+    ...prev,
+    machines: prev.machines.map((m) => {
+      if (m.id !== id) return m;
+      updated = { ...m, ...patch };
+      return updated;
+    }),
+  }));
+  if (updated) void mirrorOp("machines", "update", { id, item: updated });
+}
+
+export function deleteMachine(id: string) {
+  setState((prev) => ({ ...prev, machines: prev.machines.filter((m) => m.id !== id) }));
+  void mirrorOp("machines", "delete", { id });
 }

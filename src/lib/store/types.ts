@@ -149,6 +149,20 @@ export interface EventStockMovement {
   createdAt: string;
 }
 
+/** A piece of equipment production has to run through. Capacity is expressed in batches
+ * rather than jars because a batch is the unit the recipes and yields are already written in
+ * — the same grinder makes one batch whether that batch yields 20 jars or 40. */
+export interface Machine {
+  id: string;
+  name: string;
+  /** Batches this machine can finish in a single working day. */
+  batchesPerDay: number;
+  /** How many days a week it runs, counted from Monday — 6 means Mon-Sat. */
+  workingDaysPerWeek: number;
+  notes: string;
+  createdAt: string;
+}
+
 export interface SyncStatus {
   /** True if the most recently settled write to Google Sheets failed. Clears
    * on the next write that succeeds — it does not mean the failed write was

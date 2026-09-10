@@ -6,6 +6,7 @@ import { suppliersCollection, supplierPriceHistoryCollection } from "@/lib/sheet
 import { socialStatsCollection } from "@/lib/sheets/marketing";
 import { budgetsCollection } from "@/lib/sheets/budgets";
 import { eventsCollection, eventStockCollection } from "@/lib/sheets/events";
+import { machinesCollection } from "@/lib/sheets/machines";
 import type { SheetCollection } from "@/lib/sheets/collection";
 
 const COLLECTIONS = {
@@ -19,6 +20,7 @@ const COLLECTIONS = {
   budgets: budgetsCollection,
   events: eventsCollection,
   eventStock: eventStockCollection,
+  machines: machinesCollection,
 } as const;
 
 type CollectionName = keyof typeof COLLECTIONS;
@@ -29,7 +31,7 @@ function isCollectionName(value: unknown): value is CollectionName {
 
 export async function GET() {
   try {
-    const [entries, products, recipes, rawMaterials, suppliers, supplierPriceHistory, socialStats, budgets, events, eventStock] =
+    const [entries, products, recipes, rawMaterials, suppliers, supplierPriceHistory, socialStats, budgets, events, eventStock, machines] =
       await Promise.all([
       entriesCollection.getAll(),
       productsCollection.getAll(),
@@ -41,6 +43,7 @@ export async function GET() {
       budgetsCollection.getAll(),
       eventsCollection.getAll(),
       eventStockCollection.getAll(),
+      machinesCollection.getAll(),
     ]);
     return NextResponse.json({
       success: true,
@@ -54,6 +57,7 @@ export async function GET() {
       budgets,
       events,
       eventStock,
+      machines,
     });
   } catch (err) {
     return NextResponse.json({ success: false, detail: err instanceof Error ? err.message : String(err) });

@@ -72,7 +72,7 @@ export default function EventsPage() {
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-8">
       <div className="flex items-baseline justify-between">
-        <h1 className="text-xl font-bold text-foreground">Events &amp; shops</h1>
+        <h1 className="text-xl font-bold text-foreground">Events</h1>
         <p className="text-sm text-muted-foreground">{openCount} running</p>
       </div>
       <p className="text-sm text-muted-foreground">
@@ -142,7 +142,7 @@ export default function EventsPage() {
           rows={summaries}
           keyFor={(s) => s.event.id}
           icon={Store}
-          iconTone="good"
+          iconTone={(s) => (s.totalOnHand > 0 ? "warning" : "good")}
           title={(s) => s.event.name}
           subtitle={(s) =>
             s.totalOnHand > 0

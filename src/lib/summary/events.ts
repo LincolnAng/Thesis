@@ -1,3 +1,4 @@
+import { resolveProductId } from "@/lib/summary/product-match";
 import type { BusinessEvent, Entry, EventStockMovement, Product } from "@/lib/store/types";
 
 /**
@@ -31,21 +32,6 @@ export interface EventSummary {
   totalSold: number;
   revenue: number;
   lastActivityAt: string | null;
-}
-
-function normalize(text: string | null | undefined): string {
-  return (text ?? "").trim().toLowerCase();
-}
-
-/** Entries name products by free text, movements by id — this bridges the two the same
- * way the store's own sku resolver does. */
-function resolveProductId(products: Product[], sku: string | null): string | null {
-  if (!sku) return null;
-  const n = normalize(sku);
-  const match =
-    products.find((p) => normalize(p.name) === n) ??
-    products.find((p) => normalize(p.name).includes(n) || n.includes(normalize(p.name)));
-  return match?.id ?? null;
 }
 
 export function summarizeEvent(

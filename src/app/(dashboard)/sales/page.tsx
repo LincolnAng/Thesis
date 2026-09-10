@@ -51,15 +51,18 @@ export default function SalesPage() {
 
   const columns: DataTableColumn<Entry>[] = [
     { key: "date", header: "Date", render: (e) => formatDate(e.timestamp) },
+    { key: "item", header: "Item", render: (e) => <p className="font-medium text-foreground">{e.sku ?? "Sale"}</p> },
     {
-      key: "item",
-      header: "Item",
-      render: (e) => (
-        <div>
-          <p className="font-medium text-foreground">{e.sku ?? "Sale"}</p>
-          {e.counterparty && <p className="text-xs text-muted-foreground">{e.counterparty}</p>}
-        </div>
-      ),
+      key: "buyer",
+      header: "Buyer",
+      // Its own column rather than a sub-line under the item — who bought it reads as
+      // primary information, not as a caption on the product name.
+      render: (e) =>
+        e.counterparty ? (
+          <p className="font-medium text-foreground">{e.counterparty}</p>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
     },
     { key: "qty", header: "Qty", align: "right", render: (e) => (e.quantity ?? "—").toString() },
     { key: "amount", header: "Amount", align: "right", render: (e) => formatPeso(e.amount) },
@@ -120,7 +123,16 @@ export default function SalesPage() {
             icon={ArrowUpRight}
             iconTone="good"
             title={(e) => e.sku ?? "Sale"}
-            subtitle={(e) => `${formatDate(e.timestamp)}${e.counterparty ? ` · ${e.counterparty}` : ""}`}
+            subtitle={(e) =>
+              e.counterparty ? (
+                <>
+                  <span className="font-medium text-foreground">{e.counterparty}</span>
+                  <span className="text-muted-foreground"> · {formatDate(e.timestamp)}</span>
+                </>
+              ) : (
+                formatDate(e.timestamp)
+              )
+            }
             trailing={(e) => `+${formatPeso(e.amount)}`}
             trailingTone="good"
             onSelect={(e) => setEditingEntry(e)}

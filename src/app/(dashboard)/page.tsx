@@ -75,11 +75,11 @@ export default function HomePage() {
     },
     {
       key: "stock",
-      label: "Stock",
+      label: "Inventory",
       icon: Box,
       stat: stockStat,
       statTone: mostUrgentReach && mostUrgentReach.urgency === "red" ? "warning" : "neutral",
-      href: "/stock",
+      href: "/inventory",
     },
     {
       key: "pricing",

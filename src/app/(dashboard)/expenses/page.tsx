@@ -60,6 +60,16 @@ export default function ExpensesPage() {
       render: (e) => <p className="font-medium text-foreground">{e.sku ?? e.rawText}</p>,
     },
     {
+      key: "paidTo",
+      header: "Paid to",
+      render: (e) =>
+        e.counterparty ? (
+          <p className="font-medium text-foreground">{e.counterparty}</p>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+    {
       key: "category",
       header: "Category",
       render: (e) => EXPENSE_CATEGORY_LABELS[e.category ?? "misc"] ?? e.category ?? "Other",
@@ -130,9 +140,17 @@ export default function ExpensesPage() {
             icon={ArrowDownRight}
             iconTone="warning"
             title={(e) => e.sku ?? e.rawText}
-            subtitle={(e) =>
-              `${formatDate(e.timestamp)} · ${EXPENSE_CATEGORY_LABELS[e.category ?? "misc"] ?? e.category ?? "Other"}`
-            }
+            subtitle={(e) => {
+              const category = EXPENSE_CATEGORY_LABELS[e.category ?? "misc"] ?? e.category ?? "Other";
+              return (
+                <>
+                  <span className="font-medium text-foreground">{e.counterparty ?? category}</span>
+                  <span className="text-muted-foreground">
+                    {e.counterparty ? ` · ${category}` : ""} · {formatDate(e.timestamp)}
+                  </span>
+                </>
+              );
+            }}
             trailing={(e) => `−${formatPeso(e.amount)}`}
             trailingTone="warning"
             onSelect={(e) => setEditingEntry(e)}
