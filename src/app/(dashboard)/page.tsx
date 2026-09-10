@@ -5,36 +5,39 @@ import { Receipt, Wallet, Box, Calculator, Truck } from "lucide-react";
 import { SummaryGrid, type GridItem } from "@/components/summary/summary-grid";
 import { Bar } from "@/components/summary/bar";
 import { StatTile } from "@/components/data-table/stat-tile";
+import { ProfitWaterfall } from "@/components/summary/profit-waterfall";
 import { NetProfitChart } from "@/components/summary/net-profit-chart";
 import { CogsPercentChart } from "@/components/summary/cogs-percent-chart";
 import { ExpensesCategoryChart } from "@/components/summary/expenses-category-chart";
 import { ProfitableProductsList } from "@/components/summary/profitable-products-list";
 import { SupplierPriceSummaryChart } from "@/components/summary/supplier-price-summary-chart";
 import { useStore } from "@/lib/store/use-store";
-import { formatPeso, pluralize } from "@/lib/format";
+import { currentMonthLabel, formatPeso, pluralize } from "@/lib/format";
 import { computeSalesSummary } from "@/lib/summary/sales-summary";
 import { computeExpensesSummary, monthlyExpensesByCategory } from "@/lib/summary/expenses-summary";
 import { computeIngredientReach } from "@/lib/summary/ingredient-reach";
 import { computeMonthlyProfitTrend, computeProductMarginRanking } from "@/lib/summary/profit-summary";
 import { productCostPerJar } from "@/lib/summary/recipe-cost";
 import { useViewMode } from "@/lib/summary/view-mode";
+import { useCostContext } from "@/lib/summary/use-cost-context";
 
 export default function HomePage() {
   const { entries, products, rawMaterials, suppliers, categoryBudgets } = useStore();
   const [viewMode] = useViewMode();
+  const costCtx = useCostContext();
 
   const sales = useMemo(
-    () => computeSalesSummary(entries, products, rawMaterials),
-    [entries, products, rawMaterials],
+    () => computeSalesSummary(entries, products, costCtx),
+    [entries, products, costCtx],
   );
   const expenses = useMemo(() => computeExpensesSummary(entries, categoryBudgets), [entries, categoryBudgets]);
   const profitTrend = useMemo(
-    () => computeMonthlyProfitTrend(entries, products, rawMaterials),
-    [entries, products, rawMaterials],
+    () => computeMonthlyProfitTrend(entries, products, costCtx),
+    [entries, products, costCtx],
   );
   const marginRanking = useMemo(
-    () => computeProductMarginRanking(entries, products, rawMaterials),
-    [entries, products, rawMaterials],
+    () => computeProductMarginRanking(entries, products, costCtx),
+    [entries, products, costCtx],
   );
   const expensesByCategory = useMemo(() => monthlyExpensesByCategory(entries), [entries]);
   const profitThisMonth = profitTrend[profitTrend.length - 1];
@@ -52,7 +55,7 @@ export default function HomePage() {
 
   const avgCostPerJar =
     products.length > 0
-      ? products.reduce((sum, p) => sum + productCostPerJar(p, rawMaterials).costPerJar, 0) / products.length
+      ? products.reduce((sum, p) => sum + productCostPerJar(p, costCtx).costPerJar, 0) / products.length
       : 0;
 
   const priceRoseCount = suppliers.filter((s) => {
@@ -110,11 +113,16 @@ export default function HomePage() {
 
       {viewMode === "advanced" && (
         <>
+          <ProfitWaterfall
+            revenue={sales.revenue}
+            cogs={profitThisMonth?.cogs ?? 0}
+            expenses={expenses.total}
+            netProfit={netProfit}
+            periodLabel={currentMonthLabel()}
+          />
+
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatTile label="Revenue" value={formatPeso(sales.revenue)} tone="good" />
-            <StatTile label="Expenses" value={formatPeso(expenses.total)} tone="warning" />
-            <StatTile label="Net profit" value={formatPeso(netProfit)} tone={netProfit >= 0 ? "good" : "critical"} />
-            <StatTile label="Gross margin" value={`${Math.round(sales.grossMarginPct)}%`} />
+            <StatTile label="Gross margin" value={`${Math.round(sales.grossMarginPct)}%`} sub="this month" />
           </div>
 
           <div className="space-y-4 rounded-2xl border border-border bg-card p-4">

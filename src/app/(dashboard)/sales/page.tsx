@@ -18,6 +18,7 @@ import { entryToDraft } from "@/lib/home/describe-entry";
 import { computeSalesSummary } from "@/lib/summary/sales-summary";
 import { currentMonthLabel, formatDate, formatPeso, PRICE_TYPE_LABELS } from "@/lib/format";
 import { useViewMode } from "@/lib/summary/view-mode";
+import { useCostContext } from "@/lib/summary/use-cost-context";
 import type { Entry } from "@/lib/store/types";
 
 const PRICE_TYPE_FILTER_OPTIONS = [
@@ -28,11 +29,12 @@ const PRICE_TYPE_FILTER_OPTIONS = [
 const SIMPLE_ROW_CAP = 8;
 
 export default function SalesPage() {
-  const { entries, products, rawMaterials } = useStore();
+  const { entries, products } = useStore();
   const [viewMode] = useViewMode();
+  const costCtx = useCostContext();
   const summary = useMemo(
-    () => computeSalesSummary(entries, products, rawMaterials),
-    [entries, products, rawMaterials],
+    () => computeSalesSummary(entries, products, costCtx),
+    [entries, products, costCtx],
   );
 
   const [search, setSearch] = useState("");

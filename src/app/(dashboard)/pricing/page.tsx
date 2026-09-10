@@ -10,10 +10,12 @@ import { formatPeso, PRICING_MODE_LABELS } from "@/lib/format";
 import { useStore } from "@/lib/store/use-store";
 import { effectiveProductPrice, productCostPerJar } from "@/lib/summary/recipe-cost";
 import { useViewMode } from "@/lib/summary/view-mode";
+import { useCostContext } from "@/lib/summary/use-cost-context";
 
 export default function PricingPage() {
-  const { products, rawMaterials } = useStore();
+  const { products } = useStore();
   const [viewMode] = useViewMode();
+  const costCtx = useCostContext();
   // Tracked by id, not the Product object itself — the dialog saves each field
   // instantly as it's edited (no explicit Save step), so it must keep reading
   // the live product from the store rather than a snapshot that goes stale the
@@ -46,9 +48,9 @@ export default function PricingPage() {
           iconTone="good"
           title={(p) => p.name}
           subtitle={(p) => PRICING_MODE_LABELS[p.pricingMode] ?? p.pricingMode}
-          trailing={(p) => formatPeso(effectiveProductPrice(p, productCostPerJar(p, rawMaterials)))}
+          trailing={(p) => formatPeso(effectiveProductPrice(p, productCostPerJar(p, costCtx)))}
           trailingTone={(p) => {
-            const cost = productCostPerJar(p, rawMaterials);
+            const cost = productCostPerJar(p, costCtx);
             return effectiveProductPrice(p, cost) - cost.costPerJar < 0 ? "warning" : "good";
           }}
           onSelect={(p) => setEditingProductId(p.id)}

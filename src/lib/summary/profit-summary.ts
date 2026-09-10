@@ -1,5 +1,5 @@
-import type { Entry, Product, RawMaterialStock } from "@/lib/store/types";
-import { productCostPerJar } from "./recipe-cost";
+import type { Entry, Product } from "@/lib/store/types";
+import { productCostPerJar, type CostContext } from "./recipe-cost";
 import { entriesInMonth, sum } from "./period";
 import { findProduct } from "./product-match";
 
@@ -21,7 +21,7 @@ export interface ProfitPoint {
 export function computeMonthlyProfitTrend(
   entries: Entry[],
   products: Product[],
-  rawMaterials: RawMaterialStock[],
+  ctx: CostContext,
   months = 6,
   now: Date = new Date(),
 ): ProfitPoint[] {
@@ -36,7 +36,7 @@ export function computeMonthlyProfitTrend(
     for (const e of sales) {
       const product = findProduct(products, e.sku);
       if (product && e.quantity) {
-        cogs += productCostPerJar(product, rawMaterials).costPerJar * e.quantity;
+        cogs += productCostPerJar(product, ctx).costPerJar * e.quantity;
       }
     }
     const expenses = sum(expenseEntries, (e) => e.amount ?? 0);
@@ -70,7 +70,7 @@ export interface ProductMarginRow {
 export function computeProductMarginRanking(
   entries: Entry[],
   products: Product[],
-  rawMaterials: RawMaterialStock[],
+  ctx: CostContext,
   now: Date = new Date(),
 ): ProductMarginRow[] {
   const thisMonth = entriesInMonth(entries, 0, now).filter((e) => e.type === "SALE");
@@ -79,7 +79,7 @@ export function computeProductMarginRanking(
     const key = e.sku ?? "Other";
     const product = findProduct(products, e.sku);
     const qty = e.quantity ?? 0;
-    const cost = product ? productCostPerJar(product, rawMaterials).costPerJar * qty : 0;
+    const cost = product ? productCostPerJar(product, ctx).costPerJar * qty : 0;
     const current = bySku.get(key) ?? { revenue: 0, cost: 0, qty: 0 };
     current.revenue += e.amount ?? 0;
     current.cost += cost;

@@ -6,14 +6,15 @@ import { formatPeso } from "@/lib/format";
 import type { ProductCostBreakdown } from "@/lib/summary/recipe-cost";
 import { CHART_LEGEND_STYLE, ChartTooltip } from "@/components/summary/chart-theme";
 
-const SLICES: Array<{ key: keyof ProductCostBreakdown; label: string }> = [
-  { key: "ingredientPerJar", label: "Ingredients" },
-  { key: "laborPerJar", label: "Labor" },
-  { key: "miscPerJar", label: "Other" },
+const SLICES: Array<{ label: string; valueOf: (c: ProductCostBreakdown) => number }> = [
+  { label: "Ingredients", valueOf: (c) => c.ingredientPerJar },
+  { label: "Packaging", valueOf: (c) => c.packagingPerJar },
+  { label: "Labor", valueOf: (c) => c.laborPerJar },
+  { label: "Other", valueOf: (c) => c.miscPerJar },
 ];
 
 export function CostBreakdownChart({ cost }: { cost: ProductCostBreakdown }) {
-  const data = SLICES.map((s, i) => ({ name: s.label, value: cost[s.key], color: chipColor(i) })).filter(
+  const data = SLICES.map((s, i) => ({ name: s.label, value: s.valueOf(cost), color: chipColor(i) })).filter(
     (d) => d.value > 0,
   );
 

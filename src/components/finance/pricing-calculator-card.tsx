@@ -11,7 +11,10 @@ import { updateProduct } from "@/lib/store/store";
 import { useStore } from "@/lib/store/use-store";
 import { effectiveProductPrice, ingredientRowCost, productCostPerJar } from "@/lib/summary/recipe-cost";
 import { CostBreakdownChart } from "@/components/finance/cost-breakdown-chart";
+import { CostBreakdownLines } from "@/components/finance/cost-breakdown-lines";
+import { LaborEditor } from "@/components/finance/labor-editor";
 import { useViewMode } from "@/lib/summary/view-mode";
+import { useCostContext } from "@/lib/summary/use-cost-context";
 import { useNumericDraft } from "@/lib/use-numeric-draft";
 import type { PricingMode, Product, RawMaterialStock, RecipeExtraRow, RecipeIngredientRow } from "@/lib/store/types";
 import { cn } from "@/lib/utils";
@@ -101,6 +104,7 @@ function IngredientRowEditor({
   onRemove: (id: string) => void;
 }) {
   const qtyField = useNumericDraft(row.quantity, (n) => onUpdate(row.id, { quantity: n }));
+  const costCtx = useCostContext();
   return (
     <div className="space-y-1.5 rounded-xl border border-border p-2.5">
       <div className="flex items-center gap-2">
@@ -128,7 +132,7 @@ function IngredientRowEditor({
         />
         <span className="w-10 shrink-0 text-xs text-muted-foreground">{material?.unit ?? ""}</span>
         <span className="w-20 shrink-0 text-right text-xs font-medium text-foreground">
-          {formatPeso(ingredientRowCost(row, rawMaterials))}
+          {formatPeso(ingredientRowCost(row, costCtx))}
         </span>
       </div>
     </div>
@@ -162,15 +166,18 @@ function TierRow({
 
 export function PricingCalculatorCard({ product }: { product: Product }) {
   const { rawMaterials } = useStore();
+  const costCtx = useCostContext();
   const [showMore, setShowMore] = useState(false);
   const [batchCount, setBatchCount] = useState(1);
   const [viewMode] = useViewMode();
 
   const ingredients = product.recipeIngredients;
+  // Still written back on every save so the rows survive, but no longer costed: labor now
+  // comes from minutes x rate, or from laborCostOverride where one was migrated in.
   const labor = product.recipeLabor;
   const misc = product.recipeMisc;
 
-  const cost = productCostPerJar(product, rawMaterials);
+  const cost = productCostPerJar(product, costCtx);
   const totalForRun = cost.batchTotal * batchCount;
   const jarsForRun = product.batchYield * batchCount;
 
@@ -252,26 +259,6 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
     persist(
       ingredients.filter((r) => r.id !== id),
       labor,
-      misc,
-      product.batchYield,
-    );
-  }
-
-  function addLabor() {
-    persist(ingredients, [...labor, { id: genRowId("lab"), label: "", cost: 0 }], misc, product.batchYield);
-  }
-  function updateLabor(id: string, patch: Partial<RecipeExtraRow>) {
-    persist(
-      ingredients,
-      labor.map((r) => (r.id === id ? { ...r, ...patch } : r)),
-      misc,
-      product.batchYield,
-    );
-  }
-  function removeLabor(id: string) {
-    persist(
-      ingredients,
-      labor.filter((r) => r.id !== id),
       misc,
       product.batchYield,
     );
@@ -389,11 +376,9 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
             </div>
 
             <div className="space-y-2">
-              <div>
+              <div className="space-y-2">
                 <Label className="text-xs font-semibold text-muted-foreground">What this jar costs to make</Label>
-                <p className="text-xs text-muted-foreground">
-                  Ingredients, labor, and other costs add up to {formatPeso(cost.costPerJar)} per jar.
-                </p>
+                <CostBreakdownLines cost={cost} />
               </div>
 
               {viewMode === "advanced" && <CostBreakdownChart cost={cost} />}
@@ -426,7 +411,7 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
                 </div>
               )}
 
-              <ExtraRowsSection title="Labor per batch" rows={labor} onAdd={addLabor} onChange={updateLabor} onRemove={removeLabor} />
+              <LaborEditor product={product} hourlyRate={costCtx.hourlyLaborRate} laborPerBatch={cost.laborTotal} />
               <ExtraRowsSection
                 title="Other costs per batch"
                 subtitle="Electricity, gas, misc."

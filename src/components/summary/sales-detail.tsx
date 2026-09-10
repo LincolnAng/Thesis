@@ -13,20 +13,22 @@ import { CogsPercentChart } from "@/components/summary/cogs-percent-chart";
 import { ProfitableProductsList } from "@/components/summary/profitable-products-list";
 import { computeMonthlyProfitTrend, computeProductMarginRanking } from "@/lib/summary/profit-summary";
 import { useViewMode } from "@/lib/summary/view-mode";
+import { useCostContext } from "@/lib/summary/use-cost-context";
 
 export function SalesDetail() {
-  const { entries, products, rawMaterials } = useStore();
+  const { entries, products } = useStore();
+  const costCtx = useCostContext();
   const summary = useMemo(
-    () => computeSalesSummary(entries, products, rawMaterials),
-    [entries, products, rawMaterials],
+    () => computeSalesSummary(entries, products, costCtx),
+    [entries, products, costCtx],
   );
   const profitTrend = useMemo(
-    () => computeMonthlyProfitTrend(entries, products, rawMaterials),
-    [entries, products, rawMaterials],
+    () => computeMonthlyProfitTrend(entries, products, costCtx),
+    [entries, products, costCtx],
   );
   const marginRanking = useMemo(
-    () => computeProductMarginRanking(entries, products, rawMaterials),
-    [entries, products, rawMaterials],
+    () => computeProductMarginRanking(entries, products, costCtx),
+    [entries, products, costCtx],
   );
   const lastMonthLabel = previousMonthShortLabel();
   const [viewMode] = useViewMode();

@@ -7,6 +7,8 @@ import { socialStatsCollection } from "@/lib/sheets/marketing";
 import { budgetsCollection } from "@/lib/sheets/budgets";
 import { eventsCollection, eventStockCollection } from "@/lib/sheets/events";
 import { machinesCollection } from "@/lib/sheets/machines";
+import { supplierPricesCollection } from "@/lib/sheets/supplier-prices";
+import { businessSettingsCollection } from "@/lib/sheets/business-settings";
 import type { SheetCollection } from "@/lib/sheets/collection";
 
 const COLLECTIONS = {
@@ -21,6 +23,8 @@ const COLLECTIONS = {
   events: eventsCollection,
   eventStock: eventStockCollection,
   machines: machinesCollection,
+  supplierPrices: supplierPricesCollection,
+  businessSettings: businessSettingsCollection,
 } as const;
 
 type CollectionName = keyof typeof COLLECTIONS;
@@ -31,7 +35,7 @@ function isCollectionName(value: unknown): value is CollectionName {
 
 export async function GET() {
   try {
-    const [entries, products, recipes, rawMaterials, suppliers, supplierPriceHistory, socialStats, budgets, events, eventStock, machines] =
+    const [entries, products, recipes, rawMaterials, suppliers, supplierPriceHistory, socialStats, budgets, events, eventStock, machines, supplierPrices, businessSettings] =
       await Promise.all([
       entriesCollection.getAll(),
       productsCollection.getAll(),
@@ -44,6 +48,8 @@ export async function GET() {
       eventsCollection.getAll(),
       eventStockCollection.getAll(),
       machinesCollection.getAll(),
+      supplierPricesCollection.getAll(),
+      businessSettingsCollection.getAll(),
     ]);
     return NextResponse.json({
       success: true,
@@ -58,6 +64,8 @@ export async function GET() {
       events,
       eventStock,
       machines,
+      supplierPrices,
+      businessSettings,
     });
   } catch (err) {
     return NextResponse.json({ success: false, detail: err instanceof Error ? err.message : String(err) });

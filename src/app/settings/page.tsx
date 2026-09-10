@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { getSnapshot, resetAllData, restoreLocalCollections, setApiKeyMissing } from "@/lib/store/store";
 import type { BotLanguage } from "@/lib/sheets/settings";
+import { LaborRateCard } from "@/components/settings/labor-rate-card";
 import { cn } from "@/lib/utils";
 
 const LANGUAGE_LABELS: Record<BotLanguage, string> = {
@@ -319,6 +320,8 @@ export default function SettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      <LaborRateCard />
 
       <Card className="mt-4">
         <CardHeader>

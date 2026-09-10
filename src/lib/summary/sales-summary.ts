@@ -1,7 +1,7 @@
 import { PRICE_TYPE_LABELS } from "@/lib/format";
 import { chipColor } from "@/lib/chart-colors";
-import type { Entry, Product, RawMaterialStock } from "@/lib/store/types";
-import { productCostPerJar } from "./recipe-cost";
+import type { Entry, Product } from "@/lib/store/types";
+import { productCostPerJar, type CostContext } from "./recipe-cost";
 import { findProduct } from "./product-match";
 import { entriesInMonth, pctChange, sortByDateDesc, sum } from "./period";
 import { monthlyTrend, type TrendPoint } from "./trend";
@@ -46,7 +46,7 @@ export function productColor(products: Product[], sku: string | null): string {
   return chipColor(index >= 0 ? index : products.length);
 }
 
-export function computeSalesSummary(entries: Entry[], products: Product[], rawMaterials: RawMaterialStock[]): SalesSummary {
+export function computeSalesSummary(entries: Entry[], products: Product[], ctx: CostContext): SalesSummary {
   const thisMonth = entriesInMonth(entries, 0).filter((e) => e.type === "SALE");
   const lastMonth = entriesInMonth(entries, 1).filter((e) => e.type === "SALE");
 
@@ -59,7 +59,7 @@ export function computeSalesSummary(entries: Entry[], products: Product[], rawMa
   for (const e of thisMonth) {
     const product = findProduct(products, e.sku);
     if (product && e.quantity) {
-      const cost = productCostPerJar(product, rawMaterials).costPerJar * e.quantity;
+      const cost = productCostPerJar(product, ctx).costPerJar * e.quantity;
       profit += (e.amount ?? 0) - cost;
     }
   }

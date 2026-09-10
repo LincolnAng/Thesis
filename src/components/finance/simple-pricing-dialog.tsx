@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { formatPeso, PRICING_MODE_LABELS } from "@/lib/format";
 import { updateProduct } from "@/lib/store/store";
-import { useStore } from "@/lib/store/use-store";
+import { useCostContext } from "@/lib/summary/use-cost-context";
 import { effectiveProductPrice, productCostPerJar } from "@/lib/summary/recipe-cost";
 import { useNumericDraft } from "@/lib/use-numeric-draft";
 import type { PricingMode, Product } from "@/lib/store/types";
@@ -17,8 +17,8 @@ import { cn } from "@/lib/utils";
  * metric and its one relevant input, no recipe/ingredient editing (that stays
  * an Advanced-view-only concern, same as everywhere else in the app). */
 export function SimplePricingDialog({ product, onClose }: { product: Product; onClose: () => void }) {
-  const { rawMaterials } = useStore();
-  const cost = productCostPerJar(product, rawMaterials);
+  const costCtx = useCostContext();
+  const cost = productCostPerJar(product, costCtx);
   const effectivePrice = effectiveProductPrice(product, cost);
   const profit = effectivePrice - cost.costPerJar;
   const belowCost = profit < 0;

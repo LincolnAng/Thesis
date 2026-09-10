@@ -18,6 +18,7 @@ import {
   type SupplierRow,
 } from "./sheet-shapes";
 import { findProduct } from "@/lib/summary/product-match";
+import type { BusinessSettingRow } from "@/lib/sheets/business-settings";
 import type {
   AiStatus,
   BusinessEvent,
@@ -32,6 +33,7 @@ import type {
   SyncStatus,
   TokenUsage,
   Machine,
+  SupplierPrice,
 } from "./types";
 
 export interface StoreState {
@@ -44,6 +46,9 @@ export interface StoreState {
   events: BusinessEvent[];
   eventStock: EventStockMovement[];
   machines: Machine[];
+  supplierPrices: SupplierPrice[];
+  /** Business-level numbers the owner sets once — hourly labor rate today. */
+  businessSettings: Record<string, string>;
   tokenUsage: TokenUsage;
   aiStatus: AiStatus;
   syncStatus: SyncStatus;
@@ -59,6 +64,8 @@ const SOCIAL_STATS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-social-stats-migrated-
 const BUDGETS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-budgets-migrated-v1";
 const EVENTS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-events-migrated-v1";
 const MACHINES_MIGRATION_FLAG_KEY = "mangkiko.migrated.machines";
+const SUPPLIER_PRICES_MIGRATION_FLAG_KEY = "mangkiko.migrated.supplierPrices";
+const BUSINESS_SETTINGS_MIGRATION_FLAG_KEY = "mangkiko.migrated.businessSettings";
 const EVENT_STOCK_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-event-stock-migrated-v1";
 const SYNC_POLL_INTERVAL_MS = 30_000;
 
@@ -85,6 +92,8 @@ function defaultState(): StoreState {
     events: [],
     eventStock: [],
     machines: [],
+    supplierPrices: [],
+    businessSettings: {},
     tokenUsage: {
       totalInputTokens: 0,
       totalOutputTokens: 0,
@@ -347,6 +356,20 @@ async function loadAllFromServer() {
       state.machines,
     );
 
+    const supplierPricesMigration = await migrateCollectionIfEmpty<SupplierPrice>(
+      "supplierPrices",
+      SUPPLIER_PRICES_MIGRATION_FLAG_KEY,
+      Array.isArray(json.supplierPrices) ? json.supplierPrices : [],
+      state.supplierPrices,
+    );
+
+    const businessSettingsMigration = await migrateCollectionIfEmpty<BusinessSettingRow>(
+      "businessSettings",
+      BUSINESS_SETTINGS_MIGRATION_FLAG_KEY,
+      Array.isArray(json.businessSettings) ? json.businessSettings : [],
+      businessSettingsToRows(state.businessSettings),
+    );
+
     const serverEntries = entriesMigration.items;
     const serverIds = new Set(serverEntries.map((e) => e.id));
 
@@ -366,6 +389,8 @@ async function loadAllFromServer() {
         events: eventsMigration.items,
         eventStock: eventStockMigration.items,
         machines: machinesMigration.items,
+        supplierPrices: supplierPricesMigration.items,
+        businessSettings: businessSettingRowsToRecord(businessSettingsMigration.items),
       };
     });
   } catch {
@@ -879,4 +904,46 @@ export function updateMachine(id: string, patch: Partial<Machine>) {
 export function deleteMachine(id: string) {
   setState((prev) => ({ ...prev, machines: prev.machines.filter((m) => m.id !== id) }));
   void mirrorOp("machines", "delete", { id });
+}
+
+// --- Supplier prices ---------------------------------------------------------
+
+export function addSupplierPrice(input: Omit<SupplierPrice, "id" | "loggedAt"> & { loggedAt?: string }): SupplierPrice {
+  const entry: SupplierPrice = { ...input, id: genId("sprice"), loggedAt: input.loggedAt ?? new Date().toISOString() };
+  setState((prev) => ({ ...prev, supplierPrices: [...prev.supplierPrices, entry] }));
+  void mirrorOp("supplierPrices", "append", { item: entry });
+  return entry;
+}
+
+export function updateSupplierPrice(id: string, patch: Partial<SupplierPrice>) {
+  let updated: SupplierPrice | undefined;
+  setState((prev) => ({
+    ...prev,
+    supplierPrices: prev.supplierPrices.map((p) => {
+      if (p.id !== id) return p;
+      updated = { ...p, ...patch };
+      return updated;
+    }),
+  }));
+  if (updated) void mirrorOp("supplierPrices", "update", { id, item: updated });
+}
+
+export function deleteSupplierPrice(id: string) {
+  setState((prev) => ({ ...prev, supplierPrices: prev.supplierPrices.filter((p) => p.id !== id) }));
+  void mirrorOp("supplierPrices", "delete", { id });
+}
+
+// --- Business settings -------------------------------------------------------
+
+function businessSettingsToRows(record: Record<string, string>): BusinessSettingRow[] {
+  return Object.entries(record).map(([key, value]) => ({ key, value }));
+}
+
+function businessSettingRowsToRecord(rows: BusinessSettingRow[]): Record<string, string> {
+  return Object.fromEntries(rows.map((r) => [r.key, r.value]));
+}
+
+export function setBusinessSetting(key: string, value: string) {
+  setState((prev) => ({ ...prev, businessSettings: { ...prev.businessSettings, [key]: value } }));
+  void mirrorOp("businessSettings", "update", { id: key, item: { key, value } });
 }

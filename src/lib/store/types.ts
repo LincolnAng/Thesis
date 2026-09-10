@@ -71,6 +71,13 @@ export interface Product {
   stockQty: number;
   lowStockThreshold: number;
   batchYield: number; // jars produced per batch
+  /** Hands-on time one batch takes. Labor cost is derived from this and the hourly rate in
+   * settings, so a change to the rate reprices every product at once. */
+  minutesPerBatch?: number;
+  /** A labor figure typed in directly. When set it wins over the derived one, and the UI
+   * says so — existing per-batch labor costs migrated here rather than being recomputed
+   * into something the owner never entered. */
+  laborCostOverride?: number | null;
   recipeIngredients: RecipeIngredientRow[];
   recipeLabor: RecipeExtraRow[];
   recipeMisc: RecipeExtraRow[];
@@ -93,6 +100,10 @@ export interface Supplier {
   contact: string;
 }
 
+/** Separates what goes *in* the jar from the jar itself, so cost can be broken out per line
+ * instead of arriving as one undifferentiated "ingredients" figure. */
+export type MaterialKind = "ingredient" | "packaging";
+
 export interface RawMaterialStock {
   id: string;
   name: string; // cocoa beans, jars, labels, oil, sugar
@@ -101,7 +112,26 @@ export interface RawMaterialStock {
   lowStockThreshold: number;
   perBatchQty: number | null; // how much one production batch uses, for "enough for N batches"
   color: string | null; // user-chosen hex override for the stock calendar line; null = auto (urgency-based)
-  unitCost: number; // current cost per unit — the single source of truth for recipe costing
+  /** Fallback cost per unit, used only when no supplier has logged a price for this material.
+   * Supplier-logged prices are authoritative — see getUnitCost in summary/cost-engine.ts. */
+  unitCost: number;
+  kind?: MaterialKind;
+}
+
+/**
+ * One price a supplier charged for one ingredient, as actually paid: the peso amount, and
+ * how much it bought. Cost per unit is derived (price / quantity), never stored, because a
+ * supplier quoting "₱90" means nothing until you know whether that bought a kilo or half of
+ * one. Several suppliers can price the same ingredient, which is what makes them comparable.
+ */
+export interface SupplierPrice {
+  id: string;
+  supplierId: string;
+  materialId: string;
+  price: number;
+  quantity: number;
+  unit: string;
+  loggedAt: string;
 }
 
 export interface SocialStatEntry {

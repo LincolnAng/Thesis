@@ -1,7 +1,7 @@
 import { createSheetCollection } from "./collection";
 import type { RawMaterialStock } from "@/lib/store/types";
 
-const HEADER = ["id", "name", "unit", "qty", "lowStockThreshold", "perBatchQty", "color", "unitCost", "deletedAt"];
+const HEADER = ["id", "name", "unit", "qty", "lowStockThreshold", "perBatchQty", "color", "unitCost", "deletedAt", "kind"];
 
 function toRow(m: RawMaterialStock): string[] {
   return [
@@ -14,11 +14,12 @@ function toRow(m: RawMaterialStock): string[] {
     m.color ?? "",
     String(m.unitCost),
     "",
+    m.kind ?? "",
   ];
 }
 
 function fromRow(row: string[]): RawMaterialStock | null {
-  const [id, name, unit, qty, lowStockThreshold, perBatchQty, color, unitCost] = row;
+  const [id, name, unit, qty, lowStockThreshold, perBatchQty, color, unitCost, , kind] = row;
   if (!id) return null;
   return {
     id,
@@ -29,6 +30,7 @@ function fromRow(row: string[]): RawMaterialStock | null {
     perBatchQty: perBatchQty ? Number(perBatchQty) : null,
     color: color || null,
     unitCost: Number(unitCost) || 0,
+    kind: kind === "packaging" || kind === "ingredient" ? kind : undefined,
   };
 }
 

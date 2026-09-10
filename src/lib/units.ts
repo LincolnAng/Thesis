@@ -40,3 +40,31 @@ export function normalizeUnit(raw: string | null | undefined): string | null {
   if (exact) return exact;
   return UNIT_ALIASES[lower] ?? text;
 }
+
+/**
+ * How many of a base unit one of each unit is worth, within its own group. Cross-group
+ * conversion is impossible (kg to pcs depends on the item), so it returns null rather than
+ * inventing a factor — a supplier price logged in the wrong kind of unit must be visible
+ * as unusable, not silently turned into a number.
+ */
+const UNIT_FACTORS: Record<string, { group: string; perBase: number }> = {
+  g: { group: "weight", perBase: 1 },
+  kg: { group: "weight", perBase: 1000 },
+  ml: { group: "volume", perBase: 1 },
+  L: { group: "volume", perBase: 1000 },
+};
+
+/** Converts a quantity between units of the same measurement family. */
+export function convertQuantity(quantity: number, from: string | null, to: string | null): number | null {
+  const fromUnit = normalizeUnit(from);
+  const toUnit = normalizeUnit(to);
+  if (!fromUnit || !toUnit) return null;
+  if (fromUnit === toUnit) return quantity;
+
+  const a = UNIT_FACTORS[fromUnit];
+  const b = UNIT_FACTORS[toUnit];
+  // Count units (pcs, jars, boxes) have no ratio between them — a box is not n jars by
+  // definition — so only an exact match counts, which the check above already handled.
+  if (!a || !b || a.group !== b.group) return null;
+  return (quantity * a.perBase) / b.perBase;
+}
