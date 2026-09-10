@@ -1,7 +1,8 @@
 "use client";
 
+import { PageHeader } from "@/components/layout/page-header";
 import { useMemo, useState } from "react";
-import { ArrowDownRight, Pencil, Plus, Settings2 } from "lucide-react";
+import { ArrowDownRight, Pencil, Plus, Settings2, Wallet } from "lucide-react";
 import { ExpensesDetail } from "@/components/summary/expenses-detail";
 import { CategoryBudgetEditor } from "@/components/summary/category-budget-editor";
 import { QuickEditDialog } from "@/components/home/quick-edit-dialog";
@@ -85,11 +86,8 @@ export default function ExpensesPage() {
     summary.total === 0 && lastExpense ? emptyPeriodReason(lastExpense.timestamp, currentMonthLabel()) : null;
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-8">
-      <div className="flex items-baseline justify-between">
-        <h1 className="text-xl font-bold text-foreground">Expenses</h1>
-        <p className="text-sm text-muted-foreground">{currentMonthLabel()}</p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader icon={Wallet} title="Expenses" meta={currentMonthLabel()} />
 
       {emptyReason && <p className="text-sm text-muted-foreground">{emptyReason}</p>}
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { CHART_Y_WIDTH, CHART_HEIGHT } from "@/components/summary/chart-theme";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { formatDateShort, formatPeso } from "@/lib/format";
 import type { PriceHistoryPoint } from "@/lib/store/types";
@@ -15,12 +16,12 @@ export function PriceHistoryChart({ history }: { history: PriceHistoryPoint[] })
   return (
     <div className="space-y-1.5">
       <p className="text-xs font-semibold text-muted-foreground">Price over time</p>
-      <div className="h-40">
+      <div style={{ height: CHART_HEIGHT }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid stroke={CHART_GRID_STROKE} vertical={false} />
             <XAxis dataKey="label" tick={CHART_AXIS_TICK} axisLine={{ stroke: CHART_GRID_STROKE }} tickLine={false} />
-            <YAxis tick={CHART_AXIS_TICK} axisLine={false} tickLine={false} width={44} />
+            <YAxis tick={CHART_AXIS_TICK} axisLine={false} tickLine={false} width={CHART_Y_WIDTH} />
             <Tooltip content={<ChartTooltip formatValue={(v) => formatPeso(Number(v))} />} />
             <Line
               type="monotone"

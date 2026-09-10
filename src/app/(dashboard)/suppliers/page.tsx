@@ -1,5 +1,7 @@
 "use client";
 
+import { Truck } from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
 import { useMemo, useState } from "react";
 import { SupplierCard } from "@/components/suppliers/supplier-card";
 import { AddSupplierForm } from "@/components/suppliers/add-supplier-form";
@@ -28,8 +30,8 @@ export default function SuppliersPage() {
   }, [suppliers, search, typeFilter]);
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-8">
-      <h1 className="text-xl font-bold text-foreground">Suppliers</h1>
+    <div className="space-y-6">
+      <PageHeader icon={Truck} title="Suppliers" />
 
       <Toolbar
         searchValue={search}
@@ -51,7 +53,7 @@ export default function SuppliersPage() {
           No suppliers match.
         </p>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))" }}>
           {filtered.map((s) => (
             <SupplierCard key={s.id} supplier={s} />
           ))}

@@ -8,7 +8,13 @@
 
 export const CHART_GRID_STROKE = "var(--border)";
 export const CHART_AXIS_TICK = { fontSize: 12, fill: "var(--muted-foreground)" };
-export const CHART_HEIGHT = "h-56";
+/** Fixed so side-by-side chart cards align. Applied as a style, not a class — a rem-based
+ * height would be scaled by the 118.75% root font-size and stop being 240px. */
+export const CHART_HEIGHT = 240;
+
+/** Reserved gutter for y-axis labels. Too narrow a width is what was clipping the
+ * "Average price by supplier" tick labels. */
+export const CHART_Y_WIDTH = 48;
 
 interface TooltipPayloadEntry {
   dataKey?: string;

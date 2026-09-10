@@ -5,6 +5,10 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --color-status-good: var(--status-good);
+  --color-status-warning: var(--status-warning);
+  --color-status-critical: var(--status-critical);
+  --color-status-info: var(--status-info);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
@@ -74,9 +78,24 @@
   --sidebar-accent-foreground: oklch(0.22 0.01 55);
   --sidebar-border: oklch(0.9 0.003 60);
   --sidebar-ring: oklch(0.7 0.01 60);
-  --status-good: #15803d;
-  --status-warning: #b45309;
-  --status-critical: #dc2626;
+  /* Re-derived in oklch against the warm ground (hue ~45-60) rather than dropped in as
+     generic hexes: chroma is held down so green and amber read as part of the palette
+     instead of sitting on top of it. */
+  --status-good: oklch(0.55 0.125 150);
+  --status-warning: oklch(0.62 0.135 62);
+  --status-critical: oklch(0.55 0.19 27);
+  --status-info: oklch(0.55 0.13 250);
+
+  /* Layout — the Simple/Advanced width split is enforced from these, not per page. */
+  --content-simple: 680px;
+  --content-advanced: 1200px;
+  --sidebar-w: 240px;
+  --rail-w: 72px;
+
+  /* Radii: panels, controls, pills. */
+  --radius-panel: 12px;
+  --radius-control: 8px;
+  --radius-pill: 999px;
 }
 
 .dark {
@@ -106,9 +125,10 @@
   --sidebar-accent-foreground: oklch(0.93 0.02 70);
   --sidebar-border: oklch(0.32 0.03 48);
   --sidebar-ring: oklch(0.62 0.05 60);
-  --status-good: #4ade80;
-  --status-warning: #fbbf24;
-  --status-critical: #f87171;
+  --status-good: oklch(0.78 0.15 152);
+  --status-warning: oklch(0.80 0.14 70);
+  --status-critical: oklch(0.72 0.17 25);
+  --status-info: oklch(0.75 0.12 250);
 }
 
 @layer base {
@@ -123,5 +143,55 @@
     /* Bumps every rem-based Tailwind text/spacing utility app-wide — the
        simplest lever for bigger type without hand-editing every component. */
     font-size: 118.75%;
+  }
+}
+
+
+/*
+ * Type scale, in px on purpose.
+ *
+ * The root font-size is set to 118.75% above, which silently scales every rem-based
+ * Tailwind utility. Stating these in px keeps the scale the size it says it is, whatever
+ * the root does, so a "28px page title" is 28px on every screen.
+ */
+@layer components {
+  .type-page-title {
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+  .type-section-header {
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+  .type-stat-number {
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+  .type-stat-label {
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.3;
+  }
+  .type-body {
+    font-size: 15px;
+    font-weight: 400;
+    line-height: 1.5;
+  }
+  .type-meta {
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 1.4;
+    color: var(--muted-foreground);
+  }
+
+  /* One line, ellipsised. Long supplier names were wrapping to four lines and
+     breaking the grid they sat in. */
+  .truncate-line {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }

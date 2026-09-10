@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import { Receipt, Wallet, Box, Calculator, Truck } from "lucide-react";
+import { Box, Calculator, Home, Receipt, Truck, Wallet } from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
 import { SummaryGrid, type GridItem } from "@/components/summary/summary-grid";
 import { Bar } from "@/components/summary/bar";
 import { StatTile } from "@/components/data-table/stat-tile";
@@ -105,7 +106,8 @@ export default function HomePage() {
   ];
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-8 px-4 py-8">
+    <div className="space-y-8">
+      <PageHeader icon={Home} title="Home" meta={currentMonthLabel()} />
       <div className="text-center">
         <h1 className="text-2xl font-bold text-foreground">Home</h1>
         <p className="mt-1 text-sm text-muted-foreground">This month at a glance</p>

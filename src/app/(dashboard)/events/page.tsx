@@ -1,7 +1,9 @@
 "use client";
 
+import { PageHeader } from "@/components/layout/page-header";
 import { useMemo, useState } from "react";
 import { Store } from "lucide-react";
+import { EmptyState } from "@/components/layout/empty-state";
 import { StatTile } from "@/components/data-table/stat-tile";
 import { DataTable, type DataTableColumn } from "@/components/data-table/data-table";
 import { BigRowList } from "@/components/data-table/big-row-list";
@@ -70,17 +72,11 @@ export default function EventsPage() {
   ];
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-8">
+    <div className="space-y-6">
       <div className="flex items-baseline justify-between">
-        <h1 className="text-xl font-bold text-foreground">Events</h1>
+        <PageHeader icon={Store} title="Events" />
         <p className="text-sm text-muted-foreground">{openCount} running</p>
       </div>
-      <p className="text-sm text-muted-foreground">
-        For stock you send somewhere else — a weekend booth, or a shop like Nomad or Bandera. Send jars here and
-        they leave your main stock; sales logged against the place come out of what it&apos;s holding, and anything
-        unsold can be brought back.
-      </p>
-
       {adding ? (
         <div className="space-y-3 rounded-2xl border border-border bg-card p-4">
           <div className="space-y-1">
@@ -117,7 +113,18 @@ export default function EventsPage() {
         </Button>
       )}
 
-      {viewMode === "advanced" ? (
+      {summaries.length === 0 ? (
+        <EmptyState
+          icon={Store}
+          heading="Add your first event"
+          body="A weekend booth, or a shop like Nomad that keeps some of your stock. Send jars there and they leave your main stock until they sell or come back."
+          action={
+            <Button size="sm" onClick={() => setAdding(true)}>
+              Add a place
+            </Button>
+          }
+        />
+      ) : viewMode === "advanced" ? (
         <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <StatTile label="Places" value={String(summaries.length)} />

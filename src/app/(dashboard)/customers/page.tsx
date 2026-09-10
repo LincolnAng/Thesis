@@ -1,5 +1,6 @@
 "use client";
 
+import { PageHeader } from "@/components/layout/page-header";
 import { useMemo, useState } from "react";
 import { Users } from "lucide-react";
 import { StatTile } from "@/components/data-table/stat-tile";
@@ -55,9 +56,9 @@ export default function CustomersPage() {
   ];
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-8">
+    <div className="space-y-6">
       <div className="flex items-baseline justify-between">
-        <h1 className="text-xl font-bold text-foreground">Customers</h1>
+        <PageHeader icon={Users} title="Customers" />
         <p className="text-sm text-muted-foreground">{customers.length} tracked</p>
       </div>
       <p className="text-sm text-muted-foreground">

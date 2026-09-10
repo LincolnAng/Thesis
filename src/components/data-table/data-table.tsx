@@ -7,7 +7,19 @@ export interface DataTableColumn<T> {
   header: string;
   align?: "left" | "right" | "center";
   className?: string;
+  /** Keeps a column from being squeezed to the point of clipping its own header —
+   * "Total sp…" and "Ingredien…" were the symptom. Defaults per column kind below. */
+  minWidth?: number;
   render: (row: T) => ReactNode;
+}
+
+/** Sensible floors by column name, so callers only set minWidth when they differ. */
+function defaultMinWidth(key: string, header: string): number {
+  const text = `${key} ${header}`.toLowerCase();
+  if (/amount|total|price|cost|spent|revenue|profit/.test(text)) return 90;
+  if (/date|last|when/.test(text)) return 100;
+  if (/category|type|status|level/.test(text)) return 100;
+  return 160;
 }
 
 export function DataTable<T>({
@@ -32,14 +44,19 @@ export function DataTable<T>({
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-card">
+    <div className="overflow-x-auto rounded-[var(--radius-panel)] border border-border bg-card">
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
             {columns.map((col) => (
               <TableHead
                 key={col.key}
-                className={cn(col.align === "right" && "text-right", col.align === "center" && "text-center")}
+                style={{ minWidth: col.minWidth ?? defaultMinWidth(col.key, col.header) }}
+                className={cn(
+                  "whitespace-nowrap",
+                  col.align === "right" && "text-right",
+                  col.align === "center" && "text-center",
+                )}
               >
                 {col.header}
               </TableHead>

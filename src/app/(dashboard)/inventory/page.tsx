@@ -1,7 +1,8 @@
 "use client";
 
+import { PageHeader } from "@/components/layout/page-header";
 import { useMemo, useState } from "react";
-import { Pencil, Plus } from "lucide-react";
+import { Box, Pencil, Plus } from "lucide-react";
 import { StockDetail } from "@/components/summary/stock-detail";
 import { QuickEditDialog } from "@/components/home/quick-edit-dialog";
 import { EditProductDialog } from "@/components/stock/edit-product-dialog";
@@ -97,11 +98,8 @@ export default function InventoryPage() {
   ];
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-8">
-      <div className="flex items-baseline justify-between">
-        <h1 className="text-xl font-bold text-foreground">Inventory</h1>
-        <p className="text-sm text-muted-foreground">{currentMonthLabel()}</p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader icon={Box} title="Inventory" meta={currentMonthLabel()} />
 
       <DemandForecastCard
         forecasts={forecasts}

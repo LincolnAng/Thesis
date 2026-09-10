@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Calculator } from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
 import { PricingCalculatorCard } from "@/components/finance/pricing-calculator-card";
 import { SimplePricingDialog } from "@/components/finance/simple-pricing-dialog";
 import { IngredientCostsPanel } from "@/components/finance/ingredient-costs-panel";
@@ -24,8 +25,8 @@ export default function PricingPage() {
   const editingProduct = products.find((p) => p.id === editingProductId) ?? null;
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-8">
-      <h1 className="mb-1 text-xl font-bold text-foreground">Pricing calculator</h1>
+    <div>
+      <PageHeader icon={Calculator} title="Pricing" />
       <p className="mb-4 text-sm text-muted-foreground">See how much profit each jar makes.</p>
 
       {viewMode === "advanced" ? (

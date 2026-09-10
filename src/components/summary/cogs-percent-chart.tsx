@@ -2,7 +2,7 @@
 
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { ProfitPoint } from "@/lib/summary/profit-summary";
-import { CHART_AXIS_TICK, CHART_GRID_STROKE, CHART_HEIGHT, ChartTooltip } from "./chart-theme";
+import { CHART_AXIS_TICK, CHART_GRID_STROKE, CHART_Y_WIDTH, CHART_HEIGHT, ChartTooltip } from "./chart-theme";
 
 export function CogsPercentChart({ data }: { data: ProfitPoint[] }) {
   const chartData = data.map((d) => ({
@@ -14,7 +14,7 @@ export function CogsPercentChart({ data }: { data: ProfitPoint[] }) {
     <div className="space-y-2 rounded-2xl border border-border p-4">
       <h2 className="text-sm font-semibold text-muted-foreground">Ingredient cost as a share of revenue</h2>
       <p className="text-xs text-muted-foreground">Rising means ingredient prices are eating more of every peso you make.</p>
-      <div className={CHART_HEIGHT}>
+      <div style={{ height: CHART_HEIGHT }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid stroke={CHART_GRID_STROKE} vertical={false} />
@@ -23,7 +23,7 @@ export function CogsPercentChart({ data }: { data: ProfitPoint[] }) {
               tick={CHART_AXIS_TICK}
               axisLine={false}
               tickLine={false}
-              width={40}
+              width={CHART_Y_WIDTH}
               tickFormatter={(v: number) => `${v}%`}
             />
             <Tooltip content={<ChartTooltip formatValue={(v) => `${v}%`} />} />

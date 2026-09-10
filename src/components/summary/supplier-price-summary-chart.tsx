@@ -4,7 +4,7 @@ import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis
 import { chipColor } from "@/lib/chart-colors";
 import { formatPeso, formatPesoAbbrev } from "@/lib/format";
 import type { Supplier } from "@/lib/store/types";
-import { CHART_AXIS_TICK, CHART_GRID_STROKE, CHART_HEIGHT, ChartTooltip } from "./chart-theme";
+import { CHART_AXIS_TICK, CHART_GRID_STROKE, CHART_HEIGHT, CHART_Y_WIDTH, ChartTooltip } from "./chart-theme";
 
 function truncateLabel(name: string): string {
   return name.length > 14 ? `${name.slice(0, 14)}…` : name;
@@ -23,7 +23,7 @@ export function SupplierPriceSummaryChart({ suppliers }: { suppliers: Supplier[]
     <div className="space-y-2 rounded-2xl border border-border p-4">
       <h2 className="text-sm font-semibold text-muted-foreground">Average price by supplier</h2>
       <p className="text-xs text-muted-foreground">The average price paid across each supplier&apos;s logged history.</p>
-      <div className={CHART_HEIGHT}>
+      <div style={{ height: CHART_HEIGHT }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid stroke={CHART_GRID_STROKE} vertical={false} />
@@ -39,7 +39,7 @@ export function SupplierPriceSummaryChart({ suppliers }: { suppliers: Supplier[]
               tick={CHART_AXIS_TICK}
               axisLine={false}
               tickLine={false}
-              width={48}
+              width={CHART_Y_WIDTH}
               tickFormatter={(v: number) => formatPesoAbbrev(v)}
             />
             <Tooltip content={<ChartTooltip formatValue={(v) => formatPeso(Number(v))} />} />

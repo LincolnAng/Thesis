@@ -13,7 +13,7 @@ export function SalesTrendChart({ data }: { data: TrendPoint[] }) {
   return (
     <div className="space-y-2 rounded-2xl border border-border p-4">
       <h2 className="text-sm font-semibold text-muted-foreground">Revenue, last 6 months</h2>
-      <div className={CHART_HEIGHT}>
+      <div style={{ height: CHART_HEIGHT }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid stroke={CHART_GRID_STROKE} vertical={false} />

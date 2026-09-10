@@ -1,7 +1,8 @@
 "use client";
 
+import { PageHeader } from "@/components/layout/page-header";
 import { useMemo, useState } from "react";
-import { ArrowUpRight, Pencil, Plus } from "lucide-react";
+import { ArrowUpRight, Pencil, Plus, Receipt } from "lucide-react";
 import { SalesDetail } from "@/components/summary/sales-detail";
 import { MissingProductBanner } from "@/components/sales/missing-product-banner";
 import { QuickEditDialog } from "@/components/home/quick-edit-dialog";
@@ -79,11 +80,8 @@ export default function SalesPage() {
   ];
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-8">
-      <div className="flex items-baseline justify-between">
-        <h1 className="text-xl font-bold text-foreground">Sales</h1>
-        <p className="text-sm text-muted-foreground">{currentMonthLabel()}</p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader icon={Receipt} title="Sales" meta={currentMonthLabel()} />
 
       <MissingProductBanner sales={entries.filter((e) => e.type === "SALE")} />
 

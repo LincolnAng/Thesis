@@ -57,7 +57,7 @@ export function NetProfitChart({ data }: { data: ProfitPoint[] }) {
     <div className="space-y-2 rounded-2xl border border-border p-4">
       <h2 className="text-sm font-semibold text-muted-foreground">Revenue vs. net profit, last 6 months</h2>
       <p className="text-xs text-muted-foreground">The true bottom line — after ingredients and every other expense.</p>
-      <div className={CHART_HEIGHT}>
+      <div style={{ height: CHART_HEIGHT }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid stroke={CHART_GRID_STROKE} vertical={false} />

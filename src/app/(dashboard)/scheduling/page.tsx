@@ -1,5 +1,6 @@
 "use client";
 
+import { PageHeader } from "@/components/layout/page-header";
 import { useMemo } from "react";
 import { CalendarDays, CircleAlert, CircleCheck } from "lucide-react";
 import { MachinesPanel } from "@/components/scheduling/machines-panel";
@@ -24,11 +25,8 @@ export default function SchedulingPage() {
   const hasMachines = machines.length > 0;
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-8">
-      <div className="flex items-baseline justify-between">
-        <h1 className="text-xl font-bold text-foreground">Scheduling</h1>
-        <p className="text-sm text-muted-foreground">for {plan.targetMonthLabel}</p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader icon={CalendarDays} title="Scheduling" meta={`for ${plan.targetMonthLabel}`} />
       <p className="text-sm text-muted-foreground">
         What to make in the days left this month so there&apos;s enough stock for {plan.targetMonthLabel}, based on
         what sold in past months and how much the equipment can finish in a day.

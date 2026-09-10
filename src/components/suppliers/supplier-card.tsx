@@ -31,7 +31,9 @@ export function SupplierCard({ supplier }: { supplier: Supplier }) {
       <CardContent className="space-y-3 px-4 py-4">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <p className="font-semibold text-foreground">{supplier.name}</p>
+            <p className="truncate-line font-semibold text-foreground" title={supplier.name}>
+              {supplier.name}
+            </p>
             <p className="text-xs text-muted-foreground">{supplier.items}</p>
           </div>
           {priceRose && (
