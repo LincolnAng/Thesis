@@ -7,6 +7,8 @@ import { ExpensesDetail } from "@/components/summary/expenses-detail";
 import { CategoryBudgetEditor } from "@/components/summary/category-budget-editor";
 import { QuickEditDialog } from "@/components/home/quick-edit-dialog";
 import { StatTile } from "@/components/data-table/stat-tile";
+import { ActionCard } from "@/components/layout/action-card";
+import { ProgressRing } from "@/components/ui/progress-ring";
 import { Toolbar } from "@/components/data-table/toolbar";
 import { DataTable, type DataTableColumn } from "@/components/data-table/data-table";
 import { ConfirmDeleteButton } from "@/components/data-table/confirm-delete-button";
@@ -88,6 +90,23 @@ export default function ExpensesPage() {
   return (
     <div className="space-y-6">
       <PageHeader icon={Wallet} title="Expenses" meta={currentMonthLabel()} />
+
+      {viewMode === "simple" && (
+        <ActionCard
+          visual={<ProgressRing value={summary.total} max={summary.budget} />}
+          title={
+            <>
+              <span className="font-semibold">{formatPeso(summary.total)}</span> of {formatPeso(summary.budget)} spent
+              this month
+            </>
+          }
+          action={
+            <Button size="sm" onClick={() => setAddOpen(true)}>
+              Add expense
+            </Button>
+          }
+        />
+      )}
 
       {emptyReason && <p className="text-sm text-muted-foreground">{emptyReason}</p>}
 

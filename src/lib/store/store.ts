@@ -947,3 +947,46 @@ export function setBusinessSetting(key: string, value: string) {
   setState((prev) => ({ ...prev, businessSettings: { ...prev.businessSettings, [key]: value } }));
   void mirrorOp("businessSettings", "update", { id: key, item: { key, value } });
 }
+
+// --- Production batches ------------------------------------------------------
+
+/**
+ * Records a finished batch: jars go onto the shelf, the ingredients they consumed come off.
+ *
+ * The product side goes through addEntry so the run shows up in the ledger like any other
+ * stock movement; the ingredient side is applied here, because entries only ever add raw
+ * materials (an expense is a purchase) and nothing else deducts them.
+ */
+export function recordBatch(productId: string, jars: number) {
+  const product = state.products.find((p) => p.id === productId);
+  if (!product || jars <= 0) return;
+  const batches = product.batchYield > 0 ? jars / product.batchYield : 0;
+
+  const touchedMaterialIds: string[] = [];
+  setState((prev) => ({
+    ...prev,
+    rawMaterials: prev.rawMaterials.map((material) => {
+      const row = product.recipeIngredients.find((r) => r.materialId === material.id);
+      if (!row) return material;
+      touchedMaterialIds.push(material.id);
+      return { ...material, qty: Math.max(0, material.qty - row.quantity * batches) };
+    }),
+  }));
+  mirrorStockRows([], touchedMaterialIds);
+
+  addEntry({
+    timestamp: new Date().toISOString(),
+    type: "INVENTORY_IN",
+    amount: null,
+    quantity: jars,
+    unit: "jars",
+    sku: product.name,
+    counterparty: null,
+    location: null,
+    priceType: null,
+    category: null,
+    rawText: `Made ${jars} of ${product.name}`,
+    confidence: 1,
+    notes: null,
+  });
+}

@@ -108,11 +108,6 @@ export default function HomePage() {
   return (
     <div className="space-y-8">
       <PageHeader icon={Home} title="Home" meta={currentMonthLabel()} />
-      <div className="text-center">
-        <h1 className="text-2xl font-bold text-foreground">Home</h1>
-        <p className="mt-1 text-sm text-muted-foreground">This month at a glance</p>
-      </div>
-
       {viewMode === "advanced" && (
         <>
           <ProfitWaterfall
@@ -156,10 +151,6 @@ export default function HomePage() {
       )}
 
       <div>
-        <p className="mb-3 text-center text-sm text-muted-foreground">
-          <span className="min-[900px]:hidden">Tap a section to see your numbers</span>
-          <span className="hidden min-[900px]:inline">Click a section to see your numbers</span>
-        </p>
         <SummaryGrid items={items} />
       </div>
     </div>

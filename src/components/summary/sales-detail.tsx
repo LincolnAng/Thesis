@@ -33,35 +33,42 @@ export function SalesDetail() {
   const lastMonthLabel = previousMonthShortLabel();
   const [viewMode] = useViewMode();
 
+  if (viewMode === "simple") {
+    // One number and a sentence about it. No trend, no margin, no ranking — those are
+    // questions for someone who already knows the answer to "how am I doing".
+    return (
+      <div className="space-y-1.5">
+        <p className="type-stat-number text-[var(--status-good)]">{formatPeso(summary.revenue)}</p>
+        <p className="type-body text-muted-foreground">
+          {pluralize(summary.jarsSold, "jar")} sold this month · {formatPeso(summary.profit)} of this is profit
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="space-y-1.5">
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-4xl font-bold text-[var(--status-good)]">{formatPeso(summary.revenue)}</p>
+              <p className="type-stat-number text-[var(--status-good)]">{formatPeso(summary.revenue)}</p>
               <ComparisonBadge pct={summary.revenueChangePct} comparedToLabel={lastMonthLabel} favorableWhen="up" />
             </div>
             <p className="text-sm text-muted-foreground">
               {pluralize(summary.jarsSold, "jar")} sold · about {formatPeso(summary.avgPerJar)} per jar ·{" "}
               {formatPeso(summary.profit)} of this is profit
             </p>
-            {viewMode === "advanced" && (
-              <p className="text-sm text-muted-foreground">Gross margin: {Math.round(summary.grossMarginPct)}%</p>
-            )}
+            <p className="text-sm text-muted-foreground">Gross margin: {Math.round(summary.grossMarginPct)}%</p>
           </div>
           <Sparkline points={summary.trend} />
         </div>
       </div>
 
       <MonthlyTrendChart data={summary.trend} metric="sales" />
-      {viewMode === "advanced" && (
-        <>
-          <SalesTrendChart data={summary.trend} />
-          <NetProfitChart data={profitTrend} />
-          <CogsPercentChart data={profitTrend} />
-        </>
-      )}
+      <SalesTrendChart data={summary.trend} />
+      <NetProfitChart data={profitTrend} />
+      <CogsPercentChart data={profitTrend} />
 
       <div className="space-y-2">
         <h2 className="text-sm font-semibold text-muted-foreground">Best sellers</h2>
@@ -85,7 +92,7 @@ export function SalesDetail() {
         )}
       </div>
 
-      {viewMode === "advanced" && <ProfitableProductsList rows={marginRanking} />}
+      <ProfitableProductsList rows={marginRanking} />
 
       {summary.byPriceType.length > 0 && (
         <div className="space-y-2">

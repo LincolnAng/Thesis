@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronRight, type LucideIcon } from "lucide-react";
+import { type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface GridItem {
@@ -15,30 +15,34 @@ export interface GridItem {
 
 export function SummaryGrid({ items }: { items: GridItem[] }) {
   return (
-    <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {items.map((item) => {
+    <div className="grid w-full grid-cols-2 gap-4">
+      {items.map((item, index) => {
         const Icon = item.icon;
         const content = (
           <>
-            <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-muted">
-              <Icon className="h-8 w-8 text-foreground" />
+            <span className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-pill)] bg-muted">
+              <Icon className="h-5 w-5 text-foreground" />
             </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-xl font-semibold text-foreground">{item.label}</span>
+            <span className="min-w-0">
+              <span className="type-section-header block truncate-line text-foreground">{item.label}</span>
               <span
                 className={cn(
-                  "block truncate text-base",
-                  item.statTone === "warning" ? "text-[var(--status-warning)]" : "text-muted-foreground",
+                  "type-meta block truncate-line",
+                  item.statTone === "warning" && "text-[var(--status-warning)]",
                 )}
               >
                 {item.stat}
               </span>
             </span>
-            <ChevronRight className="h-6 w-6 shrink-0 text-muted-foreground" />
           </>
         );
-        const className =
-          "flex w-full items-center gap-4 rounded-2xl border border-border bg-card px-5 py-6 text-left transition-colors hover:bg-accent";
+        // The last tile of an odd-numbered set spans both columns rather than sitting
+        // orphaned in the left half of its own row.
+        const spansRow = items.length % 2 === 1 && index === items.length - 1;
+        const className = cn(
+          "flex min-h-[120px] w-full flex-col justify-center gap-2 rounded-[var(--radius-panel)] border border-border bg-card p-4 text-left transition-colors hover:bg-accent",
+          spansRow && "col-span-2",
+        );
 
         return (
           <Link key={item.key} href={item.href} className={className}>

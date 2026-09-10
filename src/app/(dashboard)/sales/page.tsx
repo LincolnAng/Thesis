@@ -2,11 +2,12 @@
 
 import { PageHeader } from "@/components/layout/page-header";
 import { useMemo, useState } from "react";
-import { ArrowUpRight, Pencil, Plus, Receipt } from "lucide-react";
+import { ArrowUpRight, Pencil, Receipt } from "lucide-react";
 import { SalesDetail } from "@/components/summary/sales-detail";
 import { MissingProductBanner } from "@/components/sales/missing-product-banner";
 import { QuickEditDialog } from "@/components/home/quick-edit-dialog";
 import { StatTile } from "@/components/data-table/stat-tile";
+import { ActionCard } from "@/components/layout/action-card";
 import { Toolbar } from "@/components/data-table/toolbar";
 import { DataTable, type DataTableColumn } from "@/components/data-table/data-table";
 import { ConfirmDeleteButton } from "@/components/data-table/confirm-delete-button";
@@ -85,6 +86,22 @@ export default function SalesPage() {
 
       <MissingProductBanner sales={entries.filter((e) => e.type === "SALE")} />
 
+      {viewMode === "simple" && (
+        <ActionCard
+          icon={ArrowUpRight}
+          title={
+            <>
+              <span className="font-semibold">{formatPeso(summary.revenue)}</span> sold this month
+            </>
+          }
+          action={
+            <Button size="sm" onClick={() => setAddOpen(true)}>
+              Add sale
+            </Button>
+          }
+        />
+      )}
+
       {emptyReason && <p className="text-sm text-muted-foreground">{emptyReason}</p>}
 
       {viewMode === "advanced" ? (
@@ -124,10 +141,6 @@ export default function SalesPage() {
         </>
       ) : (
         <>
-          <Button size="sm" className="gap-1" onClick={() => setAddOpen(true)}>
-            <Plus className="h-4 w-4" /> Add sale
-          </Button>
-
           <BigRowList
             rows={filtered.slice(0, SIMPLE_ROW_CAP)}
             keyFor={(e) => e.id}
