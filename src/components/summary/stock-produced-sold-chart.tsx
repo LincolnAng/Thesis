@@ -2,7 +2,7 @@
 
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { chipColor } from "@/lib/chart-colors";
-import { formatNumber } from "@/lib/format";
+import { pluralize } from "@/lib/format";
 import type { MonthlyTrendPoint } from "@/components/summary/monthly-trend-chart";
 import { CHART_AXIS_TICK, CHART_GRID_STROKE, CHART_HEIGHT, CHART_LEGEND_STYLE, ChartTooltip } from "./chart-theme";
 
@@ -18,7 +18,7 @@ export function StockProducedSoldChart({ data }: { data: MonthlyTrendPoint[] }) 
             <CartesianGrid stroke={CHART_GRID_STROKE} vertical={false} />
             <XAxis dataKey="label" tick={CHART_AXIS_TICK} axisLine={{ stroke: CHART_GRID_STROKE }} tickLine={false} />
             <YAxis tick={CHART_AXIS_TICK} axisLine={false} tickLine={false} width={40} />
-            <Tooltip content={<ChartTooltip formatValue={(v) => `${formatNumber(Number(v))} jars`} />} />
+            <Tooltip content={<ChartTooltip formatValue={(v) => pluralize(Number(v), "jar")} />} />
             <Legend wrapperStyle={CHART_LEGEND_STYLE} iconType="circle" iconSize={8} />
             <Bar dataKey="Produced" fill={chipColor(0)} radius={[4, 4, 0, 0]} maxBarSize={24} />
             <Bar dataKey="Sold" fill={chipColor(1)} radius={[4, 4, 0, 0]} maxBarSize={24} />

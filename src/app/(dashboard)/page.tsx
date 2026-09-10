@@ -11,7 +11,7 @@ import { ExpensesCategoryChart } from "@/components/summary/expenses-category-ch
 import { ProfitableProductsList } from "@/components/summary/profitable-products-list";
 import { SupplierPriceSummaryChart } from "@/components/summary/supplier-price-summary-chart";
 import { useStore } from "@/lib/store/use-store";
-import { formatPeso } from "@/lib/format";
+import { formatPeso, pluralize } from "@/lib/format";
 import { computeSalesSummary } from "@/lib/summary/sales-summary";
 import { computeExpensesSummary, monthlyExpensesByCategory } from "@/lib/summary/expenses-summary";
 import { computeIngredientReach } from "@/lib/summary/ingredient-reach";
@@ -47,7 +47,7 @@ export default function HomePage() {
     .filter((r) => r.daysLeft !== null)
     .sort((a, b) => (a.daysLeft ?? Infinity) - (b.daysLeft ?? Infinity))[0];
   const stockStat = mostUrgentReach
-    ? `${mostUrgentReach.material.name}: ${mostUrgentReach.daysLeft} day${mostUrgentReach.daysLeft === 1 ? "" : "s"} left`
+    ? `${mostUrgentReach.material.name}: ${pluralize(mostUrgentReach.daysLeft ?? 0, "day")} left`
     : "Stock looks good";
 
   const avgCostPerJar =

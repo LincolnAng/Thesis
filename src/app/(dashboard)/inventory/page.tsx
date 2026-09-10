@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { useStore } from "@/lib/store/use-store";
 import { addEntry } from "@/lib/store/store";
 import { blankEntryDraft } from "@/lib/store/blank-draft";
-import { currentMonthLabel } from "@/lib/format";
+import { currentMonthLabel, pluralize } from "@/lib/format";
 import { iconForItemName, ItemIcon } from "@/lib/summary/item-icons";
 import { forecastAll, nextMonthLabel } from "@/lib/summary/forecast";
 import { useViewMode } from "@/lib/summary/view-mode";
@@ -75,7 +75,7 @@ export default function InventoryPage() {
         <span
           className={cnLevel(stockLevel(p.stockQty, p.lowStockThreshold))}
         >
-          {p.stockQty} jars
+          {pluralize(p.stockQty, "jar")}
         </span>
       ),
     },
@@ -142,7 +142,7 @@ export default function InventoryPage() {
             iconTone={(p) => (stockLevel(p.stockQty, p.lowStockThreshold) === "low" ? "warning" : "good")}
             title={(p) => p.name}
             subtitle={(p) => <StockLevelBar level={stockLevel(p.stockQty, p.lowStockThreshold)} />}
-            trailing={(p) => `${p.stockQty} jars`}
+            trailing={(p) => pluralize(p.stockQty, "jar")}
             trailingTone={(p) => (stockLevel(p.stockQty, p.lowStockThreshold) === "low" ? "warning" : "neutral")}
             onSelect={(p) => setEditingProduct(p)}
             emptyMessage="No products yet."

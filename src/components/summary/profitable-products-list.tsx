@@ -1,4 +1,4 @@
-import { formatPeso } from "@/lib/format";
+import { formatPeso, pluralize } from "@/lib/format";
 import type { ProductMarginRow } from "@/lib/summary/profit-summary";
 
 /** Ranked by profit contributed, not revenue — a bestseller can still be a poor
@@ -20,7 +20,7 @@ export function ProfitableProductsList({ rows }: { rows: ProductMarginRow[] }) {
             <span className="shrink-0 text-right">
               <span className="block text-base font-semibold text-[var(--status-good)]">{formatPeso(row.margin)} profit</span>
               <span className="block text-sm text-muted-foreground">
-                {Math.round(row.marginPct)}% margin · {row.qty} jars
+                {Math.round(row.marginPct)}% margin · {pluralize(row.qty, "jar")}
               </span>
             </span>
           </div>

@@ -9,6 +9,14 @@ export function formatSignedPeso(amount: number | null | undefined, moneyIn: boo
   return `${sign}${formatPeso(value)}`;
 }
 
+/**
+ * "1 jar" / "2 jars" — one place that decides the noun form, so quantity renders can't
+ * drift back into "1 jars". Pass an explicit plural for words that don't just take -s.
+ */
+export function pluralize(count: number, singular: string, plural = `${singular}s`): string {
+  return `${formatNumber(count)} ${count === 1 ? singular : plural}`;
+}
+
 export function formatNumber(value: number | null | undefined): string {
   return (value ?? 0).toLocaleString("en-PH");
 }

@@ -8,7 +8,7 @@ import { DataTable, type DataTableColumn } from "@/components/data-table/data-ta
 import { BigRowList } from "@/components/data-table/big-row-list";
 import { CustomerDetailDialog } from "@/components/customers/customer-detail-dialog";
 import { useStore } from "@/lib/store/use-store";
-import { formatDate, formatNumber, formatPeso } from "@/lib/format";
+import { formatDate, formatNumber, formatPeso, pluralize } from "@/lib/format";
 import { customerKey, deriveCustomers, type DerivedCustomer } from "@/lib/summary/customers";
 import { useViewMode } from "@/lib/summary/view-mode";
 
@@ -89,7 +89,7 @@ export default function CustomersPage() {
           icon={Users}
           iconTone="good"
           title={(c) => c.name}
-          subtitle={(c) => `${c.orderCount} ${c.orderCount === 1 ? "order" : "orders"} · ${c.purchases[0]?.sku ?? "—"}`}
+          subtitle={(c) => `${pluralize(c.orderCount, "order")} · ${c.purchases[0]?.sku ?? "—"}`}
           trailing={(c) => formatPeso(c.totalSpent)}
           trailingTone="good"
           onSelect={(c) => setSelected(c)}

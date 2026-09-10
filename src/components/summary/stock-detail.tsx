@@ -1,4 +1,5 @@
 "use client";
+import { pluralize } from "@/lib/format";
 
 import { useMemo } from "react";
 import Link from "next/link";
@@ -36,8 +37,8 @@ export function StockDetail() {
             <p className="text-sm text-foreground">
               {summary.mostUrgent.product.name} is running low
               {summary.mostUrgent.runwayDays != null
-                ? ` — about ${summary.mostUrgent.runwayDays} day${summary.mostUrgent.runwayDays === 1 ? "" : "s"} left at your usual pace.`
-                : ` — ${summary.mostUrgent.product.stockQty} jars left.`}
+                ? ` — about ${pluralize(summary.mostUrgent.runwayDays, "day")} left at your usual pace.`
+                : ` — ${pluralize(summary.mostUrgent.product.stockQty, "jar")} left.`}
             </p>
           </div>
           <Link href={`/chat?draft=${encodeURIComponent(`Made a batch of ${summary.mostUrgent.product.name}`)}`}>
@@ -63,7 +64,7 @@ export function StockDetail() {
                   <p className="text-sm text-foreground">
                     {r.material.name} will run out on{" "}
                     {r.runOutDate!.toLocaleDateString("en-PH", { month: "short", day: "numeric" })} —{" "}
-                    {r.daysLeft} day{r.daysLeft === 1 ? "" : "s"} left.
+                    {pluralize(r.daysLeft ?? 0, "day")} left.
                   </p>
                 </div>
                 <Link href="/suppliers">

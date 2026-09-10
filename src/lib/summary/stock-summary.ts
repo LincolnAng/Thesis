@@ -1,3 +1,4 @@
+import { pluralize } from "@/lib/format";
 import type { Entry, Product, RawMaterialStock } from "@/lib/store/types";
 import { sum } from "./period";
 
@@ -61,7 +62,7 @@ export function computeStockSummary(
       const wholeBatches = Math.floor(batches);
       text =
         wholeBatches >= 1
-          ? `${m.qty} ${m.unit} — enough for ${wholeBatches} batch${wholeBatches === 1 ? "" : "es"}`
+          ? `${m.qty} ${m.unit} — enough for ${pluralize(wholeBatches, "batch", "batches")}`
           : `${m.qty} ${m.unit} — not enough for a full batch`;
     } else {
       text = `${m.qty} ${m.unit}`;

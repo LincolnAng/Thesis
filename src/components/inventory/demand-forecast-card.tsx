@@ -2,6 +2,7 @@
 
 import { TrendingUp } from "lucide-react";
 import { ItemIcon } from "@/lib/summary/item-icons";
+import { pluralize } from "@/lib/format";
 import { FORECAST_METHOD_LABELS, type ProductForecast } from "@/lib/summary/forecast";
 import { cn } from "@/lib/utils";
 
@@ -79,7 +80,7 @@ export function DemandForecastCard({
           </ul>
           <p className="text-xs text-muted-foreground">
             {totalToMake > 0
-              ? `About ${totalToMake} jars to prepare in total. Based on sales up to last month — this month isn't counted yet since it's still going.`
+              ? `About ${pluralize(totalToMake, "jar")} to prepare in total. Based on sales up to last month — this month isn't counted yet since it's still going.`
               : "Current stock already covers what's expected."}
           </p>
         </>

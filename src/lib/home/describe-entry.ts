@@ -1,5 +1,6 @@
 import { formatPeso } from "@/lib/format";
 import { EXPENSE_CATEGORY_LABELS, ENTRY_TYPE_LABELS, PRICE_TYPE_LABELS } from "@/lib/format";
+import { findProduct } from "@/lib/summary/product-match";
 import type { Entry, Product, RawMaterialStock } from "@/lib/store/types";
 
 export type EntryDraft = Omit<Entry, "id">;
@@ -46,15 +47,6 @@ export function describeDraft(draft: EntryDraft): string {
 
 function normalize(text: string | null | undefined): string {
   return (text ?? "").trim().toLowerCase();
-}
-
-function findProduct(products: Product[], sku: string | null): Product | undefined {
-  if (!sku) return undefined;
-  const n = normalize(sku);
-  return (
-    products.find((p) => normalize(p.name) === n) ??
-    products.find((p) => normalize(p.name).includes(n) || n.includes(normalize(p.name)))
-  );
 }
 
 function findRawMaterial(materials: RawMaterialStock[], name: string | null): RawMaterialStock | undefined {

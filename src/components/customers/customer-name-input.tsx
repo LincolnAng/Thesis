@@ -4,7 +4,7 @@ import { useState } from "react";
 import { UserPlus, Users } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useStore } from "@/lib/store/use-store";
-import { formatPeso } from "@/lib/format";
+import { formatPeso, pluralize } from "@/lib/format";
 import { customerKey, deriveCustomers, suggestCustomers } from "@/lib/summary/customers";
 import { cn } from "@/lib/utils";
 
@@ -71,7 +71,7 @@ export function CustomerNameInput({
                 <span className="truncate text-foreground">{c.name}</span>
               </span>
               <span className="shrink-0 text-xs text-muted-foreground">
-                {c.orderCount} {c.orderCount === 1 ? "order" : "orders"} · {formatPeso(c.totalSpent)}
+                {pluralize(c.orderCount, "order")} · {formatPeso(c.totalSpent)}
               </span>
             </button>
           ))}

@@ -5,6 +5,7 @@ import { CalendarDays, CircleAlert, CircleCheck } from "lucide-react";
 import { MachinesPanel } from "@/components/scheduling/machines-panel";
 import { ItemIcon } from "@/lib/summary/item-icons";
 import { useStore } from "@/lib/store/use-store";
+import { pluralize } from "@/lib/format";
 import { buildProductionPlan } from "@/lib/summary/schedule";
 import { useViewMode } from "@/lib/summary/view-mode";
 import { cn } from "@/lib/utils";
@@ -82,7 +83,7 @@ export default function SchedulingPage() {
                   </span>
                 </span>
                 <span className="shrink-0 text-right">
-                  <span className="block text-base font-semibold text-foreground">{r.neededJars} jars</span>
+                  <span className="block text-base font-semibold text-foreground">{pluralize(r.neededJars, "jar")}</span>
                   <span
                     className={cn(
                       "block text-xs",
@@ -115,8 +116,8 @@ export default function SchedulingPage() {
                     <span key={`${run.machineId}-${run.productId}-${i}`} className="block text-sm text-foreground">
                       {run.productName}{" "}
                       <span className="text-muted-foreground">
-                        ×{run.batches} {run.batches === 1 ? "batch" : "batches"}
-                        {run.jars > 0 && ` (${run.jars} jars)`} · {run.machineName}
+                        ×{pluralize(run.batches, "batch", "batches")}
+                        {run.jars > 0 && ` (${pluralize(run.jars, "jar")})`} · {run.machineName}
                       </span>
                     </span>
                   ))}

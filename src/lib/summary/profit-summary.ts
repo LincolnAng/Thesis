@@ -1,7 +1,7 @@
 import type { Entry, Product, RawMaterialStock } from "@/lib/store/types";
 import { productCostPerJar } from "./recipe-cost";
 import { entriesInMonth, sum } from "./period";
-import { findProduct } from "./sales-summary";
+import { findProduct } from "./product-match";
 
 export interface ProfitPoint {
   label: string;

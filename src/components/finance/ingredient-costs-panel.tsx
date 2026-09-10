@@ -5,7 +5,7 @@ import { ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { useStore } from "@/lib/store/use-store";
 import { addRawMaterial, updateRawMaterial } from "@/lib/store/store";
 import { procurementHistoryFor, weightedAverageUnitCost } from "@/lib/summary/procurement";
-import { formatPeso } from "@/lib/format";
+import { formatPeso, pluralize } from "@/lib/format";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { UnitSelect } from "@/components/ui/unit-select";
@@ -110,7 +110,7 @@ export function IngredientCostsPanel() {
         <div>
           <p className="text-sm font-semibold text-foreground">Ingredient costs</p>
           <p className="text-xs text-muted-foreground">
-            {rawMaterials.length} ingredient{rawMaterials.length === 1 ? "" : "s"} tracked — tap to review costs
+            {pluralize(rawMaterials.length, "ingredient")} tracked — tap to review costs
           </p>
         </div>
         {showDetails ? (

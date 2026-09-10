@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AlertTriangle } from "lucide-react";
-import { formatPeso } from "@/lib/format";
+import { formatPeso, pluralize } from "@/lib/format";
 import type { IngredientReach } from "@/lib/summary/ingredient-reach";
 import { procurementHistoryFor, weightedAverageUnitCost } from "@/lib/summary/procurement";
 import type { Entry } from "@/lib/store/types";
@@ -54,7 +54,7 @@ export function StockCalendar({ reaches, entries }: { reaches: IngredientReach[]
             <span className="min-w-0 flex-1">
               <span className="block text-base font-medium text-foreground">{r.material.name}</span>
               <span className="block text-sm text-muted-foreground">
-                {r.daysLeft} day{r.daysLeft === 1 ? "" : "s"} left
+                {pluralize(r.daysLeft ?? 0, "day")} left
                 {r.isEstimate ? " · estimate" : ""}
               </span>
             </span>

@@ -2,7 +2,7 @@
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { formatDate, formatNumber, formatPeso } from "@/lib/format";
+import { formatDate, formatNumber, formatPeso, pluralize } from "@/lib/format";
 import { entriesForCustomer, type DerivedCustomer } from "@/lib/summary/customers";
 import { useStore } from "@/lib/store/use-store";
 
@@ -56,7 +56,7 @@ export function CustomerDetailDialog({ customer, onClose }: { customer: DerivedC
                   <div className="min-w-0">
                     <p className="truncate text-foreground">{p.sku}</p>
                     <p className="text-xs text-muted-foreground">
-                      {formatNumber(p.quantity)} {p.unit ?? "pcs"} across {p.orders} {p.orders === 1 ? "order" : "orders"}
+                      {formatNumber(p.quantity)} {p.unit ?? "pcs"} across {pluralize(p.orders, "order")}
                     </p>
                   </div>
                   <span className="shrink-0 font-medium text-[var(--status-good)]">{formatPeso(p.spent)}</span>

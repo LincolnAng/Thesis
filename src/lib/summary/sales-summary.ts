@@ -2,6 +2,7 @@ import { PRICE_TYPE_LABELS } from "@/lib/format";
 import { chipColor } from "@/lib/chart-colors";
 import type { Entry, Product, RawMaterialStock } from "@/lib/store/types";
 import { productCostPerJar } from "./recipe-cost";
+import { findProduct } from "./product-match";
 import { entriesInMonth, pctChange, sortByDateDesc, sum } from "./period";
 import { monthlyTrend, type TrendPoint } from "./trend";
 
@@ -36,15 +37,6 @@ export interface SalesSummary {
 
 function normalize(text: string | null | undefined): string {
   return (text ?? "").trim().toLowerCase();
-}
-
-export function findProduct(products: Product[], sku: string | null): Product | undefined {
-  if (!sku) return undefined;
-  const n = normalize(sku);
-  return (
-    products.find((p) => normalize(p.name) === n) ??
-    products.find((p) => normalize(p.name).includes(n) || n.includes(normalize(p.name)))
-  );
 }
 
 /** Same product = same color everywhere in Summary (Sales best sellers, Stock jars on hand). */

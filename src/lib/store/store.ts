@@ -17,6 +17,7 @@ import {
   type SupplierPriceHistoryRow,
   type SupplierRow,
 } from "./sheet-shapes";
+import { findProduct } from "@/lib/summary/product-match";
 import type {
   AiStatus,
   BusinessEvent,
@@ -430,15 +431,6 @@ function normalize(text: string | null | undefined): string {
   return (text ?? "").trim().toLowerCase();
 }
 
-function findProductBySku(products: Product[], sku: string | null): Product | undefined {
-  if (!sku) return undefined;
-  const n = normalize(sku);
-  return (
-    products.find((p) => normalize(p.name) === n) ??
-    products.find((p) => normalize(p.name).includes(n) || n.includes(normalize(p.name)))
-  );
-}
-
 function findRawMaterialByName(materials: RawMaterialStock[], name: string | null): RawMaterialStock | undefined {
   if (!name) return undefined;
   const n = normalize(name);
@@ -480,13 +472,13 @@ function applyEntrySideEffects(
 
   if (entry.type === "SALE" || entry.type === "INVENTORY_OUT" || entry.type === "WASTE") {
     if (drawsFromEventHoldings) return { products, rawMaterials, touchedProductIds, touchedMaterialIds };
-    const product = findProductBySku(products, entry.sku);
+    const product = findProduct(products, entry.sku);
     if (product) {
       products = products.map((p) => (p.id === product.id ? { ...p, stockQty: Math.max(0, p.stockQty - delta) } : p));
       touchedProductIds.push(product.id);
     }
   } else if (entry.type === "INVENTORY_IN") {
-    const product = findProductBySku(products, entry.sku);
+    const product = findProduct(products, entry.sku);
     if (product) {
       products = products.map((p) => (p.id === product.id ? { ...p, stockQty: Math.max(0, p.stockQty + delta) } : p));
       touchedProductIds.push(product.id);

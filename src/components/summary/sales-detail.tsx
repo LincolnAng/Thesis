@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useStore } from "@/lib/store/use-store";
 import { computeSalesSummary } from "@/lib/summary/sales-summary";
-import { formatPeso, previousMonthShortLabel } from "@/lib/format";
+import { formatPeso, pluralize, previousMonthShortLabel } from "@/lib/format";
 import { ComparisonBadge } from "@/components/summary/comparison-badge";
 import { Sparkline } from "@/components/summary/sparkline";
 import { MonthlyTrendChart } from "@/components/summary/monthly-trend-chart";
@@ -41,7 +41,7 @@ export function SalesDetail() {
               <ComparisonBadge pct={summary.revenueChangePct} comparedToLabel={lastMonthLabel} favorableWhen="up" />
             </div>
             <p className="text-sm text-muted-foreground">
-              {summary.jarsSold} jars sold · about {formatPeso(summary.avgPerJar)} per jar ·{" "}
+              {pluralize(summary.jarsSold, "jar")} sold · about {formatPeso(summary.avgPerJar)} per jar ·{" "}
               {formatPeso(summary.profit)} of this is profit
             </p>
             {viewMode === "advanced" && (
@@ -75,7 +75,7 @@ export function SalesDetail() {
                 </span>
                 <span className="shrink-0 text-right">
                   <span className="block text-base font-semibold text-foreground">{formatPeso(s.revenue)}</span>
-                  <span className="block text-sm text-muted-foreground">{s.qty} jars</span>
+                  <span className="block text-sm text-muted-foreground">{pluralize(s.qty, "jar")}</span>
                 </span>
               </div>
             ))}
@@ -94,7 +94,7 @@ export function SalesDetail() {
                 <span className="text-base font-medium text-foreground">{row.label}</span>
                 <span className="shrink-0 text-right">
                   <span className="block text-base font-semibold text-foreground">{formatPeso(row.revenue)}</span>
-                  <span className="block text-sm text-muted-foreground">{row.qty} jars</span>
+                  <span className="block text-sm text-muted-foreground">{pluralize(row.qty, "jar")}</span>
                 </span>
               </div>
             ))}
