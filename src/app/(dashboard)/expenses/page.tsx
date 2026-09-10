@@ -1,7 +1,9 @@
 "use client";
 
 import { PageHeader } from "@/components/layout/page-header";
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ArrowDownRight, Pencil, Plus, Settings2, Wallet } from "lucide-react";
 import { ExpensesDetail } from "@/components/summary/expenses-detail";
 import { CategoryBudgetEditor } from "@/components/summary/category-budget-editor";
@@ -26,9 +28,13 @@ import type { Entry } from "@/lib/store/types";
 
 const SIMPLE_ROW_CAP = 8;
 
-export default function ExpensesPage() {
+function ExpensesPageInner() {
   const { entries, categoryBudgets } = useStore();
   const [viewMode] = useViewMode();
+  // Arriving from a supplier row on the Suppliers page: the table becomes that supplier's
+  // spending rather than a generic list the owner has to filter by hand.
+  const searchParams = useSearchParams();
+  const supplierFilter = searchParams.get("supplier");
   const summary = useMemo(() => computeExpensesSummary(entries, categoryBudgets), [entries, categoryBudgets]);
 
   const categoryFilterOptions = useMemo(() => {
@@ -52,15 +58,25 @@ export default function ExpensesPage() {
       .filter((e) => e.type === "EXPENSE")
       .filter((e) => categoryFilter === "all" || (e.category ?? "misc") === categoryFilter)
       .filter((e) => !q || e.sku?.toLowerCase().includes(q) || e.rawText?.toLowerCase().includes(q))
+      .filter((e) => !supplierFilter || (e.counterparty ?? "").toLowerCase() === supplierFilter.toLowerCase())
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  }, [entries, search, categoryFilter]);
+  }, [entries, search, categoryFilter, supplierFilter]);
 
   const columns: DataTableColumn<Entry>[] = [
-    { key: "date", header: "Date", render: (e) => formatDate(e.timestamp) },
+    {
+      key: "date",
+      header: "Date",
+      render: (e) => formatDate(e.timestamp),
+      sortValue: (e) => e.timestamp,
+      exportValue: (e) => e.timestamp.slice(0, 10),
+    },
     {
       key: "description",
       header: "Description",
-      render: (e) => <p className="font-medium text-foreground">{e.sku ?? e.rawText}</p>,
+      render: (e) => <p className="truncate-line font-medium text-foreground">{e.sku ?? e.rawText}</p>,
+      sortValue: (e) => e.sku ?? e.rawText ?? "",
+      exportValue: (e) => e.sku ?? e.rawText ?? "",
+      total: () => "Total",
     },
     {
       key: "paidTo",
@@ -77,7 +93,15 @@ export default function ExpensesPage() {
       header: "Category",
       render: (e) => EXPENSE_CATEGORY_LABELS[e.category ?? "misc"] ?? e.category ?? "Other",
     },
-    { key: "amount", header: "Amount", align: "right", render: (e) => formatPeso(e.amount) },
+    {
+      key: "amount",
+      header: "Amount",
+      align: "right",
+      render: (e) => formatPeso(e.amount),
+      sortValue: (e) => e.amount ?? 0,
+      exportValue: (e) => e.amount ?? "",
+      total: (rows) => formatPeso(rows.reduce((sum, e) => sum + (e.amount ?? 0), 0)),
+    },
   ];
 
   // A P0 month with records just outside the window is correct but reads as a bug.
@@ -106,6 +130,16 @@ export default function ExpensesPage() {
             </Button>
           }
         />
+      )}
+
+      {supplierFilter && (
+        <div className="flex items-center gap-2 rounded-[var(--radius-panel)] border border-border bg-secondary/40 px-3 py-2 text-sm">
+          <span className="text-muted-foreground">Showing spending with</span>
+          <span className="font-medium text-foreground">{supplierFilter}</span>
+          <Link href="/expenses" className="ml-auto text-primary underline decoration-dotted">
+            Clear
+          </Link>
+        </div>
       )}
 
       {emptyReason && <p className="text-sm text-muted-foreground">{emptyReason}</p>}
@@ -148,6 +182,7 @@ export default function ExpensesPage() {
             columns={columns}
             rows={filtered}
             keyFor={(e) => e.id}
+            exportName="expenses"
             emptyMessage="No expenses logged yet."
             renderRowActions={(e) => (
               <div className="flex items-center justify-end gap-1">
@@ -215,5 +250,13 @@ export default function ExpensesPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function ExpensesPage() {
+  return (
+    <Suspense fallback={null}>
+      <ExpensesPageInner />
+    </Suspense>
   );
 }

@@ -6,6 +6,7 @@ import { Users } from "lucide-react";
 import { StatTile } from "@/components/data-table/stat-tile";
 import { Toolbar } from "@/components/data-table/toolbar";
 import { DataTable, type DataTableColumn } from "@/components/data-table/data-table";
+import { SparklineCell } from "@/components/data-table/sparkline-cell";
 import { BigRowList } from "@/components/data-table/big-row-list";
 import { CustomerDetailDialog } from "@/components/customers/customer-detail-dialog";
 import { useStore } from "@/lib/store/use-store";
@@ -32,9 +33,12 @@ export default function CustomersPage() {
     {
       key: "name",
       header: "Customer",
+      sortValue: (c) => c.name,
+      exportValue: (c) => c.name,
+      total: () => "Total",
       render: (c) => (
-        <div>
-          <p className="font-medium text-foreground">{c.name}</p>
+        <div className="min-w-0">
+          <p className="truncate-line font-medium text-foreground">{c.name}</p>
           {c.spellings.length > 1 && (
             <p className="text-xs text-muted-foreground">also spelled {c.spellings.filter((s) => s !== c.name).join(", ")}</p>
           )}
@@ -46,12 +50,36 @@ export default function CustomersPage() {
       header: "Usually buys",
       render: (c) => <span className="text-muted-foreground">{c.purchases[0]?.sku ?? "—"}</span>,
     },
-    { key: "orders", header: "Orders", align: "right", render: (c) => formatNumber(c.orderCount) },
-    { key: "spent", header: "Total spent", align: "right", render: (c) => formatPeso(c.totalSpent) },
+    {
+      key: "trend",
+      header: "Trend",
+      minWidth: 80,
+      render: (c) => <SparklineCell points={c.purchases.map((p) => p.spent)} />,
+    },
+    {
+      key: "orders",
+      header: "Orders",
+      align: "right",
+      render: (c) => formatNumber(c.orderCount),
+      sortValue: (c) => c.orderCount,
+      exportValue: (c) => c.orderCount,
+      total: (rows) => formatNumber(rows.reduce((sum, c) => sum + c.orderCount, 0)),
+    },
+    {
+      key: "spent",
+      header: "Total spent",
+      align: "right",
+      render: (c) => formatPeso(c.totalSpent),
+      sortValue: (c) => c.totalSpent,
+      exportValue: (c) => c.totalSpent,
+      total: (rows) => formatPeso(rows.reduce((sum, c) => sum + c.totalSpent, 0)),
+    },
     {
       key: "last",
       header: "Last order",
       render: (c) => (c.lastOrderAt ? formatDate(c.lastOrderAt) : "—"),
+      sortValue: (c) => c.lastOrderAt ?? "",
+      exportValue: (c) => (c.lastOrderAt ? c.lastOrderAt.slice(0, 10) : ""),
     },
   ];
 
@@ -80,6 +108,8 @@ export default function CustomersPage() {
             columns={columns}
             rows={filtered}
             keyFor={(c) => c.key}
+            exportName="customers"
+            onRowClick={(c) => setSelected(c)}
             emptyMessage="No customers yet — they'll appear here as soon as you log a sale with a buyer name."
           />
         </>

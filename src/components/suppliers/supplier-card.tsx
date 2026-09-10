@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Phone, TrendingUp } from "lucide-react";
+import Link from "next/link";
+import { Phone } from "lucide-react";
+import { StatusChip } from "@/components/ui/status-symbol";
+import { SparklineCell } from "@/components/data-table/sparkline-cell";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { formatPeso } from "@/lib/format";
@@ -36,25 +38,32 @@ export function SupplierCard({ supplier }: { supplier: Supplier }) {
             </p>
             <p className="text-xs text-muted-foreground">{supplier.items}</p>
           </div>
-          {priceRose && (
-            <Badge variant="outline" className="gap-1 border-[var(--status-warning)] text-[var(--status-warning)]">
-              <TrendingUp className="h-3 w-3" /> Price rose
-            </Badge>
-          )}
+          {priceRose && <StatusChip kind="info">Price rose</StatusChip>}
         </div>
 
-        <p className="text-sm">
-          Last price: <span className="font-bold text-foreground">{formatPeso(supplier.lastPrice)}</span>
-          {priceRose && previousPrice !== null && (
-            <span className="text-muted-foreground"> (was {formatPeso(previousPrice)})</span>
-          )}
-        </p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm">
+            Last price: <span className="font-bold text-foreground">{formatPeso(supplier.lastPrice)}</span>
+            {priceRose && previousPrice !== null && (
+              <span className="text-muted-foreground"> (was {formatPeso(previousPrice)})</span>
+            )}
+          </p>
+          {/* The trend, inline. The full chart is still one click away in Advanced. */}
+          <SparklineCell points={history.map((h) => h.price)} tone={priceRose ? "warning" : "good"} />
+        </div>
 
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Phone className="h-3.5 w-3.5" /> {supplier.contact}
         </div>
 
         {viewMode === "advanced" && <PriceHistoryChart history={history} />}
+
+        <Link
+          href={`/expenses?supplier=${encodeURIComponent(supplier.name)}`}
+          className="inline-block text-xs font-medium text-primary underline decoration-dotted"
+        >
+          See spending with {supplier.name}
+        </Link>
 
         <div className="flex gap-2">
           <Input

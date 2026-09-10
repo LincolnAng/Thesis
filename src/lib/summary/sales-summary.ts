@@ -26,7 +26,14 @@ export interface SalesSummary {
   revenue: number;
   revenueChangePct: number | null;
   jarsSold: number;
+  jarsChangePct: number | null;
+  /** Number of sales, as distinct from jars — five jars in one order is one order. */
+  orderCount: number;
+  orderCountChangePct: number | null;
+  avgOrderValue: number;
   avgPerJar: number;
+  /** Cost of goods as a share of revenue. The other half of gross margin, stated directly. */
+  cogsPct: number;
   profit: number;
   grossMarginPct: number;
   bestSellers: BestSellerRow[];
@@ -53,7 +60,10 @@ export function computeSalesSummary(entries: Entry[], products: Product[], ctx: 
   const revenue = sum(thisMonth, (e) => e.amount ?? 0);
   const lastRevenue = sum(lastMonth, (e) => e.amount ?? 0);
   const jarsSold = sum(thisMonth, (e) => e.quantity ?? 0);
+  const lastJarsSold = sum(lastMonth, (e) => e.quantity ?? 0);
   const avgPerJar = jarsSold > 0 ? revenue / jarsSold : 0;
+  const orderCount = thisMonth.length;
+  const avgOrderValue = orderCount > 0 ? revenue / orderCount : 0;
 
   let profit = 0;
   for (const e of thisMonth) {
@@ -103,7 +113,12 @@ export function computeSalesSummary(entries: Entry[], products: Product[], ctx: 
     revenue,
     revenueChangePct: pctChange(revenue, lastRevenue),
     jarsSold,
+    jarsChangePct: pctChange(jarsSold, lastJarsSold),
+    orderCount,
+    orderCountChangePct: pctChange(orderCount, lastMonth.length),
+    avgOrderValue,
     avgPerJar,
+    cogsPct: revenue > 0 ? ((revenue - profit) / revenue) * 100 : 0,
     profit,
     grossMarginPct: revenue > 0 ? (profit / revenue) * 100 : 0,
     bestSellers,

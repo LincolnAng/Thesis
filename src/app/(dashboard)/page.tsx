@@ -7,7 +7,8 @@ import { SummaryGrid, type GridItem } from "@/components/summary/summary-grid";
 import { Bar } from "@/components/summary/bar";
 import { StatTile } from "@/components/data-table/stat-tile";
 import { ProfitWaterfall } from "@/components/summary/profit-waterfall";
-import { NetProfitChart } from "@/components/summary/net-profit-chart";
+import { ProfitOverlayChart } from "@/components/summary/profit-overlay-chart";
+import { ChartGrid } from "@/components/layout/containers";
 import { CogsPercentChart } from "@/components/summary/cogs-percent-chart";
 import { ExpensesCategoryChart } from "@/components/summary/expenses-category-chart";
 import { ProfitableProductsList } from "@/components/summary/profitable-products-list";
@@ -140,13 +141,14 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <NetProfitChart data={profitTrend} />
+          <ProfitOverlayChart data={profitTrend} />
+
+          <ChartGrid>
             <CogsPercentChart data={profitTrend} />
             <ExpensesCategoryChart data={expensesByCategory} />
             <SupplierPriceSummaryChart suppliers={suppliers} />
             <ProfitableProductsList rows={marginRanking} />
-          </div>
+          </ChartGrid>
         </>
       )}
 
