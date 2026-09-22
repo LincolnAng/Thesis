@@ -1,10 +1,11 @@
 "use client";
 
-import { Suspense, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { Plus } from "lucide-react";
 import { ChatThread } from "@/components/home/chat-thread";
-import { ChatSidebarDesktop, ChatSidebarMobileTrigger } from "@/components/home/chat-sidebar";
-import { ChatInputBar } from "@/components/home/chat-input-bar";
+import { ChatComposer } from "@/components/home/chat-composer";
+import { ChatLanding } from "@/components/home/chat-landing";
+import { PastChatsButton } from "@/components/home/chat-sidebar";
 import type { ClarifyOption } from "@/lib/home/chat-types";
 import type { EntryDraft } from "@/lib/home/describe-entry";
 import { useAiStatus } from "@/lib/ai/use-ai-status";
@@ -16,19 +17,12 @@ import { allExpenseCategories } from "@/lib/summary/expenses-summary";
 import { addEntry, deleteEntry, replaceEntry } from "@/lib/store/store";
 import { buildClarifyPrompt } from "@/lib/home/clarify";
 import { computeInsight } from "@/lib/home/insights";
-import { pushChatMessage, removeChatMessage, replaceChatMessage } from "@/lib/home/chat-store";
+import { pushChatMessage, removeChatMessage, replaceChatMessage, startNewChat } from "@/lib/home/chat-store";
 import { useChatMessages } from "@/lib/home/use-chat-messages";
 import { useChatReady } from "@/lib/home/use-chat-ready";
 
 const CONFIDENCE_THRESHOLD = 0.7;
 const INSIGHT_EVERY = 3;
-
-const QUICK_START_EXAMPLES = [
-  "Sold 10 jars to Aling Nena, 1800",
-  "Bought 5kg cocoa beans, 450",
-  "Made a batch of Classic Cocoa Spread",
-  "How much did I make this week?",
-];
 
 function genId(): string {
   return `msg-${Math.random().toString(36).slice(2, 10)}`;
@@ -56,11 +50,15 @@ function blankDraft(rawText: string): EntryDraft {
   };
 }
 
-function HomePageInner() {
-  const searchParams = useSearchParams();
+/**
+ * The assistant, living on Home. Empty: a greeting, one message box and prompts to tap.
+ * Once something is sent, the conversation continues right here. Nothing reaches the
+ * ledger until the owner confirms the review card.
+ */
+export function HomeChat() {
   const messages = useChatMessages();
   const ready = useChatReady();
-  const [input, setInput] = useState(() => searchParams.get("draft") ?? "");
+  const [input, setInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const { degraded } = useAiStatus();
   const state = useStore();
@@ -115,7 +113,7 @@ function HomePageInner() {
     });
   }
 
-  async function handleSubmit(override?: string) {
+  async function handleSubmit(override?: string, opts: { freshChat?: boolean } = {}) {
     if (!ready) return; // still loading history from Sheets — don't guess which chat this belongs to
     const rawText = (override ?? input).trim();
     if (!rawText) return;
@@ -139,7 +137,7 @@ function HomePageInner() {
     // Only plain text turns carry usable conversation context; entry cards, clarify prompts
     // and quick-edit forms aren't turns. `messages` is this render's snapshot, so it excludes
     // the owner message pushed above — which is correct, that one is sent as `rawText`.
-    const history = messages
+    const history = (opts.freshChat ? [] : messages)
       .filter((m) => m.kind === "text")
       .slice(-6)
       .map((m) => ({ role: m.role, content: m.text }));
@@ -299,58 +297,70 @@ function HomePageInner() {
     }
   }
 
+  const isEmpty = !messages.some((m) => m.kind !== "divider" && "role" in m && m.role === "user");
+
   function handleCancelQuickEdit(id: string) {
     removeChatMessage(id);
   }
 
-  return (
-    <div className="flex min-h-svh">
-      <ChatSidebarDesktop />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="border-b border-border px-4 py-3 min-[900px]:hidden">
-          <ChatSidebarMobileTrigger />
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          <ChatThread
-            messages={messages}
-            onEdit={handleEdit}
-            onUndo={handleUndo}
-            onPickClarify={handlePickClarify}
-            onSaveQuickEdit={handleSaveQuickEdit}
-            onCancelQuickEdit={handleCancelQuickEdit}
-            onConfirmReview={handleConfirmReview}
-            onEditReview={handleEditReview}
-            onRetry={handleRetry}
-            isTyping={submitting}
-          />
-        </div>
-        {messages.length <= 1 && (
-          <div className="mx-auto w-full max-w-[720px] px-4 pb-2">
-            <p className="mb-1.5 text-xs font-medium text-muted-foreground">Try one of these:</p>
-            <div className="flex flex-wrap gap-2">
-              {QUICK_START_EXAMPLES.map((example) => (
-                <button
-                  key={example}
-                  type="button"
-                  onClick={() => setInput(example)}
-                  className="rounded-full border border-border bg-card px-3 py-1.5 text-xs text-foreground hover:bg-accent"
-                >
-                  {example}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        <ChatInputBar value={input} onChange={setInput} onSubmit={handleSubmit} submitting={submitting || !ready} />
-      </div>
+  // Home opens on a fresh conversation, like Claude's start page. Earlier chats stay under
+  // "Past chats"; a new session isn't written to Sheets until its first message.
+  const openedFresh = useRef(false);
+  useEffect(() => {
+    if (!ready || openedFresh.current) return;
+    openedFresh.current = true;
+    startNewChat();
+  }, [ready]);
+
+  const toolbar = (
+    <div className="flex justify-end gap-1">
+      <PastChatsButton />
+      {!isEmpty && (
+        <button
+          type="button"
+          onClick={() => startNewChat()}
+          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium text-muted-foreground hover:bg-secondary hover:text-foreground"
+        >
+          <Plus className="h-3.5 w-3.5" /> New chat
+        </button>
+      )}
     </div>
   );
-}
 
-export default function HomePage() {
+  if (isEmpty) {
+    return (
+      <div className="mx-auto w-full max-w-[760px]">
+        {toolbar}
+        <div className="pt-[6vh]">
+          <ChatLanding onSubmit={(text) => void handleSubmit(text)} disabled={!ready || submitting} />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <Suspense fallback={null}>
-      <HomePageInner />
-    </Suspense>
+    <div className="mx-auto flex w-full max-w-[760px] flex-col gap-3">
+      {toolbar}
+      <ChatThread
+        messages={messages}
+        onEdit={handleEdit}
+        onUndo={handleUndo}
+        onPickClarify={handlePickClarify}
+        onSaveQuickEdit={handleSaveQuickEdit}
+        onCancelQuickEdit={handleCancelQuickEdit}
+        onConfirmReview={handleConfirmReview}
+        onEditReview={handleEditReview}
+        onRetry={handleRetry}
+        isTyping={submitting}
+      />
+      <ChatComposer
+        value={input}
+        onChange={setInput}
+        onSubmit={() => void handleSubmit()}
+        disabled={submitting || !ready}
+        placeholder="Reply, or tell me what else happened…"
+        className="mx-auto w-full max-w-[720px]"
+      />
+    </div>
   );
 }

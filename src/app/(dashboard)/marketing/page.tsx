@@ -1,23 +1,17 @@
 "use client";
 
-import { Megaphone } from "lucide-react";
-import { PageHeader } from "@/components/layout/page-header";
-import { BackToSummaryLink } from "@/components/summary/back-to-summary-link";
+import { Page } from "@/components/layout/page";
 import { AddSocialStatForm } from "@/components/marketing/add-social-stat-form";
 import { PlatformSummaryList } from "@/components/marketing/platform-summary-list";
 
 export default function MarketingPage() {
   return (
-    <div>
-      <div className="mb-4">
-        <BackToSummaryLink />
-      </div>
-      <PageHeader icon={Megaphone} title="Marketing" />
+    <Page title="Marketing">
       <p className="mb-4 text-sm text-muted-foreground">Facebook, TikTok, and Instagram — logged weekly.</p>
-      <div className="space-y-4">
+      <div className="max-w-4xl space-y-4">
         <AddSocialStatForm />
         <PlatformSummaryList />
       </div>
-    </div>
+    </Page>
   );
 }

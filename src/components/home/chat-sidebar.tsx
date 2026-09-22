@@ -134,3 +134,24 @@ export function ChatSidebarMobileTrigger() {
     </Sheet>
   );
 }
+
+/** "Past chats" on Home: opens every earlier conversation in a slide-in panel. */
+export function PastChatsButton() {
+  const [open, setOpen] = useState(false);
+  return (
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild>
+        <button
+          type="button"
+          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium text-muted-foreground hover:bg-secondary hover:text-foreground"
+        >
+          <MessageSquareText className="h-3.5 w-3.5" /> Past chats
+        </button>
+      </SheetTrigger>
+      <SheetContent side="right" className="w-80 p-0">
+        <SheetTitle className="sr-only">Past chats</SheetTitle>
+        <ChatSidebarList onNavigate={() => setOpen(false)} />
+      </SheetContent>
+    </Sheet>
+  );
+}

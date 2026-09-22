@@ -12,9 +12,28 @@ export interface IngredientReach {
   runOutDate: Date | null;
   urgency: Urgency | null;
   color: string;
+  /** True when the projection is suppressed for want of history. */
+  insufficientHistory: boolean;
+  /** True when daysLeft hit the display ceiling and should read as "90+". */
+  capped: boolean;
+  /** Set when the material has a reorder point and is at or below it. */
+  belowReorderPoint: boolean;
 }
 
 const WINDOW_DAYS = 30;
+
+/**
+ * A month of records and a handful of sales before any run-out date is shown.
+ *
+ * One month of sales was producing figures like "1,869 days left" and colouring them green
+ * — arithmetic dividing a full shelf by an almost-zero rate. Fake precision labelled as
+ * confidence is worse than no estimate, because it invites the owner to stop checking.
+ */
+const MIN_HISTORY_DAYS = 30;
+const MIN_SALES = 5;
+
+/** Nothing beyond this is a real forecast; past it the number only tracks how little sold. */
+const MAX_DISPLAY_DAYS = 90;
 
 function midnight(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -56,6 +75,12 @@ export function computeIngredientReach(
     (e) => e.quantity ?? 0,
   );
 
+  // How much history actually exists, as opposed to how much window we asked for.
+  const dated = entries.map((e) => new Date(e.timestamp).getTime()).filter((t) => Number.isFinite(t));
+  const historyDays = dated.length > 0 ? (now.getTime() - Math.min(...dated)) / (24 * 60 * 60 * 1000) : 0;
+  const saleCount = entries.filter((e) => e.type === "SALE").length;
+  const insufficientHistory = historyDays < MIN_HISTORY_DAYS || saleCount < MIN_SALES;
+
   const batchesFromProduction = jarsProduced / avgYield;
   const batchesFromSales = jarsSold / avgYield;
   const isEstimate = batchesFromProduction <= 0;
@@ -70,23 +95,42 @@ export function computeIngredientReach(
   return rawMaterials.map((material, index) => {
     const color = material.color ?? chipColor(index);
     const avgDailyUse = material.perBatchQty ? material.perBatchQty * batchesPerDay : 0;
+    const reorderPoint = material.reorderPoint ?? null;
+    const belowReorderPoint = reorderPoint != null && reorderPoint > 0 && material.qty <= reorderPoint;
 
-    if (avgDailyUse <= 0) {
+    if (avgDailyUse <= 0 || insufficientHistory) {
       return {
         material,
-        avgDailyUse: 0,
+        avgDailyUse,
         isEstimate,
         daysLeft: null,
         runOutDate: null,
-        urgency: null,
+        // With no projection, the reorder point is the only real signal there is.
+        urgency: belowReorderPoint ? "red" : null,
         color,
+        insufficientHistory,
+        capped: false,
+        belowReorderPoint,
       };
     }
 
-    const daysLeft = Math.max(0, Math.round(material.qty / avgDailyUse));
-    const runOutDate = new Date(today.getTime() + daysLeft * 24 * 60 * 60 * 1000);
-    const urgency = urgencyOf(daysLeft);
+    const rawDaysLeft = Math.max(0, Math.round(material.qty / avgDailyUse));
+    const capped = rawDaysLeft > MAX_DISPLAY_DAYS;
+    const daysLeft = capped ? MAX_DISPLAY_DAYS : rawDaysLeft;
+    const runOutDate = capped ? null : new Date(today.getTime() + daysLeft * 24 * 60 * 60 * 1000);
+    const urgency = belowReorderPoint ? "red" : urgencyOf(daysLeft);
 
-    return { material, avgDailyUse, isEstimate, daysLeft, runOutDate, urgency, color };
+    return {
+      material,
+      avgDailyUse,
+      isEstimate,
+      daysLeft,
+      runOutDate,
+      urgency,
+      color,
+      insufficientHistory: false,
+      capped,
+      belowReorderPoint,
+    };
   });
 }

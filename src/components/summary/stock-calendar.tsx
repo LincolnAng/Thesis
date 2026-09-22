@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AlertTriangle } from "lucide-react";
-import { formatPeso, pluralize } from "@/lib/format";
+import { formatNumber, formatPeso, pluralize } from "@/lib/format";
 import type { IngredientReach } from "@/lib/summary/ingredient-reach";
 import { procurementHistoryFor, weightedAverageUnitCost } from "@/lib/summary/procurement";
 import type { Entry } from "@/lib/store/types";
@@ -23,9 +23,10 @@ const URGENCY_COLOR: Record<string, string> = {
 export function StockCalendar({ reaches, entries }: { reaches: IngredientReach[]; entries: Entry[] }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const sorted = reaches
-    .filter((r) => r.daysLeft !== null)
-    .sort((a, b) => (a.daysLeft ?? Infinity) - (b.daysLeft ?? Infinity));
+  const sorted = [...reaches].sort((a, b) => {
+    if (a.belowReorderPoint !== b.belowReorderPoint) return a.belowReorderPoint ? -1 : 1;
+    return (a.daysLeft ?? Infinity) - (b.daysLeft ?? Infinity);
+  });
 
   const selected = sorted.find((r) => r.material.id === selectedId) ?? null;
   const selectedAvgCost = selected
@@ -34,8 +35,8 @@ export function StockCalendar({ reaches, entries }: { reaches: IngredientReach[]
 
   if (sorted.length === 0) {
     return (
-      <div className="rounded-2xl border border-border p-4">
-        <p className="text-base text-muted-foreground">Not enough history yet to project ingredient reach.</p>
+      <div className="rounded-[var(--radius-panel)] border border-border p-4">
+        <p className="text-base text-muted-foreground">No ingredients tracked yet.</p>
       </div>
     );
   }
@@ -54,14 +55,31 @@ export function StockCalendar({ reaches, entries }: { reaches: IngredientReach[]
             <span className="min-w-0 flex-1">
               <span className="block text-base font-medium text-foreground">{r.material.name}</span>
               <span className="block text-sm text-muted-foreground">
-                {pluralize(r.daysLeft ?? 0, "day")} left
-                {r.isEstimate ? " · estimate" : ""}
+                {r.insufficientHistory ? (
+                  r.material.reorderPoint
+                    ? `${formatNumber(r.material.qty)} ${r.material.unit} on hand · restock at ${formatNumber(r.material.reorderPoint)}`
+                    : "Not enough sales history to estimate — set a reorder point instead"
+                ) : (
+                  <>
+                    {r.capped ? "90+ days" : pluralize(r.daysLeft ?? 0, "day")} left
+                    {r.isEstimate ? " · estimate" : ""}
+                  </>
+                )}
               </span>
             </span>
-            <span className={cn("flex shrink-0 items-center gap-1 text-sm font-semibold", URGENCY_COLOR[r.urgency ?? "green"])}>
-              {r.urgency === "red" && <AlertTriangle className="h-4 w-4" />}
-              {URGENCY_WORD[r.urgency ?? "green"]}
-            </span>
+            {r.insufficientHistory && !r.belowReorderPoint ? (
+              <span className="shrink-0 text-sm text-muted-foreground">—</span>
+            ) : (
+              <span
+                className={cn(
+                  "flex shrink-0 items-center gap-1 text-sm font-semibold",
+                  URGENCY_COLOR[r.urgency ?? "green"],
+                )}
+              >
+                {r.urgency === "red" && <AlertTriangle className="h-4 w-4" />}
+                {r.belowReorderPoint ? "Restock" : URGENCY_WORD[r.urgency ?? "green"]}
+              </span>
+            )}
           </button>
         ))}
       </div>

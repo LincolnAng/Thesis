@@ -3,14 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { NAV_ITEMS } from "@/lib/nav-items";
+import { NAV_ITEMS, SETTINGS_ITEM } from "@/lib/nav-items";
 
 export function BottomTabBar() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 flex overflow-x-auto border-t border-border bg-card min-[900px]:hidden">
-      {NAV_ITEMS.map((item) => {
+    <nav className="fixed inset-x-0 bottom-0 z-40 flex overflow-x-auto border-t border-line/10 bg-white min-[900px]:hidden">
+      {[...NAV_ITEMS, SETTINGS_ITEM].map((item) => {
         const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
         const Icon = item.icon;
         return (
@@ -19,7 +19,7 @@ export function BottomTabBar() {
             href={item.href}
             className={cn(
               "flex w-20 shrink-0 flex-col items-center gap-1 py-3 text-sm font-medium",
-              active ? "text-primary" : "text-muted-foreground",
+              active ? "text-cacao font-semibold" : "text-muted-foreground",
             )}
           >
             <Icon className="h-6 w-6" />

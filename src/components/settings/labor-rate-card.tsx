@@ -22,7 +22,7 @@ export function LaborRateCard() {
   const derivingProducts = products.filter((p) => p.laborCostOverride == null).length;
 
   return (
-    <Card className="mt-4">
+    <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Clock className="h-4 w-4" /> Labor rate

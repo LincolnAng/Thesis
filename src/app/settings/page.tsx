@@ -11,7 +11,9 @@ import { Switch } from "@/components/ui/switch";
 import { getSnapshot, resetAllData, restoreLocalCollections, setApiKeyMissing } from "@/lib/store/store";
 import type { BotLanguage } from "@/lib/sheets/settings";
 import { LaborRateCard } from "@/components/settings/labor-rate-card";
+import { OwnerNameCard } from "@/components/settings/owner-name-card";
 import { cn } from "@/lib/utils";
+import { Page, PageTabs } from "@/components/layout/page";
 
 const LANGUAGE_LABELS: Record<BotLanguage, string> = {
   english: "English",
@@ -41,6 +43,7 @@ export default function SettingsPage() {
   const [languageSaving, setLanguageSaving] = useState(false);
   const [backupMessage, setBackupMessage] = useState<string | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [tab, setTab] = useState<"general" | "ai" | "sheet">("general");
 
   // next-themes resolves the real theme synchronously on the client's first render
   // (to avoid a flash), which is already ahead of what the server rendered — so
@@ -191,11 +194,27 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-4 py-8">
-      <h1 className="mb-1 text-xl font-bold text-foreground">Settings</h1>
-      <p className="mb-4 text-sm text-muted-foreground">Manage how the AI assistant works.</p>
+    <Page title="Settings">
+    <div className="w-full max-w-4xl">
+      <p className="mb-4 text-sm text-muted-foreground">Your details, the AI assistant, and where your data is kept.</p>
 
-      <Card className="mb-4">
+      <div className="mb-5">
+        <PageTabs
+          tabs={[
+            ["general", "General"],
+            ["ai", "AI assistant"],
+            ["sheet", "Google Sheet"],
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
+      </div>
+
+      {tab === "general" && (
+        <div className="flex flex-col gap-4">
+      <OwnerNameCard />
+
+      <Card>
         <CardContent className="flex items-center justify-between gap-3">
           <span className="flex items-center gap-2 text-sm font-medium text-foreground">
             <Moon className="h-4 w-4" /> Dark mode
@@ -206,7 +225,13 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      <Card className="mb-4">
+      <LaborRateCard />
+        </div>
+      )}
+
+      {tab === "ai" && (
+        <div className="flex flex-col gap-4">
+      <Card>
         <CardContent className="flex items-center justify-between gap-3">
           <span className="flex items-center gap-2 text-sm font-medium text-foreground">
             <Languages className="h-4 w-4" /> Bot language
@@ -321,9 +346,12 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      <LaborRateCard />
+        </div>
+      )}
 
-      <Card className="mt-4">
+      {tab === "sheet" && (
+        <div className="flex flex-col gap-4">
+      <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Sheet className="h-4 w-4" /> Google Sheets
@@ -335,6 +363,16 @@ export default function SettingsPage() {
             Sheet — a readable, editable record of the whole business. Edits made directly in the sheet sync back
             here automatically within moments.
           </p>
+          <div className="flex items-center gap-2 text-sm">
+            <span className={cn("h-2 w-2 rounded-full", settings?.spreadsheetUrl ? "bg-success" : loadError ? "bg-danger" : "bg-faint")} />
+            {settings?.spreadsheetUrl
+              ? "Connected"
+              : loadError
+                ? "Couldn't reach Google Sheets — check the connection settings on the server"
+                : settings
+                  ? "Not connected — the server has no Google Sheet set up yet"
+                  : "Checking…"}
+          </div>
           {settings?.spreadsheetUrl && (
             <a
               href={settings.spreadsheetUrl}
@@ -348,7 +386,7 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      <Card className="mt-4">
+      <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Database className="h-4 w-4" /> Business data backup
@@ -374,7 +412,7 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      <Card className="mt-4">
+      <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base text-[var(--status-critical)]">
             <Trash2 className="h-4 w-4" /> Reset business data
@@ -413,6 +451,10 @@ export default function SettingsPage() {
           )}
         </CardContent>
       </Card>
+        </div>
+      )}
+
     </div>
+    </Page>
   );
 }

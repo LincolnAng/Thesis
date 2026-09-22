@@ -3,6 +3,8 @@ import type { ProductRow, RecipeRow } from "@/lib/store/sheet-shapes";
 
 export type { ProductRow, RecipeRow };
 
+const PRICING_MODES = ["manual", "cost_percent", "margin", "competitive"];
+
 // marketPrice is appended strictly after deletedAt (not just after the other
 // price fields) so every column already written for existing rows — including
 // deletedAt's own position — stays exactly where it was; only a genuinely new
@@ -65,7 +67,8 @@ function productFromRow(row: string[]): ProductRow | null {
     id,
     name,
     standardPrice: Number(standardPrice) || 0,
-    pricingMode: pricingMode as ProductRow["pricingMode"],
+    // Anything unrecognized (e.g. the retired "suggested") falls back to self pricing.
+    pricingMode: (PRICING_MODES as string[]).includes(pricingMode) ? (pricingMode as ProductRow["pricingMode"]) : "manual",
     marginPercent: Number(marginPercent) || 0,
     friendPrice: Number(friendPrice) || 0,
     wholesalePrice: Number(wholesalePrice) || 0,

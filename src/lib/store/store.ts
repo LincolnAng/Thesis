@@ -653,6 +653,44 @@ export function updateProduct(id: string, patch: Partial<Product>) {
   }
 }
 
+/**
+ * Renames a product and every entry that refers to it. Entries link to a product by name
+ * (Entry.sku), so renaming only the product would orphan its past sales from stock
+ * matching, best sellers, and customer history.
+ */
+export function renameProduct(id: string, newName: string) {
+  const trimmed = newName.trim();
+  const product = state.products.find((p) => p.id === id);
+  if (!product || !trimmed || trimmed === product.name) return;
+  const oldKey = normalize(product.name);
+
+  const changedEntries: Entry[] = [];
+  setState((prev) => ({
+    ...prev,
+    products: prev.products.map((p) => (p.id === id ? { ...p, name: trimmed } : p)),
+    entries: prev.entries.map((e) => {
+      if (normalize(e.sku) !== oldKey) return e;
+      const next = { ...e, sku: trimmed };
+      changedEntries.push(next);
+      return next;
+    }),
+  }));
+
+  const renamed = state.products.find((p) => p.id === id);
+  if (renamed) void mirrorOp("products", "update", { id, item: toProductRow(renamed) });
+  for (const e of changedEntries) void mirrorEntryUpdate(e.id, e);
+}
+
+/** Removes a product and its recipe rows. Past entries keep the product's name as text,
+ * so sales history and totals are unchanged — it just stops appearing in stock and pickers. */
+export function deleteProduct(id: string) {
+  const product = state.products.find((p) => p.id === id);
+  if (!product) return;
+  setState((prev) => ({ ...prev, products: prev.products.filter((p) => p.id !== id) }));
+  void mirrorOp("products", "delete", { id });
+  for (const row of flattenProductRecipe(product)) void mirrorOp("recipes", "delete", { id: row.id });
+}
+
 export function addProduct(input: Omit<Product, "id">): Product {
   const product: Product = { ...input, id: genId("prod") };
   setState((prev) => ({ ...prev, products: [...prev.products, product] }));

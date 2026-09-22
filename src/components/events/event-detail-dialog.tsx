@@ -6,7 +6,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { borrowStockForEvent, returnStockFromEvent, updateEvent } from "@/lib/store/store";
+import { borrowStockForEvent, deleteEvent, returnStockFromEvent, updateEvent } from "@/lib/store/store";
+import { ConfirmDeleteButton } from "@/components/data-table/confirm-delete-button";
 import { formatNumber, formatPeso } from "@/lib/format";
 import type { EventSummary } from "@/lib/summary/events";
 import type { Product } from "@/lib/store/types";
@@ -54,6 +55,15 @@ export function EventDetailDialog({
     for (const h of holdings) {
       if (h.onHand > 0) returnStockFromEvent(event.id, h.productId, h.onHand);
     }
+  }
+
+  // Unsold jars are sent back to main stock first — deleting the event outright would
+  // otherwise make stock that was borrowed out simply vanish. Sales already logged at the
+  // event stay in your sales history.
+  function removeEvent() {
+    returnEverything();
+    deleteEvent(event.id);
+    onClose();
   }
 
   return (
@@ -199,10 +209,19 @@ export function EventDetailDialog({
                 Reopen
               </Button>
             )}
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <ConfirmDeleteButton label="Delete event" onConfirm={removeEvent} />
+              Delete
+            </span>
             <Button size="sm" className="ml-auto" onClick={onClose}>
               Done
             </Button>
           </div>
+          {summary.totalOnHand > 0 && (
+            <p className="-mt-3 text-xs text-muted-foreground">
+              Deleting sends the {formatNumber(summary.totalOnHand)} unsold back to your main stock first.
+            </p>
+          )}
           {event.status === "open" && summary.totalOnHand > 0 && (
             <p className="-mt-3 text-xs text-muted-foreground">
               Bring the unsold stock back before marking this finished, so it counts as available again.

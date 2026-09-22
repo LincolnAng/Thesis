@@ -57,14 +57,17 @@ export interface RecipeExtraRow {
   cost: number; // cost per batch, in pesos
 }
 
-export type PricingMode = "manual" | "cost_percent" | "competitive" | "suggested";
+// manual = self pricing; cost_percent = cost + markup %; margin = profit as a % of the
+// selling price; competitive = market price. marginPercent holds the % for both
+// cost_percent (as markup) and margin (as margin) — see lib/summary/pricing-methods.ts.
+export type PricingMode = "manual" | "cost_percent" | "margin" | "competitive";
 
 export interface Product {
   id: string;
   name: string;
   standardPrice: number;
-  pricingMode: PricingMode; // how standardPrice is determined; "cost_percent"/"competitive" compute it live instead
-  marginPercent: number; // used only when pricingMode === "cost_percent"
+  pricingMode: PricingMode; // how the price is set; only "manual" uses standardPrice directly
+  marginPercent: number; // markup % (cost_percent) or margin % (margin)
   marketPrice: number; // used only when pricingMode === "competitive" — what similar products sell for
   friendPrice: number;
   wholesalePrice: number;
@@ -116,6 +119,9 @@ export interface RawMaterialStock {
    * Supplier-logged prices are authoritative — see getUnitCost in summary/cost-engine.ts. */
   unitCost: number;
   kind?: MaterialKind;
+  /** Restock when on-hand falls to this. A real threshold the owner sets, used instead of
+   * a projected run-out date when there isn't enough sales history to project from. */
+  reorderPoint?: number | null;
 }
 
 /**

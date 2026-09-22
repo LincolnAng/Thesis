@@ -13,6 +13,19 @@ export interface CustomerPurchase {
   orders: number;
 }
 
+/** New until they've ordered twice; quiet once they've been away long enough to notice. */
+export type CustomerStatus = "new" | "repeat" | "quiet";
+
+export const QUIET_AFTER_DAYS = 60;
+
+export function customerStatus(orderCount: number, lastOrderAt: string | null, now = new Date()): CustomerStatus {
+  if (lastOrderAt) {
+    const days = (now.getTime() - new Date(lastOrderAt).getTime()) / (24 * 60 * 60 * 1000);
+    if (days > QUIET_AFTER_DAYS) return "quiet";
+  }
+  return orderCount > 1 ? "repeat" : "new";
+}
+
 export interface DerivedCustomer {
   /** Case/space-insensitive identity. "Aling Nena", "aling nena" and "Aling  Nena" share one. */
   key: string;
@@ -25,6 +38,13 @@ export interface DerivedCustomer {
   lastOrderAt: string | null;
   firstOrderAt: string | null;
   purchases: CustomerPurchase[];
+  /** Mean price paid per unit — what makes a wholesale relationship visibly different
+   * from a one-off at the standard price. */
+  avgUnitPrice: number | null;
+  /** Average ₱ per order — the customer's typical purchase size in money. */
+  avgOrderValue: number;
+  /** Average units per order — the customer's typical purchase size in jars. */
+  avgOrderQty: number;
 }
 
 /** Lowercased, whitespace-collapsed — capitalization or a double space never splits one
@@ -87,12 +107,17 @@ export function deriveCustomers(entries: Entry[]): DerivedCustomer[] {
       }
     }
 
+    const totalSpent = group.reduce((sum, e) => sum + (e.amount ?? 0), 0);
+    const totalQty = group.reduce((sum, e) => sum + (e.quantity ?? 0), 0);
     customers.push({
       key,
       name,
       spellings,
       orderCount: group.length,
-      totalSpent: group.reduce((sum, e) => sum + (e.amount ?? 0), 0),
+      totalSpent,
+      avgUnitPrice: totalQty > 0 ? totalSpent / totalQty : null,
+      avgOrderValue: totalSpent / group.length,
+      avgOrderQty: totalQty / group.length,
       lastOrderAt: sorted[0]?.timestamp ?? null,
       firstOrderAt: sorted[sorted.length - 1]?.timestamp ?? null,
       purchases: [...bySku.values()].sort((a, b) => b.spent - a.spent),

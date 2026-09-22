@@ -1,4 +1,6 @@
+import { priceFromMargin, priceFromMarkup } from "./pricing-methods";
 import { batchLaborCost, getProductCost, getUnitCost, type CostLine } from "./cost-engine";
+import { rawQuantityNeeded } from "./cacao";
 import type { Product, RawMaterialStock, RecipeExtraRow, RecipeIngredientRow, SupplierPrice } from "@/lib/store/types";
 
 /**
@@ -12,6 +14,8 @@ export interface CostContext {
   rawMaterials: RawMaterialStock[];
   supplierPrices: SupplierPrice[];
   hourlyLaborRate: number;
+  /** Share of raw cacao that's usable after processing, 0–1 (1 = no loss). */
+  cacaoUtilization: number;
 }
 
 export interface ProductCostBreakdown {
@@ -40,7 +44,9 @@ function sumExtras(rows: RecipeExtraRow[]): number {
 
 /** Cost of a single recipe row at the material's current unit cost. */
 export function ingredientRowCost(row: RecipeIngredientRow, ctx: CostContext): number {
-  return getUnitCost(row.materialId, ctx.rawMaterials, ctx.supplierPrices).cost * row.quantity;
+  const material = ctx.rawMaterials.find((m) => m.id === row.materialId);
+  const rawQty = material ? rawQuantityNeeded(material.name, row.quantity, ctx.cacaoUtilization) : row.quantity;
+  return getUnitCost(row.materialId, ctx.rawMaterials, ctx.supplierPrices).cost * rawQty;
 }
 
 export function ingredientBatchTotal(rows: RecipeIngredientRow[], ctx: CostContext): number {
@@ -48,10 +54,11 @@ export function ingredientBatchTotal(rows: RecipeIngredientRow[], ctx: CostConte
 }
 
 /** The price actually charged at the standard tier, derived from the product's chosen
- * pricing metric — cost-based and market-based both compute this live rather than trusting
+ * pricing method — cost-, margin-, and market-based all compute this live rather than trusting
  * a possibly-stale `standardPrice`, which is only the source of truth in "manual" mode. */
 export function effectiveProductPrice(product: Product, cost: ProductCostBreakdown): number {
-  if (product.pricingMode === "cost_percent") return cost.costPerJar * (1 + product.marginPercent / 100);
+  if (product.pricingMode === "cost_percent") return priceFromMarkup(cost.costPerJar, product.marginPercent);
+  if (product.pricingMode === "margin") return priceFromMargin(cost.costPerJar, product.marginPercent);
   if (product.pricingMode === "competitive") return product.marketPrice;
   return product.standardPrice;
 }
@@ -61,7 +68,7 @@ export function effectiveProductPrice(product: Product, cost: ProductCostBreakdo
  * cached on the product — so it can't go stale when an ingredient's price changes.
  */
 export function productCostPerJar(product: Product, ctx: CostContext): ProductCostBreakdown {
-  const cost = getProductCost(product, ctx.rawMaterials, ctx.supplierPrices, ctx.hourlyLaborRate);
+  const cost = getProductCost(product, ctx.rawMaterials, ctx.supplierPrices, ctx.hourlyLaborRate, ctx.cacaoUtilization);
   const ingredientTotal = cost.ingredientLines.reduce((sum, l) => sum + l.batchCost, 0);
   const packagingTotal = cost.packagingLines.reduce((sum, l) => sum + l.batchCost, 0);
   const laborTotal = batchLaborCost(product, ctx.hourlyLaborRate).cost;

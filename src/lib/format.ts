@@ -1,6 +1,7 @@
 export function formatPeso(amount: number | null | undefined): string {
   const value = amount ?? 0;
-  return `₱${value.toLocaleString("en-PH", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+  const text = `₱${Math.abs(value).toLocaleString("en-PH", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+  return value < 0 ? `−${text}` : text;
 }
 
 export function formatSignedPeso(amount: number | null | undefined, moneyIn: boolean): string {
@@ -80,10 +81,10 @@ export const PRICE_TYPE_LABELS: Record<string, string> = {
 };
 
 export const PRICING_MODE_LABELS: Record<string, string> = {
-  manual: "Custom",
+  manual: "Self pricing",
   cost_percent: "Cost-based",
+  margin: "Margin-based",
   competitive: "Market-based",
-  suggested: "Suggested",
 };
 
 /**

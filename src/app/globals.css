@@ -5,6 +5,17 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  /* Mang Kiko's palette (from the mkc design): warm ivory ground, cacao accent. */
+  --color-ivory: #FAF9F5;
+  --color-ink: #141413;
+  --color-cacao: #7B4B2A;
+  --color-sand: #C08552;
+  --color-oat: #E3DACC;
+  --color-faint: #9C9A92;
+  --color-success: #558A42;
+  --color-danger: #B3261E;
+  --color-line: #1F1E1D;
+  --font-display: var(--font-display);
   --color-status-good: var(--status-good);
   --color-status-warning: var(--status-warning);
   --color-status-critical: var(--status-critical);
@@ -13,7 +24,7 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-heading: var(--font-display);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -38,41 +49,42 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  /* Standard corner sizes (as in the mkc design) rather than multiples of --radius. */
+  --radius-sm: 0.125rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.5rem;
+  --radius-4xl: 2rem;
 }
 
 /* Flat, minimalist, neutral surfaces. Cocoa brown is the one accent color;
    green and amber are the only other strong colors, reserved for money
    in / money out and warnings. No gradients, no shadows. */
 :root {
-  --background: oklch(0.99 0.002 60);
-  --foreground: oklch(0.22 0.01 55);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.22 0.01 55);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.22 0.01 55);
-  --primary: #5c3a21;
-  --primary-foreground: oklch(0.98 0.004 60);
-  --secondary: oklch(0.96 0.003 60);
-  --secondary-foreground: oklch(0.22 0.01 55);
-  --muted: oklch(0.96 0.003 60);
-  --muted-foreground: oklch(0.4 0.008 60);
-  --accent: oklch(0.95 0.003 60);
-  --accent-foreground: oklch(0.22 0.01 55);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.88 0.004 60);
-  --input: oklch(0.88 0.004 60);
+  --background: #FAF9F5;
+  --foreground: #141413;
+  --card: #FFFFFF;
+  --card-foreground: #141413;
+  --popover: #FFFFFF;
+  --popover-foreground: #141413;
+  --primary: #7B4B2A;
+  --primary-foreground: #FAF9F5;
+  --secondary: #F5F4ED;
+  --secondary-foreground: #141413;
+  --muted: #F5F4ED;
+  --muted-foreground: #73726C;
+  --accent: #F5F4ED;
+  --accent-foreground: #141413;
+  --destructive: #B3261E;
+  --border: rgba(31, 30, 29, 0.15);
+  --input: rgba(31, 30, 29, 0.2);
   --ring: oklch(0.7 0.01 60);
   --radius: 1rem;
   --sidebar: oklch(1 0 0);
   --sidebar-foreground: oklch(0.22 0.01 55);
-  --sidebar-primary: #5c3a21;
+  --sidebar-primary: #7B4B2A;
   --sidebar-primary-foreground: oklch(0.98 0.004 60);
   --sidebar-accent: oklch(0.95 0.003 60);
   --sidebar-accent-foreground: oklch(0.22 0.01 55);
@@ -81,20 +93,19 @@
   /* Re-derived in oklch against the warm ground (hue ~45-60) rather than dropped in as
      generic hexes: chroma is held down so green and amber read as part of the palette
      instead of sitting on top of it. */
-  --status-good: oklch(0.55 0.125 150);
-  --status-warning: oklch(0.62 0.135 62);
-  --status-critical: oklch(0.55 0.19 27);
+  --status-good: #558A42;
+  --status-warning: #9A6B12;
+  --status-critical: #B3261E;
   --status-info: oklch(0.55 0.13 250);
 
-  /* Layout — the Simple/Advanced width split is enforced from these, not per page. */
-  --content-simple: 680px;
-  --content-advanced: 1200px;
-  --sidebar-w: 240px;
+  /* Layout — one content width for both Simple and Advanced. */
+  --content-width: 1200px;
+  --sidebar-w: 232px;
   --rail-w: 72px;
 
   /* Radii: panels, controls, pills. */
-  --radius-panel: 12px;
-  --radius-control: 8px;
+  --radius-panel: 16px;
+  --radius-control: 10px;
   --radius-pill: 999px;
 }
 
@@ -142,7 +153,7 @@
     @apply font-sans;
     /* Bumps every rem-based Tailwind text/spacing utility app-wide — the
        simplest lever for bigger type without hand-editing every component. */
-    font-size: 118.75%;
+    font-size: 100%;
   }
 }
 
@@ -156,8 +167,9 @@
  */
 @layer components {
   .type-page-title {
-    font-size: 28px;
-    font-weight: 700;
+    font-family: var(--font-display);
+    font-size: 24px;
+    font-weight: 600;
     line-height: 1.2;
   }
   .type-section-header {

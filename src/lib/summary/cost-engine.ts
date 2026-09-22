@@ -1,4 +1,5 @@
 import { convertQuantity } from "@/lib/units";
+import { rawQuantityNeeded } from "./cacao";
 import type {
   Product,
   RawMaterialStock,
@@ -130,6 +131,8 @@ export function getProductCost(
   rawMaterials: RawMaterialStock[],
   supplierPrices: SupplierPrice[],
   hourlyLaborRate: number,
+  /** Share of raw cacao that's usable, 0–1. Recipes are written in usable cacao. */
+  cacaoUtilization = 1,
 ): ProductCost {
   const ingredientLines: CostLine[] = [];
   const packagingLines: CostLine[] = [];
@@ -139,13 +142,15 @@ export function getProductCost(
     const material = rawMaterials.find((m) => m.id === row.materialId);
     if (!material) continue;
     const unitCost = getUnitCost(row.materialId, rawMaterials, supplierPrices);
+    // Raw quantity actually bought — more than the recipe's usable amount for cacao.
+    const rawQty = rawQuantityNeeded(material.name, row.quantity, cacaoUtilization);
     const line: CostLine = {
       materialId: row.materialId,
       name: material.name,
-      quantityPerBatch: row.quantity,
+      quantityPerBatch: rawQty,
       unit: material.unit,
       unitCost: unitCost.cost,
-      batchCost: unitCost.cost * row.quantity,
+      batchCost: unitCost.cost * rawQty,
       source: unitCost.source,
     };
     (isPackaging(material) ? packagingLines : ingredientLines).push(line);

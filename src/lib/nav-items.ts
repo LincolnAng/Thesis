@@ -1,4 +1,4 @@
-import { Bot, Box, Calculator, CalendarDays, Home, Receipt, Settings, Store, Truck, Users, Wallet, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, Box, Home, Settings, ShoppingBag, Tag, Users, type LucideIcon } from "lucide-react";
 
 export interface NavItem {
   href: string;
@@ -6,16 +6,15 @@ export interface NavItem {
   icon: LucideIcon;
 }
 
+/** The main sections, in sidebar order. Ask AI lives on Home; Events live under People. */
 export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Home", icon: Home },
-  { href: "/sales", label: "Sales", icon: Receipt },
-  { href: "/expenses", label: "Expenses", icon: Wallet },
+  { href: "/transactions", label: "Transactions", icon: ArrowLeftRight },
+  { href: "/products", label: "Products", icon: ShoppingBag },
   { href: "/inventory", label: "Inventory", icon: Box },
-  { href: "/scheduling", label: "Scheduling", icon: CalendarDays },
-  { href: "/customers", label: "Customers", icon: Users },
-  { href: "/events", label: "Events", icon: Store },
-  { href: "/suppliers", label: "Suppliers", icon: Truck },
-  { href: "/pricing", label: "Pricing", icon: Calculator },
-  { href: "/chat", label: "Ask AI", icon: Bot },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/people", label: "People", icon: Users },
+  { href: "/pricing", label: "Pricing", icon: Tag },
 ];
+
+/** Pinned to the bottom of the sidebar, below the main sections. */
+export const SETTINGS_ITEM: NavItem = { href: "/settings", label: "Settings", icon: Settings };

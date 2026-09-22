@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Children, type CSSProperties, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -44,10 +44,31 @@ export function StatTile({
   );
 }
 
-/** Auto-fitting KPI row — six to eight metrics without a breakpoint per count. */
+/**
+ * A column count that fills rows evenly: every item in one row if they fit, otherwise the
+ * largest count that divides them exactly (8 → 4+4), otherwise rows as balanced as
+ * possible (7 → 4+3). Auto-fit alone packs greedily and strands a lone tile (8 → 7+1).
+ */
+export function evenColumns(count: number, max: number): number {
+  if (count <= max) return Math.max(count, 1);
+  for (let cols = max; cols >= 2; cols--) {
+    if (count % cols === 0) return cols;
+  }
+  return Math.ceil(count / Math.ceil(count / max));
+}
+
+/** KPI row that always fills its rows evenly — see evenColumns. */
 export function StatGrid({ children }: { children: ReactNode }) {
+  const count = Children.toArray(children).length;
+  const style = {
+    "--cols": evenColumns(count, 6),
+    "--cols-md": evenColumns(count, 4),
+  } as CSSProperties;
   return (
-    <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+    <div
+      className="grid grid-cols-2 gap-3 min-[640px]:grid-cols-[repeat(var(--cols-md),minmax(0,1fr))] min-[1024px]:grid-cols-[repeat(var(--cols),minmax(0,1fr))]"
+      style={style}
+    >
       {children}
     </div>
   );

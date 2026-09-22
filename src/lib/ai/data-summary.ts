@@ -10,6 +10,7 @@ import {
 import { deriveCustomers } from "@/lib/summary/customers";
 import { productCostPerJar } from "@/lib/summary/recipe-cost";
 import { hourlyLaborRateFrom } from "@/lib/summary/use-cost-context";
+import { cacaoUtilizationPct } from "@/lib/summary/business-config";
 import { findProduct } from "@/lib/summary/product-match";
 import type { StoreState } from "@/lib/store/store";
 
@@ -39,6 +40,7 @@ export function buildDataSummary(state: StoreState): string {
     rawMaterials: state.rawMaterials,
     supplierPrices: state.supplierPrices,
     hourlyLaborRate: hourlyLaborRateFrom(state.businessSettings),
+    cacaoUtilization: cacaoUtilizationPct(state.businessSettings) / 100,
   };
 
   // Cost of goods for the month, so margin can be stated rather than guessed at.

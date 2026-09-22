@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { addProduct } from "@/lib/store/store";
+import { blankProduct } from "@/lib/store/blank-product";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -48,7 +49,7 @@ export function QuickEditForm({
   /** Overrides the default chat-bubble width — pass "max-w-none" when this fills a full-width page column. */
   className?: string;
 }) {
-  const { products, rawMaterials, categoryBudgets, events } = useStore();
+  const { products, rawMaterials, categoryBudgets, events, suppliers } = useStore();
   const [draft, setDraft] = useState<EntryDraft>(initial);
   // Buffered as text, not the parsed number, so typing a decimal point doesn't get
   // silently eaten (Number("12.") rounds to 12, so re-deriving the field from
@@ -71,21 +72,7 @@ export function QuickEditForm({
   function createProduct(name: string) {
     const trimmed = name.trim();
     if (!trimmed) return;
-    addProduct({
-      name: trimmed,
-      standardPrice: 0,
-      pricingMode: "manual",
-      marginPercent: 0,
-      marketPrice: 0,
-      friendPrice: 0,
-      wholesalePrice: 0,
-      stockQty: 0,
-      lowStockThreshold: 0,
-      batchYield: 0,
-      recipeIngredients: [],
-      recipeLabor: [],
-      recipeMisc: [],
-    });
+    addProduct(blankProduct(trimmed));
     set("sku", trimmed);
     setAddingProduct(false);
     setNewProductName("");
@@ -201,10 +188,28 @@ export function QuickEditForm({
         </p>
       )}
 
-      <div className="space-y-1">
-        <Label className="text-xs text-muted-foreground">Buyer</Label>
-        <CustomerNameInput value={draft.counterparty ?? null} onChange={(name) => set("counterparty", name)} />
-      </div>
+      {draft.type === "EXPENSE" ? (
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Paid to</Label>
+          <Input
+            className="h-9"
+            list="quick-edit-suppliers"
+            placeholder="Supplier or store"
+            value={draft.counterparty ?? ""}
+            onChange={(e) => set("counterparty", e.target.value || null)}
+          />
+          <datalist id="quick-edit-suppliers">
+            {suppliers.map((s) => (
+              <option key={s.id} value={s.name} />
+            ))}
+          </datalist>
+        </div>
+      ) : (
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Buyer</Label>
+          <CustomerNameInput value={draft.counterparty ?? null} onChange={(name) => set("counterparty", name)} />
+        </div>
+      )}
 
       {canTagEvent && eventOptions.length > 0 && (
         <div className="space-y-1">

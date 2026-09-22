@@ -1,21 +1,21 @@
-import { linearTrend } from "@/lib/summary/regression";
 import { resolveProductId } from "@/lib/summary/product-match";
 import type { Entry, Product } from "@/lib/store/types";
 
 /**
- * Demand forecasting from past sales.
+ * Demand forecasting from past sales: a moving average of the last few complete months.
  *
- * The method is deliberately conservative. With only a handful of months on record, a plain
- * least-squares line through three noisy points will happily predict a negative month or a
- * doubling — so a fitted trend is blended half-and-half with the recent average, which pulls
- * wild extrapolations back toward what actually happened. Below four months there isn't
- * enough signal to fit anything, and the forecast falls back to an average and says so.
+ * Next month is expected to sell what the recent months sold on average. It's simple on
+ * purpose — with a handful of months on record, fitting a trend line mostly fits the noise —
+ * and it's easy for the owner to check by hand against the Transactions list.
  *
- * The month in progress is never fitted on: it's partial by definition, and including it
+ * The month in progress is never averaged in: it's partial by definition, and including it
  * would drag every forecast down as a month begins.
  */
 
-export type ForecastMethod = "damped_trend" | "average" | "single_month" | "no_history";
+/** How many recent complete months the moving average spans. */
+export const MOVING_AVERAGE_MONTHS = 3;
+
+export type ForecastMethod = "moving_average" | "single_month" | "no_history";
 export type ForecastConfidence = "none" | "low" | "medium";
 
 export interface MonthlyDemandPoint {
@@ -40,8 +40,7 @@ export interface ProductForecast {
 }
 
 export const FORECAST_METHOD_LABELS: Record<ForecastMethod, string> = {
-  damped_trend: "trend of past months",
-  average: "average of past months",
+  moving_average: `${MOVING_AVERAGE_MONTHS}-month moving average`,
   single_month: "one month of sales",
   no_history: "no sales yet",
 };
@@ -101,24 +100,17 @@ export function monthlyDemand(productId: string, entries: Entry[], products: Pro
   return points;
 }
 
-/** Blends a fitted trend with the recent average so a short, noisy series can't run away. */
+/** Average of the most recent complete months (up to MOVING_AVERAGE_MONTHS). */
 function projectNextMonth(values: number[]): { qty: number; method: ForecastMethod } {
   if (values.length === 0) return { qty: 0, method: "no_history" };
   if (values.length === 1) return { qty: values[0], method: "single_month" };
-
-  const recent = values.slice(-3);
-  const recentAvg = recent.reduce((a, b) => a + b, 0) / recent.length;
-
-  if (values.length < 4) return { qty: recentAvg, method: "average" };
-
-  const { slope, points } = linearTrend(values);
-  const trendNext = points[points.length - 1] + slope;
-  return { qty: Math.max(0, (trendNext + recentAvg) / 2), method: "damped_trend" };
+  const recent = values.slice(-MOVING_AVERAGE_MONTHS);
+  return { qty: recent.reduce((a, b) => a + b, 0) / recent.length, method: "moving_average" };
 }
 
 function confidenceFor(monthsOfHistory: number): ForecastConfidence {
   if (monthsOfHistory === 0) return "none";
-  return monthsOfHistory >= 4 ? "medium" : "low";
+  return monthsOfHistory >= MOVING_AVERAGE_MONTHS ? "medium" : "low";
 }
 
 export function forecastProduct(product: Product, entries: Entry[], products: Product[], now = new Date()): ProductForecast {

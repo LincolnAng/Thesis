@@ -4,14 +4,16 @@
 // (--status-good green, --status-warning amber), which always mean money
 // in / money out and must never double as a category color. Hues alternate
 // warm/cool so adjacent donut segments and legend dots stay distinguishable
-// at a glance, rather than several near-identical browns in a row.
+// at a glance, rather than several near-identical browns in a row. Re-stepped
+// (same hues, same order) to pass the colorblind/contrast palette checks — the
+// earlier, more muted set read as gray and put sage and plum too close to tell apart.
 export const CHIP_COLORS = [
-  "#c9a06e", // tan / gold
-  "#7fa3ad", // dusty teal
-  "#b5654a", // terracotta
-  "#6b7fa3", // dusty blue
-  "#86946f", // sage
-  "#9b7fa3", // muted plum
+  "#7e5904", // ochre
+  "#39a1bb", // teal
+  "#a45859", // terracotta rose
+  "#6068bc", // dusty blue
+  "#879c54", // sage
+  "#b477c5", // plum
 ] as const;
 
 export function chipColor(index: number): string {

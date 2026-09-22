@@ -11,12 +11,13 @@ import { updateProduct } from "@/lib/store/store";
 import { useStore } from "@/lib/store/use-store";
 import { effectiveProductPrice, ingredientRowCost, productCostPerJar } from "@/lib/summary/recipe-cost";
 import { CostBreakdownChart } from "@/components/finance/cost-breakdown-chart";
+import { PricingMethodPicker } from "@/components/finance/pricing-method-picker";
 import { CostBreakdownLines } from "@/components/finance/cost-breakdown-lines";
 import { LaborEditor } from "@/components/finance/labor-editor";
 import { useViewMode } from "@/lib/summary/view-mode";
 import { useCostContext } from "@/lib/summary/use-cost-context";
 import { useNumericDraft } from "@/lib/use-numeric-draft";
-import type { PricingMode, Product, RawMaterialStock, RecipeExtraRow, RecipeIngredientRow } from "@/lib/store/types";
+import type { Product, RawMaterialStock, RecipeExtraRow, RecipeIngredientRow } from "@/lib/store/types";
 import { cn } from "@/lib/utils";
 
 function genRowId(prefix: string): string {
@@ -186,25 +187,7 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
   const standardProfit = effectivePrice - cost.costPerJar;
   const standardBelowCost = standardProfit < 0;
 
-  const marginField = useNumericDraft(product.marginPercent, (n) => updateProduct(product.id, { marginPercent: n }));
-  const standardPriceField = useNumericDraft(product.standardPrice, (n) => updateProduct(product.id, { standardPrice: n }));
-  const marketPriceField = useNumericDraft(product.marketPrice, (n) => updateProduct(product.id, { marketPrice: n }));
   const yieldField = useNumericDraft(product.batchYield, (n) => persist(ingredients, labor, misc, n));
-
-  function handleModeChange(nextMode: PricingMode) {
-    if (product.pricingMode === "cost_percent" && nextMode === "manual") {
-      // Snapshot the live cost-based price so switching back to manual doesn't revert to a stale number.
-      updateProduct(product.id, { pricingMode: "manual", standardPrice: Math.round(effectivePrice * 100) / 100 });
-      return;
-    }
-    if (nextMode === "competitive" && product.marketPrice === 0) {
-      // Seed the market-price field from whatever's currently effective, so switching
-      // to this mode never abruptly shows ₱0 before the owner has entered anything.
-      updateProduct(product.id, { pricingMode: "competitive", marketPrice: Math.round(effectivePrice * 100) / 100 });
-      return;
-    }
-    updateProduct(product.id, { pricingMode: nextMode });
-  }
 
   const otherTiers = [
     { label: "Friend rate", price: product.friendPrice, onChange: (n: number) => updateProduct(product.id, { friendPrice: n }) },
@@ -290,57 +273,9 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
         <CardTitle className="text-base">{product.name}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label className="text-xs font-semibold text-muted-foreground">Selling price</Label>
-            <select
-              value={product.pricingMode}
-              onChange={(e) => handleModeChange(e.target.value as PricingMode)}
-              className="h-7 w-full rounded-md border border-input bg-transparent px-1.5 text-xs text-muted-foreground"
-            >
-              <option value="manual">I&apos;ll set it myself</option>
-              <option value="cost_percent">Cost + margin %</option>
-              <option value="competitive">Match the market</option>
-              <option value="suggested" disabled>
-                Suggested for me — coming soon
-              </option>
-            </select>
-            {product.pricingMode === "cost_percent" ? (
-              <div className="space-y-1">
-                <div className="flex items-center gap-1.5">
-                  <Input
-                    type="number"
-                    value={marginField.value}
-                    onChange={(e) => marginField.onChange(e.target.value)}
-                    className="h-8 w-16 text-sm"
-                  />
-                  <span className="text-xs text-muted-foreground">% margin</span>
-                </div>
-                <p className="text-lg font-semibold text-foreground">{formatPeso(effectivePrice)}</p>
-                <p className="text-xs text-muted-foreground">
-                  {formatPeso(cost.costPerJar)} cost + {product.marginPercent}% margin
-                </p>
-              </div>
-            ) : product.pricingMode === "competitive" ? (
-              <div className="space-y-1">
-                <Input
-                  type="number"
-                  value={marketPriceField.value}
-                  onChange={(e) => marketPriceField.onChange(e.target.value)}
-                  className="h-9 text-lg font-semibold"
-                />
-                <p className="text-xs text-muted-foreground">what similar products sell for</p>
-              </div>
-            ) : (
-              <Input
-                type="number"
-                value={standardPriceField.value}
-                onChange={(e) => standardPriceField.onChange(e.target.value)}
-                className="h-9 text-lg font-semibold"
-              />
-            )}
-          </div>
-          <div className="space-y-1.5">
+        <div className="grid gap-4 min-[640px]:grid-cols-[1fr_auto]">
+          <PricingMethodPicker product={product} costPerJar={cost.costPerJar} effectivePrice={effectivePrice} />
+          <div className="space-y-1.5 min-[640px]:text-right">
             <Label className="text-xs font-semibold text-muted-foreground">Total cost</Label>
             <p className="text-lg font-semibold text-foreground">
               {formatPeso(cost.costPerJar)} <span className="text-xs font-normal text-muted-foreground">/jar</span>

@@ -17,6 +17,9 @@ export function EditRawMaterialDialog({ material, onClose }: { material: RawMate
   const perBatchField = useNumericDraft(material.perBatchQty ?? 0, (n) =>
     updateRawMaterial(material.id, { perBatchQty: n }),
   );
+  const reorderField = useNumericDraft(material.reorderPoint ?? 0, (n) =>
+    updateRawMaterial(material.id, { reorderPoint: n }),
+  );
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -50,6 +53,18 @@ export function EditRawMaterialDialog({ material, onClose }: { material: RawMate
               value={thresholdField.value}
               onChange={(e) => thresholdField.onChange(e.target.value)}
             />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Restock when it drops to ({material.unit})</Label>
+            <Input
+              type="number"
+              inputMode="decimal"
+              value={reorderField.value}
+              onChange={(e) => reorderField.onChange(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              A real threshold beats a projected run-out date until there&apos;s a few months of sales to project from.
+            </p>
           </div>
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Used per batch ({material.unit})</Label>
