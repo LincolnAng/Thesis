@@ -8,16 +8,33 @@ function spreadsheetId(): string {
   return id;
 }
 
+/** Waits before each retry of a request Sheets turned away for being over quota or briefly down. */
+const RETRY_DELAYS_MS = [1000, 2000, 4000];
+
+function isRetryable(status: number) {
+  return status === 429 || status === 500 || status === 503;
+}
+
 async function sheetsFetch(path: string, init?: RequestInit) {
   const token = await getSheetsAccessToken();
-  const res = await fetch(`${SHEETS_API_BASE}/${spreadsheetId()}${path}`, {
-    ...init,
-    headers: {
-      ...(init?.headers ?? {}),
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-  });
+  const send = () =>
+    fetch(`${SHEETS_API_BASE}/${spreadsheetId()}${path}`, {
+      ...init,
+      headers: {
+        ...(init?.headers ?? {}),
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+  // Sheets allows ~60 reads a minute for the whole app; several open tabs polling plus a
+  // burst of saves can go over for a few seconds. Waiting and retrying rides that out
+  // instead of failing the save.
+  let res = await send();
+  for (const delay of RETRY_DELAYS_MS) {
+    if (res.ok || !isRetryable(res.status)) break;
+    await new Promise((r) => setTimeout(r, delay));
+    res = await send();
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`sheets_api_error_${res.status}: ${text.slice(0, 300)}`);

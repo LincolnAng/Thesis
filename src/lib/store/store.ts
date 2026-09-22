@@ -200,25 +200,46 @@ function setSyncFailing(failing: boolean) {
  * failure now flips visible sync-status (see `SyncErrorBanner`) instead of
  * disappearing silently. Ops on the same collection are serialized (see
  * `enqueueForCollection`) so a fast add-then-edit/delete can't race. */
+/** Saves still on their way to Sheets. While any are, the sync poll holds off — otherwise it
+ * would reload the sheet's older copy over a change that simply hasn't landed yet. */
+let pendingWrites = 0;
+
+/** Waits before each retry of a save that failed (usually Sheets being briefly over quota). */
+const SAVE_RETRY_DELAYS_MS = [3_000, 10_000, 30_000];
+
 async function mirrorOp(
   collection: string,
   op: "append" | "update" | "delete" | "migrate",
   payload: { id?: string; item?: unknown; items?: unknown[] },
 ): Promise<void> {
-  await enqueueForCollection(collection, async () => {
-    try {
-      const res = await fetch("/api/business-data", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ collection, op, ...payload }),
-      });
-      const json = await res.json();
-      if (!json.success) throw new Error(json.reason ?? json.detail ?? "sync failed");
-      setSyncFailing(false);
-    } catch {
-      setSyncFailing(true);
-    }
-  });
+  pendingWrites += 1;
+  try {
+    await enqueueForCollection(collection, async () => {
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const res = await fetch("/api/business-data", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ collection, op, ...payload }),
+          });
+          const json = await res.json();
+          if (!json.success) throw new Error(json.reason ?? json.detail ?? "sync failed");
+          setSyncFailing(false);
+          return;
+        } catch {
+          // A 400 (bad request) won't succeed on retry, but those are programming errors;
+          // quota and network failures are the common case and do recover.
+          if (attempt >= SAVE_RETRY_DELAYS_MS.length) {
+            setSyncFailing(true);
+            return;
+          }
+          await new Promise((r) => setTimeout(r, SAVE_RETRY_DELAYS_MS[attempt]));
+        }
+      }
+    });
+  } finally {
+    pendingWrites -= 1;
+  }
 }
 
 /** Pushes whatever's currently local up to Sheets exactly once, the first time the
@@ -408,7 +429,7 @@ function startSyncPolling() {
   if (typeof window === "undefined" || pollTimer) return;
 
   function tick() {
-    if (document.visibilityState === "visible") void loadAllFromServer();
+    if (document.visibilityState === "visible" && pendingWrites === 0) void loadAllFromServer();
   }
 
   pollTimer = setInterval(tick, SYNC_POLL_INTERVAL_MS);

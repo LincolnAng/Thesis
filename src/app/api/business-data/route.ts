@@ -120,6 +120,8 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ success: true });
   } catch (err) {
+    // Logged so a failed save shows up in the server log, not just as a silent 502.
+    console.error(`[business-data] ${body.op} ${body.collection} failed:`, err);
     return NextResponse.json(
       { success: false, detail: err instanceof Error ? err.message : String(err) },
       { status: 502 },

@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 /**
  * A number field bound to a stored setting. While focused it keeps the owner's raw typing
  * (so "12." isn't eaten); otherwise it shows the stored value, so it updates when settings
- * finish loading from Sheets after the field first appears.
+ * finish loading from Sheets after the field first appears. Saves on blur or Enter.
  */
 export function SettingNumberInput({
   value,
@@ -27,11 +27,14 @@ export function SettingNumberInput({
       placeholder={placeholder}
       value={draft ?? (value ? String(value) : "")}
       onFocus={() => setDraft(value ? String(value) : "")}
-      onBlur={() => setDraft(null)}
-      onChange={(e) => {
-        setDraft(e.target.value);
-        onCommit(Number(e.target.value) || 0);
+      // Saves once, when the owner leaves the field — not on every keystroke, which sent a
+      // write to Sheets per digit and ran the app into Sheets' request quota.
+      onBlur={() => {
+        if (draft !== null && (Number(draft) || 0) !== value) onCommit(Number(draft) || 0);
+        setDraft(null);
       }}
+      onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+      onChange={(e) => setDraft(e.target.value)}
     />
   );
 }
