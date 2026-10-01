@@ -161,8 +161,18 @@ export async function POST(req: NextRequest) {
   const result = await callClaude({ system, messages, maxTokens: 600, apiKey, model });
 
   if (!result.ok) {
+    // The caller only ever sees "ai_error", which is all the owner can act on — but without
+    // this line a wrong model name, an expired key and a timeout are indistinguishable to
+    // anyone trying to fix it.
+    console.error(`[assistant] call failed: ${result.error ?? "unknown"}`);
     return NextResponse.json(
-      { success: false, reason: result.error === "missing_api_key" ? "missing_api_key" : "ai_error" },
+      {
+        success: false,
+        reason: result.error === "missing_api_key" ? "missing_api_key" : "ai_error",
+        // Passed through so Settings can show the owner the real reason — "invalid key",
+        // "not scoped to a workspace", "timed out" are all fixable, but only if seen.
+        detail: result.error ?? null,
+      },
       { status: 200 },
     );
   }

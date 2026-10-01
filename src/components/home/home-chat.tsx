@@ -164,6 +164,29 @@ export function HomeChat() {
       return;
     }
 
+    if (outcome.status === "unreachable") {
+      // Deliberately not answered from the offline keyword matcher: a confident-sounding
+      // answer when the assistant never ran is the thing that reads as the app making
+      // things up.
+      push({
+        id: genId(),
+        role: "assistant",
+        kind: "text",
+        text: "I couldn't reach the AI just now, so I won't guess at an answer. Check the API key under Settings → AI assistant. You can still record this yourself below.",
+        retryText: rawText,
+        createdAt: nowIso(),
+      });
+      push({
+        id: genId(),
+        role: "assistant",
+        kind: "quick-edit",
+        entryId: null,
+        draft: blankDraft(rawText),
+        createdAt: nowIso(),
+      });
+      return;
+    }
+
     if (outcome.status === "failed") {
       push({
         id: genId(),

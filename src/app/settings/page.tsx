@@ -20,6 +20,26 @@ import { Page, PageTabs } from "@/components/layout/page";
 import { SimpleSettings } from "@/components/simple/simple-settings";
 import { useViewMode } from "@/lib/summary/view-mode";
 
+/** Turns Anthropic's wording into something the owner can act on. */
+function readableAiError(detail: unknown): string {
+  const text = typeof detail === "string" ? detail : "";
+  if (text.includes("not scoped to a workspace")) {
+    return "This key belongs to the whole organization, not to a workspace. In the Anthropic Console, open a workspace and create the key there, then paste that one.";
+  }
+  if (text.includes("authentication_error") || text.includes("invalid x-api-key")) {
+    return "The key was rejected — check it was copied in full, and that it hasn't been revoked.";
+  }
+  if (text.includes("credit") || text.includes("billing")) {
+    return "The key works, but the account is out of credit.";
+  }
+  if (text.includes("not_found_error") || text.includes("model")) {
+    return "That model name isn't available to this key. Clear the model override under Advanced.";
+  }
+  if (text.includes("rate_limit")) return "Too many requests just now — wait a moment and test again.";
+  if (text.includes("timed out")) return "The assistant didn't answer in time. Try again.";
+  return text ? `The assistant refused the request: ${text.slice(0, 160)}` : "The assistant couldn't be reached.";
+}
+
 const LANGUAGE_LABELS: Record<BotLanguage, string> = {
   english: "English",
   filipino: "Filipino",
@@ -48,6 +68,8 @@ export default function SettingsPage() {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [languageSaving, setLanguageSaving] = useState(false);
   const [backupMessage, setBackupMessage] = useState<string | null>(null);
+  const [keyTest, setKeyTest] = useState<{ ok: boolean; message: string } | null>(null);
+  const [testing, setTesting] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [tab, setTab] = useState<"general" | "people" | "ai" | "sheet">("general");
 
@@ -160,6 +182,35 @@ export default function SettingsPage() {
       setSaveMessage("Couldn't reach the server — check your connection and try again.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  /**
+   * Sends one real message to the assistant and reports what came back. A key can be saved,
+   * look right, and still be rejected — wrong workspace, revoked, out of credit — and until
+   * this existed the only symptom was the chat quietly declining to answer.
+   */
+  async function testKey() {
+    setTesting(true);
+    setKeyTest(null);
+    try {
+      const res = await fetch("/api/assistant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: "Say OK." }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setKeyTest({ ok: true, message: "Working — the assistant answered." });
+      } else if (json.reason === "missing_api_key") {
+        setKeyTest({ ok: false, message: "No key is saved on the server yet." });
+      } else {
+        setKeyTest({ ok: false, message: readableAiError(json.detail) });
+      }
+    } catch {
+      setKeyTest({ ok: false, message: "Couldn't reach the server to test it." });
+    } finally {
+      setTesting(false);
     }
   }
 
@@ -337,6 +388,17 @@ export default function SettingsPage() {
           )}
 
           {saveMessage && <p className="text-xs text-muted-foreground">{saveMessage}</p>}
+
+          <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
+            <Button size="sm" variant="secondary" disabled={testing} onClick={() => void testKey()}>
+              {testing ? "Testing…" : "Test the key"}
+            </Button>
+            {keyTest && (
+              <span className={cn("text-xs", keyTest.ok ? "text-[var(--status-good)]" : "text-[var(--status-critical)]")}>
+                {keyTest.message}
+              </span>
+            )}
+          </div>
 
           <Button
             size="sm"
