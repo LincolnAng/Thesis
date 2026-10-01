@@ -1,61 +1,51 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { Box, Receipt, TrendingUp, TriangleAlert, Users, Wallet, type LucideIcon } from "lucide-react";
+import { useState } from "react";
+import { Box, TrendingUp, TriangleAlert, Users, type LucideIcon } from "lucide-react";
 import { ChatComposer } from "@/components/home/chat-composer";
+import { QuickLog } from "@/components/home/quick-log";
 import { useStore } from "@/lib/store/use-store";
 import { ownerName } from "@/lib/summary/business-config";
+import { useViewMode } from "@/lib/summary/view-mode";
 
-interface Prompt {
+interface Question {
   icon: LucideIcon;
   label: string;
   text: string;
-  /** "send" asks right away; "fill" puts an example in the box to edit first — a sale
-   * shouldn't be logged from sample numbers the owner never actually said. */
-  mode: "send" | "fill";
 }
 
 /**
- * The start screen: a greeting by name, one big message box, and a few prompts to tap.
- * Used by Home and by an empty Ask AI conversation, so starting fresh looks the same
- * wherever you are.
+ * The start screen: a greeting by name, one big message box, buttons for logging what
+ * happened, and a few questions to tap.
+ *
+ * Logging lives in {@link QuickLog} as a real form rather than as example sentences pasted
+ * into the message box — typing over a sample sale is slower than filling in the fields,
+ * and it only ever helped the first time.
  */
 export function ChatLanding({ onSubmit, disabled }: { onSubmit: (text: string) => void; disabled?: boolean }) {
-  const { businessSettings, products } = useStore();
+  const { businessSettings } = useStore();
   const [value, setValue] = useState("");
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   const name = ownerName(businessSettings);
-  const product = products[0]?.name ?? "Classic Cocoa Spread";
+  const [mode] = useViewMode();
+  const simple = mode === "simple";
 
-  const prompts: Prompt[] = [
-    { icon: Receipt, label: "Log a sale", text: `Sold 10 jars of ${product} to Aling Nena, 1,800`, mode: "fill" },
-    { icon: Wallet, label: "Log an expense", text: "Bought 5 kg cocoa beans, 450", mode: "fill" },
-    { icon: Box, label: "Made a batch", text: `Made a batch of ${product}`, mode: "fill" },
-    { icon: TrendingUp, label: "How am I doing?", text: "How much did I make this month?", mode: "send" },
-    { icon: TriangleAlert, label: "What's running low?", text: "What's running low on stock?", mode: "send" },
-    { icon: Users, label: "Top customers", text: "Who are my top customers?", mode: "send" },
-  ];
+  const questions: Question[] = simple
+    ? [
+        { icon: TrendingUp, label: "How am I doing?", text: "How much did I make this month?" },
+        { icon: TriangleAlert, label: "What's running low?", text: "What's running low on stock?" },
+      ]
+    : [
+        { icon: TrendingUp, label: "How am I doing?", text: "How much did I make this month?" },
+        { icon: TriangleAlert, label: "What's running low?", text: "What's running low on stock?" },
+        { icon: Users, label: "Top customers", text: "Who are my top customers?" },
+        { icon: Box, label: "What should I make next?", text: "What should I make next, and how much?" },
+      ];
 
   function submit(text: string) {
     const trimmed = text.trim();
     if (!trimmed || disabled) return;
     onSubmit(trimmed);
     setValue("");
-  }
-
-  function pick(prompt: Prompt) {
-    if (prompt.mode === "send") {
-      submit(prompt.text);
-      return;
-    }
-    setValue(prompt.text);
-    // Focus and put the caret at the end, so the owner can change the numbers straight away.
-    requestAnimationFrame(() => {
-      const el = inputRef.current;
-      if (!el) return;
-      el.focus();
-      el.setSelectionRange(el.value.length, el.value.length);
-    });
   }
 
   return (
@@ -67,7 +57,6 @@ export function ChatLanding({ onSubmit, disabled }: { onSubmit: (text: string) =
       <p className="mb-8 text-base text-muted-foreground">What happened in the business today?</p>
 
       <ChatComposer
-        ref={inputRef}
         value={value}
         onChange={setValue}
         onSubmit={() => submit(value)}
@@ -76,18 +65,23 @@ export function ChatLanding({ onSubmit, disabled }: { onSubmit: (text: string) =
         className="w-full"
       />
 
-      <div className="mt-5 flex flex-wrap justify-center gap-2">
-        {prompts.map((p) => (
+      <div className="mt-5 w-full">
+        <QuickLog />
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+        <span className="text-[13px] text-muted-foreground">Or ask:</span>
+        {questions.map((q) => (
           <button
-            key={p.label}
+            key={q.label}
             type="button"
-            disabled={disabled && p.mode === "send"}
-            onClick={() => pick(p)}
-            title={p.text}
+            disabled={disabled}
+            onClick={() => submit(q.text)}
+            title={q.text}
             className="flex items-center gap-2 rounded-full border border-line/15 bg-white px-3.5 py-2 text-[13px] text-foreground transition-colors hover:bg-secondary disabled:opacity-50"
           >
-            <p.icon className="h-4 w-4 text-muted-foreground" />
-            {p.label}
+            <q.icon className="h-4 w-4 text-muted-foreground" />
+            {q.label}
           </button>
         ))}
       </div>

@@ -24,6 +24,7 @@ const PRODUCT_HEADER = [
   "marketPrice",
   "minutesPerBatch",
   "laborCostOverride",
+  "unit",
 ];
 
 function productToRow(p: ProductRow): string[] {
@@ -42,6 +43,7 @@ function productToRow(p: ProductRow): string[] {
     String(p.marketPrice),
     p.minutesPerBatch == null ? "" : String(p.minutesPerBatch),
     p.laborCostOverride == null ? "" : String(p.laborCostOverride),
+    p.unit ?? "",
   ];
 }
 
@@ -61,6 +63,7 @@ function productFromRow(row: string[]): ProductRow | null {
     marketPrice,
     minutesPerBatch,
     laborCostOverride,
+    unit,
   ] = row;
   if (!id) return null;
   return {
@@ -80,6 +83,7 @@ function productFromRow(row: string[]): ProductRow | null {
     // Empty means "no override" — distinct from an override of zero, which is a real
     // answer (a product that costs no labor) and must survive a round trip.
     laborCostOverride: laborCostOverride === "" || laborCostOverride === undefined ? null : Number(laborCostOverride),
+    unit: unit || undefined,
   };
 }
 

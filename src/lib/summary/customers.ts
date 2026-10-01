@@ -1,4 +1,5 @@
 import type { Entry } from "@/lib/store/types";
+import { nameKey, nameScore } from "@/lib/summary/name-match";
 
 /**
  * Customers aren't a separate thing the owner maintains — they're derived from the buyer
@@ -49,9 +50,7 @@ export interface DerivedCustomer {
 
 /** Lowercased, whitespace-collapsed — capitalization or a double space never splits one
  * customer into two. */
-export function customerKey(name: string | null | undefined): string {
-  return (name ?? "").trim().toLowerCase().replace(/\s+/g, " ");
-}
+export const customerKey = nameKey;
 
 /** Higher is tidier. Used only to break ties between equally-common spellings of one name. */
 function tidinessScore(spelling: string): number {
@@ -133,22 +132,6 @@ export function entriesForCustomer(key: string, entries: Entry[]): Entry[] {
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 }
 
-/** Small edit distance, capped — enough to catch "Aling Nena" vs "Aling Nina". */
-function editDistance(a: string, b: string): number {
-  if (Math.abs(a.length - b.length) > 3) return 99;
-  const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
-  for (let i = 1; i <= a.length; i++) {
-    let diagonal = prev[0];
-    prev[0] = i;
-    for (let j = 1; j <= b.length; j++) {
-      const temp = prev[j];
-      prev[j] = Math.min(prev[j] + 1, prev[j - 1] + 1, diagonal + (a[i - 1] === b[j - 1] ? 0 : 1));
-      diagonal = temp;
-    }
-  }
-  return prev[b.length];
-}
-
 /**
  * Existing customers whose name resembles what's being typed, best match first — the guard
  * against creating "Aling Nina" when "Aling Nena" already exists. An empty query returns the
@@ -159,20 +142,7 @@ export function suggestCustomers(query: string, customers: DerivedCustomer[], li
   if (!q) return customers.slice(0, limit);
 
   return customers
-    .map((customer) => {
-      const key = customer.key;
-      let score = Infinity;
-      if (key === q) score = 0;
-      else if (key.startsWith(q)) score = 1;
-      else if (key.includes(q)) score = 2;
-      else {
-        const distance = editDistance(q, key);
-        // Allow roughly one typo per 4 characters, so short names don't match everything.
-        if (distance <= Math.max(1, Math.floor(q.length / 4))) score = 3 + distance;
-        else if (key.split(" ").some((word) => word.startsWith(q))) score = 6;
-      }
-      return { customer, score };
-    })
+    .map((customer) => ({ customer, score: nameScore(q, customer.key) }))
     .filter((r) => r.score !== Infinity)
     .sort((a, b) => a.score - b.score || b.customer.totalSpent - a.customer.totalSpent)
     .slice(0, limit)

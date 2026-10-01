@@ -3,20 +3,19 @@
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowDown, ArrowRight, ArrowUp } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, ChevronLeft, ChevronRight } from "lucide-react";
 import { Page } from "@/components/layout/page";
+import { SimpleMoney } from "@/components/simple/simple-money";
+import { useViewMode } from "@/lib/summary/view-mode";
 import { BudgetBreakdownChart } from "@/components/summary/budget-breakdown-chart";
 import { CategoryBudgetEditor } from "@/components/summary/category-budget-editor";
-import { QuickEditDialog } from "@/components/home/quick-edit-dialog";
+import { TransactionGrid } from "@/components/transactions/transaction-grid";
 import { MissingProductBanner } from "@/components/sales/missing-product-banner";
 import { SettingNumberInput } from "@/components/ui/setting-number-input";
 import { useStore } from "@/lib/store/use-store";
-import { addEntry, deleteEntry, replaceEntry } from "@/lib/store/store";
-import { blankEntryDraft } from "@/lib/store/blank-draft";
-import { entryToDraft } from "@/lib/home/describe-entry";
 import { computeExpensesSummary } from "@/lib/summary/expenses-summary";
 import { salesTarget, setSalesTarget } from "@/lib/summary/business-config";
-import { EXPENSE_CATEGORY_LABELS, formatNumber, formatPeso } from "@/lib/format";
+import { formatPeso } from "@/lib/format";
 import type { Entry } from "@/lib/store/types";
 
 type Kind = "all" | "SALE" | "EXPENSE";
@@ -34,10 +33,6 @@ function monthOf(e: Entry): string {
 function monthLabel(key: string, style: "long" | "short" = "long") {
   const [y, m] = key.split("-").map(Number);
   return new Date(y, m - 1, 1).toLocaleDateString("en-US", style === "long" ? { month: "long", year: "numeric" } : { month: "short" });
-}
-
-function shortDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 function totals(list: Entry[]) {
@@ -80,6 +75,7 @@ function StatCard({
 
 function TransactionsPageInner() {
   const { entries, categoryBudgets, businessSettings } = useStore();
+  const [viewMode] = useViewMode();
   const searchParams = useSearchParams();
   // Arriving from a supplier's "See spending" link: show only what was paid to them.
   const supplierFilter = searchParams.get("supplier");
@@ -87,7 +83,6 @@ function TransactionsPageInner() {
   const [kind, setKind] = useState<Kind>(supplierFilter ? "EXPENSE" : "all");
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
-  const [editing, setEditing] = useState<Entry | null>(null);
   const [showBudget, setShowBudget] = useState(false);
   const [editBudgets, setEditBudgets] = useState(false);
 
@@ -99,6 +94,8 @@ function TransactionsPageInner() {
     return [...new Set([current, ...money.map(monthOf)])].sort().reverse();
   }, [money]);
   const [period, setPeriod] = useState<string>(() => months[0]);
+  // Where the shown month sits in the list (newest first), so the arrows know what's next.
+  const monthIndex = months.indexOf(period);
 
   const target = salesTarget(businessSettings);
   const expenses = useMemo(() => computeExpensesSummary(entries, categoryBudgets), [entries, categoryBudgets]);
@@ -106,7 +103,6 @@ function TransactionsPageInner() {
 
   const periodRows = period === "all" ? money : money.filter((e) => monthOf(e) === period);
   const periodTotals = totals(periodRows);
-  const allTime = totals(money);
   const periodName = period === "all" ? "all time" : monthLabel(period);
   const monthsInPeriod = period === "all" ? months.length : 1;
   const periodTarget = target * monthsInPeriod;
@@ -121,7 +117,13 @@ function TransactionsPageInner() {
       .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
   }, [periodRows, kind, search, supplierFilter]);
 
-  const grid = "grid-cols-[76px_78px_minmax(0,1.3fr)_96px_minmax(0,1fr)_104px]";
+  if (viewMode === "simple") {
+    return (
+      <Page title="Transactions" simpleTitle="Money">
+        <SimpleMoney />
+      </Page>
+    );
+  }
 
   return (
     <Page
@@ -135,7 +137,11 @@ function TransactionsPageInner() {
           >
             {showBudget ? "Hide target & budget" : "Target & budget"}
           </button>
-          <button type="button" onClick={() => setAddOpen(true)} className="rounded-[10px] bg-cacao px-[18px] py-2.5 text-[13px] font-semibold text-ivory">
+          <button
+            type="button"
+            onClick={() => setAddOpen(true)}
+            className="rounded-[10px] bg-cacao px-[18px] py-2.5 text-[13px] font-semibold text-ivory"
+          >
             + Add transaction
           </button>
         </>
@@ -144,19 +150,52 @@ function TransactionsPageInner() {
       <div className="flex flex-col gap-4">
         <MissingProductBanner sales={entries.filter((e) => e.type === "SALE")} />
 
-        <div className="flex flex-wrap gap-1.5">
-          {[...months, "all"].map((m) => (
+        {/* One month at a time with arrows, rather than a pill per month — the pill row grew
+            by one every month and would have taken the whole header over within a year. */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center rounded-full border border-line/15 bg-white">
             <button
-              key={m}
               type="button"
-              onClick={() => setPeriod(m)}
-              className={`rounded-full border px-3.5 py-1.5 text-[13px] ${
-                period === m ? "border-cacao bg-cacao font-semibold text-ivory" : "border-line/15 bg-white font-medium text-muted-foreground"
-              }`}
+              aria-label="Earlier month"
+              disabled={period === "all" || monthIndex >= months.length - 1}
+              onClick={() => setPeriod(months[monthIndex + 1])}
+              className="flex h-9 w-9 items-center justify-center rounded-l-full text-muted-foreground transition-colors hover:bg-secondary disabled:opacity-30"
             >
-              {m === "all" ? "All time" : monthLabel(m)}
+              <ChevronLeft className="h-4 w-4" />
             </button>
-          ))}
+            <span className="min-w-[140px] px-1 text-center text-[13px] font-semibold">
+              {period === "all" ? "All time" : monthLabel(period)}
+            </span>
+            <button
+              type="button"
+              aria-label="Later month"
+              disabled={period === "all" || monthIndex <= 0}
+              onClick={() => setPeriod(months[monthIndex - 1])}
+              className="flex h-9 w-9 items-center justify-center rounded-r-full text-muted-foreground transition-colors hover:bg-secondary disabled:opacity-30"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setPeriod(period === "all" ? months[0] : "all")}
+            className={`rounded-full border px-3.5 py-1.5 text-[13px] ${
+              period === "all"
+                ? "border-cacao bg-cacao font-semibold text-ivory"
+                : "border-line/15 bg-white font-medium text-muted-foreground"
+            }`}
+          >
+            All time
+          </button>
+          {period !== "all" && period !== months[0] && (
+            <button
+              type="button"
+              onClick={() => setPeriod(months[0])}
+              className="text-[13px] font-medium text-muted-foreground underline decoration-dotted"
+            >
+              Back to {monthLabel(months[0], "short")}
+            </button>
+          )}
         </div>
 
         <div className="grid grid-cols-1 gap-4 min-[900px]:grid-cols-3">
@@ -205,8 +244,7 @@ function TransactionsPageInner() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 items-start gap-4 min-[1200px]:grid-cols-[1fr_300px]">
-          <div className="flex flex-col overflow-hidden rounded-2xl border border-line/15 bg-white">
+        <div className="flex flex-col overflow-hidden rounded-2xl border border-line/15 bg-white">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line/10 px-[18px] py-3.5">
               <div className="text-sm font-semibold">
                 Transactions · <span className="font-medium text-muted-foreground">{period === "all" ? "All time" : monthLabel(period)}</span>
@@ -248,131 +286,23 @@ function TransactionsPageInner() {
               </div>
             )}
 
-            <div className="overflow-x-auto">
-              <div className="min-w-[680px]">
-                <div className={`grid ${grid} border-b border-line/15 bg-secondary`}>
-                  {["Date", "Type", "Item", "Qty", "Customer / Supplier", "Amount"].map((h) => (
-                    <div
-                      key={h}
-                      className={`px-3 py-2.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground ${h === "Qty" || h === "Amount" ? "text-right" : ""}`}
-                    >
-                      {h}
-                    </div>
-                  ))}
-                </div>
-                {rows.length === 0 && <div className="px-4 py-10 text-center text-sm text-muted-foreground">No transactions match.</div>}
-                {rows.map((e, i) => (
-                  <button
-                    key={e.id}
-                    type="button"
-                    onClick={() => setEditing(e)}
-                    title="Click to edit"
-                    className={`grid w-full ${grid} items-center border-b border-line/5 text-left text-[13px] transition hover:bg-[#F0EEE6] ${i % 2 === 0 ? "bg-white" : "bg-ivory"}`}
-                  >
-                    <div className="px-3 py-2.5 text-muted-foreground">{shortDate(e.timestamp)}</div>
-                    <div className="px-3 py-2.5">
-                      <span className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${e.type === "SALE" ? "bg-success/10 text-success" : "bg-danger/10 text-danger"}`}>
-                        {e.type === "SALE" ? "Sale" : "Expense"}
-                      </span>
-                    </div>
-                    <div className="min-w-0 px-3 py-2.5">
-                      <div className={`truncate-line ${e.sku ? "" : "text-muted-foreground"}`}>{describe(e)}</div>
-                      {e.type === "EXPENSE" && e.category && (
-                        <div className="text-[11px] text-muted-foreground">{EXPENSE_CATEGORY_LABELS[e.category] ?? e.category}</div>
-                      )}
-                    </div>
-                    <div className="px-3 py-2.5 text-right tabular-nums">
-                      {e.quantity != null ? (
-                        <>
-                          <span className="font-semibold">{formatNumber(e.quantity)}</span>
-                          {e.unit && <span className="text-muted-foreground"> {e.unit}</span>}
-                        </>
-                      ) : (
-                        <span className="text-faint">—</span>
-                      )}
-                    </div>
-                    <div className="truncate-line px-3 py-2.5">{e.counterparty ?? <span className="text-faint">—</span>}</div>
-                    <div className={`px-3 py-2.5 text-right font-semibold ${e.type === "SALE" ? "text-success" : "text-danger"}`}>{formatPeso(e.amount)}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
+            <TransactionGrid
+              rows={rows}
+              adding={addOpen}
+              onStartAdding={() => setAddOpen(true)}
+              onDoneAdding={() => setAddOpen(false)}
+              defaultType={kind === "EXPENSE" ? "EXPENSE" : "SALE"}
+            />
 
             <div className="flex justify-between border-t border-line/10 px-[18px] py-2.5 text-xs text-faint">
-              <span>Click a row to edit or delete it</span>
+              <span>Edit any cell straight in the table — it saves when you move on</span>
               <span>
                 Showing {rows.length} of {periodRows.length} rows
               </span>
             </div>
-          </div>
-
-          <div className="flex flex-col gap-4 rounded-2xl border border-line/15 bg-white p-5">
-            <div>
-              <div className="text-sm font-semibold">All-time summary</div>
-              <div className="mt-0.5 text-xs text-muted-foreground">
-                {months.length} month{months.length === 1 ? "" : "s"} · {money.length} transactions
-              </div>
-            </div>
-            <div className="flex flex-col gap-2 text-[13px]">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Money in</span>
-                <span className="font-semibold text-success">{formatPeso(allTime.totalIn)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Money out</span>
-                <span className="font-semibold text-danger">{formatPeso(allTime.totalOut)}</span>
-              </div>
-              <div className="flex justify-between border-t border-line/10 pt-2">
-                <span className="font-semibold">You earned</span>
-                <span className={`font-bold ${allTime.earned >= 0 ? "text-cacao" : "text-danger"}`}>{formatPeso(allTime.earned)}</span>
-              </div>
-            </div>
-            <div>
-              <div className="mb-2 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">By month</div>
-              <div className="flex flex-col gap-1">
-                {months.map((m) => {
-                  const t = totals(money.filter((e) => monthOf(e) === m));
-                  return (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => setPeriod(m)}
-                      className={`grid grid-cols-[40px_1fr_auto] items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12px] ${period === m ? "bg-cacao/10" : "hover:bg-secondary"}`}
-                    >
-                      <span className="font-semibold">{monthLabel(m, "short")}</span>
-                      <span className="truncate text-muted-foreground">
-                        <span className="text-success">{formatPeso(t.totalIn)}</span> · <span className="text-danger">{formatPeso(t.totalOut)}</span>
-                      </span>
-                      <span className={`font-bold ${t.earned >= 0 ? "text-cacao" : "text-danger"}`}>{formatPeso(t.earned)}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 
-      <QuickEditDialog
-        open={addOpen}
-        onOpenChange={setAddOpen}
-        title="Add transaction"
-        initial={blankEntryDraft(kind === "EXPENSE" ? "EXPENSE" : "SALE")}
-        allowedTypes={["SALE", "EXPENSE"]}
-        onSave={(draft) => addEntry(draft)}
-      />
-
-      {editing && (
-        <QuickEditDialog
-          open
-          onOpenChange={(o) => !o && setEditing(null)}
-          title={editing.type === "SALE" ? "Edit sale" : "Edit expense"}
-          initial={entryToDraft(editing)}
-          lockType
-          onSave={(draft) => replaceEntry(editing.id, draft)}
-          onDelete={() => deleteEntry(editing.id)}
-        />
-      )}
     </Page>
   );
 }

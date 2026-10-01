@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from "react";
 
 /** Home sections the owner can hide. Each one is remembered separately, in this browser only. */
-export type HomeSection = "glance" | "overview";
+export type HomeSection = "today" | "glance" | "overview";
 
 const STORAGE_KEY = "mang-kikos-cocoa-home-hidden-v1";
 const EMPTY: Record<string, boolean> = {};

@@ -10,6 +10,7 @@ import { effectiveProductPrice, productCostPerJar } from "@/lib/summary/recipe-c
 import { setProductPhoto, shrinkImage, useProductPhotos } from "@/lib/products/photos";
 import { formatPeso } from "@/lib/format";
 import type { Product } from "@/lib/store/types";
+import { useViewMode } from "@/lib/summary/view-mode";
 
 /** Shown behind the icon when a product has no photo yet, cycling by position. */
 const GRADIENTS = [
@@ -84,6 +85,8 @@ export default function ProductsPage() {
   const { products } = useStore();
   const costCtx = useCostContext();
   const photos = useProductPhotos();
+  const [viewMode] = useViewMode();
+  const simple = viewMode === "simple";
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const editing = products.find((p) => p.id === editingId) ?? null;
@@ -114,13 +117,31 @@ export default function ProductsPage() {
                   <span className="text-sm font-semibold">{p.name}</span>
                   <span className="shrink-0 text-[11px] font-semibold text-faint">Edit</span>
                 </div>
-                <div className="flex w-full justify-between text-[13px]">
-                  <span className="font-bold">{formatPeso(price)}</span>
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${low ? "bg-danger/10 text-danger" : "bg-success/10 text-success"}`}>
-                    {p.stockQty} jars{low ? " left" : ""}
-                  </span>
-                </div>
-                <div className={`text-xs font-semibold ${marginPct >= 15 ? "text-success" : "text-danger"}`}>{Math.round(marginPct)}% margin</div>
+                {simple ? (
+                  <div className="flex flex-col gap-1 text-[13px]">
+                    <span>
+                      Sells for <span className="font-bold">{formatPeso(price)}</span>
+                    </span>
+                    <span className={low ? "font-semibold text-danger" : "text-muted-foreground"}>
+                      {p.stockQty} jars on the shelf{low ? " — running low" : ""}
+                    </span>
+                    <span className={`font-semibold ${price - cost.costPerJar > 0 ? "text-success" : "text-danger"}`}>
+                      {price - cost.costPerJar > 0
+                        ? `You keep ${formatPeso(Math.round((price - cost.costPerJar) * 100) / 100)} a jar`
+                        : "It costs more to make than it sells for"}
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex w-full justify-between text-[13px]">
+                      <span className="font-bold">{formatPeso(price)}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${low ? "bg-danger/10 text-danger" : "bg-success/10 text-success"}`}>
+                        {p.stockQty} jars{low ? " left" : ""}
+                      </span>
+                    </div>
+                    <div className={`text-xs font-semibold ${marginPct >= 15 ? "text-success" : "text-danger"}`}>{Math.round(marginPct)}% margin</div>
+                  </>
+                )}
               </button>
             </div>
           );

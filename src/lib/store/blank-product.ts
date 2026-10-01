@@ -14,6 +14,7 @@ export function blankProduct(name: string, overrides: Partial<Omit<Product, "id"
     stockQty: 0,
     lowStockThreshold: 0,
     batchYield: 0,
+    unit: "jars",
     recipeIngredients: [],
     recipeLabor: [],
     recipeMisc: [],

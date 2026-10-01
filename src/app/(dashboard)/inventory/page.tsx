@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { Page, PageTabs } from "@/components/layout/page";
+import { SimpleStock } from "@/components/simple/simple-stock";
+import { useViewMode } from "@/lib/summary/view-mode";
 import { EventPlanDialog } from "@/components/inventory/event-plan-dialog";
 import { PlanSettingsDialog } from "@/components/inventory/plan-settings-dialog";
 import { AddStockDialog } from "@/components/stock/add-stock-dialog";
@@ -196,6 +198,8 @@ function StockVsForecast({
 
 export default function InventoryPage() {
   const { products, rawMaterials, entries, machines, events, businessSettings } = useStore();
+  const [viewMode] = useViewMode();
+  const simple = viewMode === "simple";
   const [strategy, setStrategy] = useState<ScheduleStrategy>("fastest");
   const [tab, setTab] = useState<"plan" | "stock">("plan");
   const [addStockOpen, setAddStockOpen] = useState(false);
@@ -207,6 +211,9 @@ export default function InventoryPage() {
   const now = new Date();
   const today = toIsoDate(now);
   const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1).toLocaleDateString("en-US", { month: "long" });
+  // What's made this month is what's sold next month, so the deadline and the demand it
+  // covers are two different months — the tile used to show only the second one.
+  const thisMonth = now.toLocaleDateString("en-US", { month: "long" });
   const editingProduct = products.find((p) => p.id === editingProductId) ?? null;
   const colorOf = (productId: string) => chipColor(Math.max(0, products.findIndex((p) => p.id === productId)));
   const nameOf = (productId: string) => products.find((p) => p.id === productId)?.name ?? "Product";
@@ -246,6 +253,24 @@ export default function InventoryPage() {
     .filter((x) => x.belowWarning || x.p.stockQty < x.need)
     .sort((a, b) => Number(b.belowWarning) - Number(a.belowWarning) || a.p.stockQty / Math.max(1, a.need) - b.p.stockQty / Math.max(1, b.need));
   const toMake = plan.needs.filter((n) => n.jarsToMake > 0);
+  /**
+   * What each upcoming event asks for, and how much of it the shelf already answers. An
+   * event whose jars are all in stock changes no other number on this page, which reads
+   * exactly like the event having been ignored — so it gets said out loud instead.
+   */
+  const eventNeeds = upcomingEvents
+    .map((event) => {
+      const lines = Object.entries(eventPlans[event.id] ?? {})
+        .filter(([, qty]) => qty > 0)
+        .map(([productId, qty]) => {
+          const stock = products.find((p) => p.id === productId)?.stockQty ?? 0;
+          return { qty, make: Math.max(0, qty - stock) };
+        });
+      const planned = lines.reduce((sum, l) => sum + l.qty, 0);
+      const make = lines.reduce((sum, l) => sum + l.make, 0);
+      return { event, planned, make };
+    })
+    .filter((e) => e.planned > 0);
   const nextDay = plan.days.find((d) => d.status === "open" && d.runs.length > 0);
   const problem = plan.totalJarsToMake > 0 && (!plan.hasEquipment || plan.batchesLate > 0 || plan.batchesUnscheduled > 0);
   const utilization = cacaoUtilizationPct(businessSettings);
@@ -255,7 +280,9 @@ export default function InventoryPage() {
   return (
     <Page
       title="Inventory"
+      simpleTitle="Stock"
       right={
+        simple ? undefined : (
         <>
           <button type="button" onClick={() => setAddStockOpen(true)} className="rounded-[10px] border border-line/20 bg-white px-4 py-2.5 text-[13px] font-semibold">
             Add stock
@@ -264,9 +291,39 @@ export default function InventoryPage() {
             + Add product
           </button>
         </>
+        )
       }
     >
+      {simple ? (
+        <SimpleStock
+          products={products}
+          plan={plan}
+          onMade={() => setAddStockOpen(true)}
+          onAddProduct={() => setAddProductOpen(true)}
+          onEditProduct={(id) => setEditingProductId(id)}
+        />
+      ) : (
       <div className="flex flex-col gap-5">
+        {/* Without a machine every day has zero capacity, so nothing is ever placed on the
+            calendar — which looks like the plan is broken rather than unconfigured. */}
+        {!plan.hasEquipment && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-danger/35 bg-danger/[0.04] px-5 py-4">
+            <div className="min-w-0">
+              <div className="font-display text-[17px] font-semibold">No equipment set up yet</div>
+              <div className="text-[13px] text-muted-foreground">
+                Nothing can land on the calendar until you say what you make with and how many batches a day it
+                can do. Everything else on this page still works.
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowSettings(true)}
+              className="shrink-0 rounded-[10px] bg-cacao px-4 py-2.5 text-[13px] font-semibold text-ivory"
+            >
+              Set up equipment
+            </button>
+          </div>
+        )}
         <div className="grid grid-cols-1 gap-4 min-[1000px]:grid-cols-3">
           <div className={`rounded-2xl border bg-white px-5 py-4 ${low.length ? "border-danger/35" : "border-line/15"}`}>
             <TileHeader title="Running low" color="#B3261E" />
@@ -303,11 +360,11 @@ export default function InventoryPage() {
           </div>
 
           <div className={`rounded-2xl border bg-white px-5 py-4 ${problem ? "border-danger/35" : "border-line/15"}`}>
-            <TileHeader title={`To make by end of ${nextMonth}`} color="#C08552" />
+            <TileHeader title={`To make by end of ${thisMonth}`} color="#C08552" />
             {toMake.length === 0 ? (
               <>
                 <div className="mt-0.5 font-display text-[22px] font-semibold">Nothing</div>
-                <div className="mt-0.5 text-xs text-muted-foreground">Stock covers the forecast and events</div>
+                <div className="mt-0.5 text-xs text-muted-foreground">Stock already covers {nextMonth} and your events</div>
               </>
             ) : (
               <div className="mt-1.5 flex flex-col gap-1">
@@ -328,15 +385,25 @@ export default function InventoryPage() {
                   </div>
                 ))}
                 {toMake.length > 4 && <div className="text-xs text-muted-foreground">+{toMake.length - 4} more</div>}
-                {problem && (
+                {problem && plan.hasEquipment && (
                   <div className="mt-0.5 text-[11px] font-semibold text-danger">
-                    {!plan.hasEquipment
-                      ? "Add your equipment in Settings to schedule it"
-                      : `${pluralize(plan.batchesLate + plan.batchesUnscheduled, "batch", "batches")} won't be ready in time`}
+                    {pluralize(plan.batchesLate + plan.batchesUnscheduled, "batch", "batches")} won&apos;t be ready in time
+                  </div>
+                )}
+                {plan.batchesExpiring > 0 && (
+                  <div className="mt-0.5 text-[11px] font-semibold text-[#9A6B12]">
+                    {pluralize(plan.batchesExpiring, "batch", "batches")} would be made too early to still be good —
+                    try Min expiry
                   </div>
                 )}
               </div>
             )}
+            {eventNeeds.map((en) => (
+              <div key={en.event.id} className="mt-1.5 border-t border-line/10 pt-1.5 text-[11px] text-muted-foreground">
+                <span className="font-semibold text-foreground">{en.event.name}</span> needs {en.planned} jars —{" "}
+                {en.make > 0 ? `${en.planned - en.make} on the shelf, ${en.make} to make` : "all of it already on the shelf"}
+              </div>
+            ))}
           </div>
 
           <div className="rounded-2xl border border-cacao/40 bg-white px-5 py-4">
@@ -345,7 +412,11 @@ export default function InventoryPage() {
               {nextDay ? fromIso(nextDay.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) : "—"}
             </div>
             <div className="mt-0.5 truncate text-xs text-muted-foreground">
-              {nextDay ? nextDay.runs.map((r) => `${nameOf(r.productId)} ×${r.batches}`).join(", ") : "Nothing scheduled"}
+              {nextDay
+                ? nextDay.runs.map((r) => `${nameOf(r.productId)} ×${r.batches}`).join(", ")
+                : plan.hasEquipment
+                  ? "Nothing scheduled"
+                  : "No equipment set up — see below"}
             </div>
           </div>
         </div>
@@ -471,6 +542,7 @@ export default function InventoryPage() {
           </div>
         )}
       </div>
+      )}
 
       {addStockOpen && (
         <AddStockDialog

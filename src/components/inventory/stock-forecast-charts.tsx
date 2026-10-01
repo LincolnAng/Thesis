@@ -89,9 +89,12 @@ function RawMaterialsLine() {
           ))}
         </p>
       )}
-      {hasCacao && (
-        <label className="flex items-center gap-2 whitespace-nowrap">
-          Cacao utilization
+      {/* The slider used to sit here with no sign of what it did. It changes two things and
+          nothing else, so both are spelled out — a wrong rate quietly multiplies every bean
+          cost in the business. */}
+      <div className="space-y-1.5 rounded-xl border border-border bg-background/40 p-3">
+        <label className="flex flex-wrap items-center gap-2">
+          <span className="font-medium text-foreground">Cacao utilization</span>
           <input
             type="range"
             min={30}
@@ -101,10 +104,23 @@ function RawMaterialsLine() {
             className="h-1 w-32 accent-[var(--primary)]"
             aria-label="Cacao utilization rate"
           />
-          <span className="w-9 font-semibold text-foreground">{utilization}%</span>
-          <span className="hidden truncate min-[1280px]:inline">usable after roasting &amp; shelling</span>
+          <span className="font-semibold text-foreground">{utilization}%</span>
+          <span>of a sack of beans ends up in the jars, after roasting and shelling</span>
         </label>
-      )}
+        {hasCacao ? (
+          <p className="leading-relaxed">
+            So a recipe asking for <span className="font-semibold text-foreground">1 kg</span> of cacao means buying{" "}
+            <span className="font-semibold text-foreground">{(100 / utilization).toFixed(2)} kg</span> of beans. It
+            changes two things only: how many beans your buying list asks for, and what a jar costs to make — which
+            then moves your margins and suggested prices. It does not touch forecasts, the calendar, or stock counts.
+          </p>
+        ) : (
+          <p className="leading-relaxed text-[var(--status-warning)]">
+            This is doing nothing right now — no raw material is recognized as cacao. It only applies to a material
+            whose name says both cacao (or cocoa) and beans, raw or nibs, like &quot;Cocoa beans&quot;.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

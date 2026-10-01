@@ -68,3 +68,12 @@ export function convertQuantity(quantity: number, from: string | null, to: strin
   if (!a || !b || a.group !== b.group) return null;
   return (quantity * a.perBase) / b.perBase;
 }
+
+/**
+ * What one of a product is called in a quantity field. Products saved before the unit
+ * column existed read back empty, and jars is this business's house default — so a blank
+ * never shows up as "1 unit" the way free-text units used to.
+ */
+export function productUnit(product: { unit?: string } | null | undefined): string {
+  return product?.unit?.trim() || "jars";
+}

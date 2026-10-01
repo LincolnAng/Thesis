@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowLeftRight, Box, CalendarDays, CircleDollarSign, Tag, Users, type LucideIcon } from "lucide-react";
 import { Page } from "@/components/layout/page";
 import { HomeChat } from "@/components/home/home-chat";
-import { ViewModeToggle } from "@/components/summary/view-mode-toggle";
+import { SimpleToday } from "@/components/simple/simple-today";
 import { Bar } from "@/components/summary/bar";
 import { StatTile } from "@/components/data-table/stat-tile";
 import { ProfitWaterfall } from "@/components/summary/profit-waterfall";
@@ -240,11 +240,17 @@ export default function HomePage() {
   );
 
   return (
-    <Page title="Home" right={<ViewModeToggle />}>
+    <Page title="Home">
     <div className="space-y-14 pb-4">
       <HomeChat />
 
-      {viewMode === "simple" && <TodayAtAGlance tiles={tiles} />}
+      {viewMode === "simple" ? (
+        <HideableSection section="today" title="Today">
+          <SimpleToday />
+        </HideableSection>
+      ) : (
+        <TodayAtAGlance tiles={tiles} />
+      )}
 
       {viewMode === "advanced" && (
         <HideableSection section="overview" title={`Business overview · ${currentMonthLabel()}`}>

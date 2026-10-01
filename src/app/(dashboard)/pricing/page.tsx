@@ -13,6 +13,8 @@ import { useCostContext } from "@/lib/summary/use-cost-context";
 import { MAX_MARGIN_PCT, PRICING_METHODS, pricingModeChange } from "@/lib/summary/pricing-methods";
 import { buildPricingRows, PRICING_WINDOW_DAYS } from "@/lib/summary/pricing-reality";
 import type { PricingMode, Product } from "@/lib/store/types";
+import { SimplePrices } from "@/components/simple/simple-prices";
+import { useViewMode } from "@/lib/summary/view-mode";
 
 /** Pesos with centavos when there are any (₱57.60), whole otherwise (₱180). */
 function peso(n: number) {
@@ -247,6 +249,15 @@ export default function PricingPage() {
   const [adding, setAdding] = useState(false);
   const rows = useMemo(() => buildPricingRows(products, entries, costCtx), [products, entries, costCtx]);
   const selected = products.find((p) => p.id === selectedId) ?? products[0];
+  const [viewMode] = useViewMode();
+
+  if (viewMode === "simple") {
+    return (
+      <Page title="Pricing" simpleTitle="Prices">
+        <SimplePrices />
+      </Page>
+    );
+  }
 
   return (
     <Page title="Pricing">

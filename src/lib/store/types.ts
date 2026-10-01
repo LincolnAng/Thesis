@@ -74,6 +74,10 @@ export interface Product {
   stockQty: number;
   lowStockThreshold: number;
   batchYield: number; // jars produced per batch
+  /** What one of this product is called when a quantity is entered — jars, bottles, packs.
+   * Set once in the product's own settings so nobody has to pick a unit per transaction.
+   * Empty on rows written before this column existed; read it through `productUnit`. */
+  unit?: string;
   /** Hands-on time one batch takes. Labor cost is derived from this and the hourly rate in
    * settings, so a change to the rate reprices every product at once. */
   minutesPerBatch?: number;
@@ -205,4 +209,25 @@ export interface SyncStatus {
    * retried, only that something didn't save and hasn't been confirmed since. */
   failing: boolean;
   failedAt: string | null;
+}
+
+/** Someone who uses this app on the shared device. See lib/sheets/users.ts on the PIN. */
+export interface AppUser {
+  id: string;
+  name: string;
+  /** SHA-256 of the user's id + PIN. Empty means "no PIN set" — anyone can pick that name. */
+  pinHash: string;
+  /** Owners can manage people and reset data; helpers can log and edit the day's work. */
+  role: "owner" | "helper";
+  createdAt: string;
+}
+
+/** One line in the "who changed what" log. */
+export interface ActivityEvent {
+  id: string;
+  at: string;
+  userId: string;
+  userName: string;
+  /** Already written as a sentence fragment: "added a transaction — Sale · Classic". */
+  action: string;
 }

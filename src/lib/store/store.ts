@@ -18,6 +18,8 @@ import {
   type SupplierRow,
 } from "./sheet-shapes";
 import { findProduct } from "@/lib/summary/product-match";
+import { ENTRY_TYPE_LABELS, formatPeso } from "@/lib/format";
+import { currentUser } from "@/lib/auth/current-user";
 import type { BusinessSettingRow } from "@/lib/sheets/business-settings";
 import type {
   AiStatus,
@@ -34,6 +36,8 @@ import type {
   TokenUsage,
   Machine,
   SupplierPrice,
+  AppUser,
+  ActivityEvent,
 } from "./types";
 
 export interface StoreState {
@@ -47,6 +51,9 @@ export interface StoreState {
   eventStock: EventStockMovement[];
   machines: Machine[];
   supplierPrices: SupplierPrice[];
+  /** Everyone who uses this app on the shared device, and what they've changed. */
+  users: AppUser[];
+  activity: ActivityEvent[];
   /** Business-level numbers the owner sets once — hourly labor rate today. */
   businessSettings: Record<string, string>;
   tokenUsage: TokenUsage;
@@ -93,6 +100,8 @@ function defaultState(): StoreState {
     eventStock: [],
     machines: [],
     supplierPrices: [],
+    users: [],
+    activity: [],
     businessSettings: {},
     tokenUsage: {
       totalInputTokens: 0,
@@ -211,7 +220,11 @@ async function mirrorOp(
   collection: string,
   op: "append" | "update" | "delete" | "migrate",
   payload: { id?: string; item?: unknown; items?: unknown[] },
+  /** Set for writes that are a consequence of another write (stock moving because a sale
+   * was logged), so the log shows the thing the person did and not its bookkeeping. */
+  silent = false,
 ): Promise<void> {
+  if (!silent) recordActivity(collection, op, payload);
   pendingWrites += 1;
   try {
     await enqueueForCollection(collection, async () => {
@@ -240,6 +253,86 @@ async function mirrorOp(
   } finally {
     pendingWrites -= 1;
   }
+}
+
+// --- Who changed what -------------------------------------------------------------------
+
+const COLLECTION_NOUNS: Record<string, string> = {
+  entries: "transaction",
+  products: "product",
+  recipes: "recipe",
+  rawMaterials: "ingredient",
+  suppliers: "supplier",
+  supplierPrices: "supplier price",
+  supplierPriceHistory: "supplier price",
+  socialStats: "social post",
+  budgets: "budget",
+  events: "event",
+  eventStock: "event stock",
+  machines: "equipment",
+  businessSettings: "setting",
+  users: "person",
+};
+
+const OP_VERBS: Record<string, string> = { append: "added", update: "changed", delete: "deleted" };
+
+/** The bit after the dash: enough to recognize the row without opening it. */
+function describeItem(collection: string, item: unknown): string {
+  if (!item || typeof item !== "object") return "";
+  const row = item as Record<string, unknown>;
+  if (collection === "entries") {
+    const type = typeof row.type === "string" ? ENTRY_TYPE_LABELS[row.type] ?? row.type : "";
+    const what = [row.sku, row.counterparty].find((v) => typeof v === "string" && v) as string | undefined;
+    const amount = typeof row.amount === "number" ? formatPeso(row.amount) : "";
+    return [type, what, amount].filter(Boolean).join(" · ");
+  }
+  if (collection === "businessSettings") return typeof row.key === "string" ? row.key : "";
+  const named = [row.name, row.label, row.key].find((v) => typeof v === "string" && v);
+  return typeof named === "string" ? named : "";
+}
+
+function recordActivity(collection: string, op: string, payload: { id?: string; item?: unknown }) {
+  // The log's own rows, and the one-off import of existing data, aren't anybody's edit.
+  if (collection === "activity" || op === "migrate") return;
+  const verb = OP_VERBS[op];
+  const noun = COLLECTION_NOUNS[collection];
+  if (!verb || !noun) return;
+  const who = currentUser();
+  const detail = describeItem(collection, payload.item);
+  const event: ActivityEvent = {
+    id: genId("act"),
+    at: new Date().toISOString(),
+    userId: who?.id ?? "",
+    userName: who?.name ?? "Someone",
+    action: `${verb} a ${noun}${detail ? ` — ${detail}` : ""}`,
+  };
+  setState((prev) => ({ ...prev, activity: [event, ...prev.activity] }));
+  void mirrorOp("activity", "append", { item: event }, true);
+}
+
+export function addUser(name: string, pinHash: string, role: AppUser["role"] = "helper"): AppUser {
+  const user: AppUser = { id: genId("user"), name: name.trim(), pinHash, role, createdAt: new Date().toISOString() };
+  setState((prev) => ({ ...prev, users: [...prev.users, user] }));
+  void mirrorOp("users", "append", { item: user });
+  return user;
+}
+
+export function updateUser(id: string, patch: Partial<AppUser>) {
+  let updated: AppUser | undefined;
+  setState((prev) => ({
+    ...prev,
+    users: prev.users.map((u) => {
+      if (u.id !== id) return u;
+      updated = { ...u, ...patch };
+      return updated;
+    }),
+  }));
+  if (updated) void mirrorOp("users", "update", { id, item: updated });
+}
+
+export function deleteUser(id: string) {
+  setState((prev) => ({ ...prev, users: prev.users.filter((u) => u.id !== id) }));
+  void mirrorOp("users", "delete", { id });
 }
 
 /** Pushes whatever's currently local up to Sheets exactly once, the first time the
@@ -411,6 +504,8 @@ async function loadAllFromServer() {
         eventStock: eventStockMigration.items,
         machines: machinesMigration.items,
         supplierPrices: supplierPricesMigration.items,
+        users: Array.isArray(json.users) ? (json.users as AppUser[]) : prev.users,
+        activity: Array.isArray(json.activity) ? (json.activity as ActivityEvent[]) : prev.activity,
         businessSettings: businessSettingRowsToRecord(businessSettingsMigration.items),
       };
     });
@@ -551,11 +646,11 @@ function applyEntrySideEffects(
 function mirrorStockRows(productIds: string[], materialIds: string[]) {
   for (const id of new Set(productIds)) {
     const product = state.products.find((p) => p.id === id);
-    if (product) void mirrorOp("products", "update", { id, item: toProductRow(product) });
+    if (product) void mirrorOp("products", "update", { id, item: toProductRow(product) }, true);
   }
   for (const id of new Set(materialIds)) {
     const material = state.rawMaterials.find((m) => m.id === id);
-    if (material) void mirrorOp("rawMaterials", "update", { id, item: material });
+    if (material) void mirrorOp("rawMaterials", "update", { id, item: material }, true);
   }
 }
 
@@ -624,20 +719,20 @@ export function replaceEntry(id: string, next: Omit<Entry, "id">) {
 
 // --- Products ------------------------------------------------------------
 
+/**
+ * The product minus its recipe, which lives in its own tab.
+ *
+ * Everything else is carried across by dropping those three keys rather than by listing the
+ * ones to keep: a field listed nowhere is a field written to the sheet as blank on every
+ * edit, which is how `unit`, `minutesPerBatch` and `laborCostOverride` were being erased
+ * each time any part of a product was saved.
+ */
 function toProductRow(p: Product): ProductRow {
-  return {
-    id: p.id,
-    name: p.name,
-    standardPrice: p.standardPrice,
-    pricingMode: p.pricingMode,
-    marginPercent: p.marginPercent,
-    marketPrice: p.marketPrice,
-    friendPrice: p.friendPrice,
-    wholesalePrice: p.wholesalePrice,
-    stockQty: p.stockQty,
-    lowStockThreshold: p.lowStockThreshold,
-    batchYield: p.batchYield,
-  };
+  const { recipeIngredients, recipeLabor, recipeMisc, ...row } = p;
+  void recipeIngredients;
+  void recipeLabor;
+  void recipeMisc;
+  return row;
 }
 
 /** Diffs one product's recipe rows before/after an edit and mirrors just the

@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { useViewMode } from "@/lib/summary/view-mode";
 import { NAV_ITEMS, SETTINGS_ITEM } from "@/lib/nav-items";
 
 export function BottomTabBar() {
   const pathname = usePathname();
+  const [mode] = useViewMode();
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 flex overflow-x-auto border-t border-line/10 bg-white min-[900px]:hidden">
@@ -23,7 +25,7 @@ export function BottomTabBar() {
             )}
           >
             <Icon className="h-6 w-6" />
-            {item.label}
+            {mode === "simple" ? (item.simpleLabel ?? item.label) : item.label}
           </Link>
         );
       })}

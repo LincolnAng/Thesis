@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { useViewMode } from "@/lib/summary/view-mode";
 import { NAV_ITEMS, SETTINGS_ITEM, type NavItem } from "@/lib/nav-items";
 
 function isActive(pathname: string, href: string) {
@@ -11,10 +12,12 @@ function isActive(pathname: string, href: string) {
 
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   const Icon = item.icon;
+  const [mode] = useViewMode();
+  const label = mode === "simple" ? (item.simpleLabel ?? item.label) : item.label;
   return (
     <Link
       href={item.href}
-      title={item.label}
+      title={label}
       className={cn(
         "flex items-center gap-3 rounded-[10px] text-sm transition-colors",
         "justify-center px-2 py-2.5 min-[1024px]:justify-start min-[1024px]:px-3",
@@ -22,7 +25,7 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
       )}
     >
       <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.8} />
-      <span className="hidden truncate-line min-[1024px]:inline">{item.label}</span>
+      <span className="hidden truncate-line min-[1024px]:inline">{label}</span>
     </Link>
   );
 }

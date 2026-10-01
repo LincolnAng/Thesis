@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ChangeEvent } from "react";
 import { useTheme } from "next-themes";
-import { ChevronDown, ChevronUp, Database, Download, ExternalLink, KeyRound, Languages, Moon, Sheet, Trash2, Upload } from "lucide-react";
+import { ChevronDown, ChevronUp, Database, Download, KeyRound, Languages, Moon, Sheet, Trash2, Upload } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,8 +12,13 @@ import { getSnapshot, resetAllData, restoreLocalCollections, setApiKeyMissing } 
 import type { BotLanguage } from "@/lib/sheets/settings";
 import { LaborRateCard } from "@/components/settings/labor-rate-card";
 import { OwnerNameCard } from "@/components/settings/owner-name-card";
+import { PeopleCard } from "@/components/settings/people-card";
+import { SpreadsheetButton } from "@/components/settings/spreadsheet-button";
+import { UnitsCard } from "@/components/settings/units-card";
 import { cn } from "@/lib/utils";
 import { Page, PageTabs } from "@/components/layout/page";
+import { SimpleSettings } from "@/components/simple/simple-settings";
+import { useViewMode } from "@/lib/summary/view-mode";
 
 const LANGUAGE_LABELS: Record<BotLanguage, string> = {
   english: "English",
@@ -30,6 +35,7 @@ interface SettingsState {
 }
 
 export default function SettingsPage() {
+  const [viewMode] = useViewMode();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [settings, setSettings] = useState<SettingsState | null>(null);
@@ -43,7 +49,7 @@ export default function SettingsPage() {
   const [languageSaving, setLanguageSaving] = useState(false);
   const [backupMessage, setBackupMessage] = useState<string | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [tab, setTab] = useState<"general" | "ai" | "sheet">("general");
+  const [tab, setTab] = useState<"general" | "people" | "ai" | "sheet">("general");
 
   // next-themes resolves the real theme synchronously on the client's first render
   // (to avoid a flash), which is already ahead of what the server rendered — so
@@ -193,15 +199,26 @@ export default function SettingsPage() {
     reader.readAsText(file);
   }
 
+  if (viewMode === "simple") {
+    return (
+      <Page title="Settings">
+        <SimpleSettings />
+      </Page>
+    );
+  }
+
   return (
     <Page title="Settings">
     <div className="w-full max-w-4xl">
-      <p className="mb-4 text-sm text-muted-foreground">Your details, the AI assistant, and where your data is kept.</p>
+      <p className="mb-4 text-sm text-muted-foreground">
+        Your details, who else uses this app, the AI assistant, and where your data is kept.
+      </p>
 
       <div className="mb-5">
         <PageTabs
           tabs={[
             ["general", "General"],
+            ["people", "People & activity"],
             ["ai", "AI assistant"],
             ["sheet", "Google Sheet"],
           ]}
@@ -226,6 +243,13 @@ export default function SettingsPage() {
       </Card>
 
       <LaborRateCard />
+      <UnitsCard />
+        </div>
+      )}
+
+      {tab === "people" && (
+        <div className="flex flex-col gap-4">
+          <PeopleCard />
         </div>
       )}
 
@@ -373,16 +397,9 @@ export default function SettingsPage() {
                   ? "Not connected — the server has no Google Sheet set up yet"
                   : "Checking…"}
           </div>
-          {settings?.spreadsheetUrl && (
-            <a
-              href={settings.spreadsheetUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary underline decoration-dotted"
-            >
-              Open the spreadsheet <ExternalLink className="h-3.5 w-3.5" />
-            </a>
-          )}
+          <div className="flex flex-wrap gap-2">
+            <SpreadsheetButton excel />
+          </div>
         </CardContent>
       </Card>
 

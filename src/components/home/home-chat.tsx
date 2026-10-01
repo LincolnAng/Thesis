@@ -327,7 +327,9 @@ export function HomeChat() {
     </div>
   );
 
-  if (isEmpty) {
+  // Until history has loaded (and Home has switched to a fresh chat), show the start screen
+  // rather than flashing whichever old conversation the browser had cached.
+  if (isEmpty || !ready || !openedFresh.current) {
     return (
       <div className="mx-auto w-full max-w-[760px]">
         {toolbar}

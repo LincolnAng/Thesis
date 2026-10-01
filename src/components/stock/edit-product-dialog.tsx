@@ -6,6 +6,8 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { UnitSelect } from "@/components/ui/unit-select";
+import { productUnit } from "@/lib/units";
 import { ConfirmDeleteButton } from "@/components/data-table/confirm-delete-button";
 import { useNumericDraft } from "@/lib/use-numeric-draft";
 import { addProduct, deleteProduct, renameProduct, updateProduct } from "@/lib/store/store";
@@ -14,6 +16,16 @@ import { formatPeso, PRICING_MODE_LABELS } from "@/lib/format";
 import { useCostContext } from "@/lib/summary/use-cost-context";
 import { effectiveProductPrice, productCostPerJar } from "@/lib/summary/recipe-cost";
 import type { Product } from "@/lib/store/types";
+
+/** "jars" → "jar", so a price reads "per jar" and not "per jars". Count units are the only
+ * ones that pluralize here; kg and ml are already singular. */
+function singular(unit: string): string {
+  return unit.endsWith("s") ? unit.slice(0, -1) : unit;
+}
+
+function capitalize(word: string): string {
+  return word.charAt(0).toUpperCase() + word.slice(1);
+}
 
 function nameTaken(name: string, products: Product[], exceptId?: string): boolean {
   const key = name.trim().toLowerCase();
@@ -37,6 +49,7 @@ export function EditProductDialog({
     updateProduct(product.id, { lowStockThreshold: n }),
   );
   const priceField = useNumericDraft(product.standardPrice, (n) => updateProduct(product.id, { standardPrice: n }));
+  const unit = productUnit(product);
   const costCtx = useCostContext();
   const effectivePrice = effectiveProductPrice(product, productCostPerJar(product, costCtx));
   const duplicate = nameTaken(name, products, product.id);
@@ -64,7 +77,18 @@ export function EditProductDialog({
             )}
           </div>
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Regular price per jar (₱)</Label>
+            <Label className="text-xs text-muted-foreground">Sold by</Label>
+            <UnitSelect
+              value={unit}
+              allowEmpty={false}
+              onChange={(next) => updateProduct(product.id, { unit: next ?? "jars" })}
+            />
+            <p className="text-xs text-muted-foreground">
+              Filled in for you every time you enter a quantity of this product.
+            </p>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Regular price per {singular(unit)} (₱)</Label>
             {product.pricingMode === "manual" ? (
               <Input type="number" value={priceField.value} onChange={(e) => priceField.onChange(e.target.value)} />
             ) : (
@@ -82,7 +106,7 @@ export function EditProductDialog({
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Jars on hand</Label>
+              <Label className="text-xs text-muted-foreground">{capitalize(unit)} on hand</Label>
               <Input type="number" value={stockField.value} onChange={(e) => stockField.onChange(e.target.value)} />
             </div>
             <div className="space-y-1">
@@ -116,6 +140,7 @@ export function AddProductDialog({ products, onClose }: { products: Product[]; o
   const [price, setPrice] = useState("");
   const [stock, setStock] = useState("");
   const [threshold, setThreshold] = useState("");
+  const [unit, setUnit] = useState("jars");
   const duplicate = nameTaken(name, products);
   const valid = name.trim() !== "" && !duplicate;
 
@@ -126,6 +151,7 @@ export function AddProductDialog({ products, onClose }: { products: Product[]; o
         standardPrice: Number(price) || 0,
         stockQty: Number(stock) || 0,
         lowStockThreshold: Number(threshold) || 0,
+        unit,
       }),
     );
     onClose();
@@ -150,13 +176,19 @@ export function AddProductDialog({ products, onClose }: { products: Product[]; o
             />
             {duplicate && <p className="text-xs text-destructive">A product with this name already exists.</p>}
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Regular price per jar (₱)</Label>
-            <Input type="number" placeholder="Optional — set it later on Pricing" value={price} onChange={(e) => setPrice(e.target.value)} />
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Sold by</Label>
+              <UnitSelect value={unit} allowEmpty={false} onChange={(next) => setUnit(next ?? "jars")} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Price per {singular(unit)} (₱)</Label>
+              <Input type="number" placeholder="Set later" value={price} onChange={(e) => setPrice(e.target.value)} />
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Jars on hand</Label>
+              <Label className="text-xs text-muted-foreground">{capitalize(unit)} on hand</Label>
               <Input type="number" placeholder="0" value={stock} onChange={(e) => setStock(e.target.value)} />
             </div>
             <div className="space-y-1">

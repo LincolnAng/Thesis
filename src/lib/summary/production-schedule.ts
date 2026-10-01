@@ -53,6 +53,10 @@ export interface ProductNeed {
   batchesNeeded: number;
   batchesScheduled: number;
   batchesLate: number;
+  /** Batches landing so far before their deadline that they'd be past their shelf life by
+   * the time they're needed. Fastest and Balanced both chase the deadline, not freshness,
+   * so without this nothing ever says the jars would be spoiled on arrival. */
+  batchesExpiring: number;
   missingYield: boolean;
 }
 
@@ -75,6 +79,7 @@ export interface ProductionPlan {
   totalBatchesNeeded: number;
   totalBatchesScheduled: number;
   batchesLate: number;
+  batchesExpiring: number;
   batchesUnscheduled: number;
   hasEquipment: boolean;
 }
@@ -96,6 +101,11 @@ export interface PlanInput {
 
 export function toIsoDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Whole days from `a` to `b`, negative when `b` is earlier. */
+function daysBetween(a: string, b: string): number {
+  return Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000);
 }
 
 function addDays(iso: string, n: number): string {
@@ -199,6 +209,7 @@ export function buildProductionPlan(input: PlanInput): ProductionPlan {
       batchesNeeded: batches,
       batchesScheduled: 0,
       batchesLate: 0,
+      batchesExpiring: 0,
       missingYield: jarsToMake > 0 && yieldPerBatch <= 0,
     };
   });
@@ -231,6 +242,7 @@ export function buildProductionPlan(input: PlanInput): ProductionPlan {
     if (need) {
       need.batchesScheduled++;
       if (day.date > job.deadline) need.batchesLate++;
+      else if (daysBetween(day.date, job.deadline) > job.shelfLife) need.batchesExpiring++;
     }
   };
 
@@ -280,14 +292,17 @@ export function buildProductionPlan(input: PlanInput): ProductionPlan {
     });
   }
 
-  // --- Ingredients for what's actually scheduled (raw cacao scaled up by utilization) --------
+  // --- Ingredients for everything that needs making (raw cacao scaled up by utilization) ----
+  // Counted against what has to be made, not against what the calendar managed to place: with
+  // no equipment set up nothing is ever placed, and a shopping list that empties itself in
+  // exactly that case is worse than useless — that's when you most need to know what to buy.
   const required = new Map<string, number>();
   for (const need of needs) {
-    if (need.batchesScheduled <= 0) continue;
+    if (need.batchesNeeded <= 0) continue;
     for (const row of productById.get(need.productId)?.recipeIngredients ?? []) {
       const material = input.rawMaterials.find((m) => m.id === row.materialId);
       const rawQty = rawQuantityNeeded(material?.name ?? "", row.quantity, input.cacaoUtilization);
-      required.set(row.materialId, (required.get(row.materialId) ?? 0) + rawQty * need.batchesScheduled);
+      required.set(row.materialId, (required.get(row.materialId) ?? 0) + rawQty * need.batchesNeeded);
     }
   }
   const ingredientNeeds: IngredientNeed[] = [...required.entries()]
@@ -317,6 +332,7 @@ export function buildProductionPlan(input: PlanInput): ProductionPlan {
     totalBatchesNeeded: jobs.length,
     totalBatchesScheduled,
     batchesLate: needs.reduce((s, n) => s + n.batchesLate, 0),
+    batchesExpiring: needs.reduce((s, n) => s + n.batchesExpiring, 0),
     batchesUnscheduled: unscheduled,
     hasEquipment: input.machines.some((m) => m.batchesPerDay > 0 && m.workingDaysPerWeek > 0),
   };
