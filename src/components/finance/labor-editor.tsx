@@ -25,13 +25,15 @@ export function LaborEditor({
   laborPerBatch: number;
 }) {
   const isOverride = product.laborCostOverride != null;
-  const minutesField = useNumericDraft(product.minutesPerBatch ?? 0, (n) =>
-    updateProduct(product.id, { minutesPerBatch: n }),
+  const minutesField = useNumericDraft(product.minutesPerUnit ?? 0, (n) =>
+    updateProduct(product.id, { minutesPerUnit: n }),
   );
   const overrideField = useNumericDraft(product.laborCostOverride ?? 0, (n) =>
     updateProduct(product.id, { laborCostOverride: n }),
   );
-  const derived = ((product.minutesPerBatch ?? 0) / 60) * hourlyRate;
+  // One figure, two uses: the same minutes-a-jar that fills the production calendar.
+  const batchMinutes = (product.minutesPerUnit ?? 0) * Math.max(0, product.batchYield);
+  const derived = (batchMinutes / 60) * hourlyRate;
 
   return (
     <div className="space-y-2">
@@ -39,7 +41,7 @@ export function LaborEditor({
 
       <div className="flex flex-wrap items-end gap-2">
         <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Minutes a batch takes</Label>
+          <Label className="text-xs text-muted-foreground">Minutes one jar takes</Label>
           <Input
             type="number"
             inputMode="decimal"
@@ -49,7 +51,8 @@ export function LaborEditor({
           />
         </div>
         <p className="pb-1.5 text-xs text-muted-foreground">
-          × {formatPeso(hourlyRate)}/hr = <span className="font-medium text-foreground">{formatPeso(derived)}</span>
+          × {product.batchYield} a batch × {formatPeso(hourlyRate)}/hr ={" "}
+          <span className="font-medium text-foreground">{formatPeso(derived)}</span>
         </p>
       </div>
 

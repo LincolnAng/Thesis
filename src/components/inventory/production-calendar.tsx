@@ -64,7 +64,7 @@ function MonthGrid({
                 ? "Marked unavailable — click to make available"
                 : day.status === "no_equipment"
                   ? "No equipment runs this day — click to mark unavailable"
-                  : `${day.capacity} batch capacity — click to mark unavailable`;
+                  : `${day.capacity} min of capacity — click to mark unavailable`;
           return (
             <button
               key={day.date}
@@ -99,11 +99,11 @@ function MonthGrid({
                   key={run.productId}
                   className="flex items-center gap-1 truncate rounded-[4px] px-1 py-0.5 text-[10px] font-medium text-foreground"
                   style={{ backgroundColor: `color-mix(in oklch, ${colorOf(run.productId)} 22%, transparent)` }}
-                  title={`${run.productName}: ${run.batches} batch${run.batches === 1 ? "" : "es"}${run.jars ? ` (${run.jars} jars)` : ""}`}
+                  title={`${run.productName}: ${run.jars} jar${run.jars === 1 ? "" : "s"}`}
                 >
                   <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: colorOf(run.productId) }} />
                   <span className="truncate">
-                    {run.productName} ×{run.batches}
+                    {run.productName} ×{run.jars}
                   </span>
                 </span>
               ))}

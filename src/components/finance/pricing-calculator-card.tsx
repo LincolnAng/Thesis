@@ -1,96 +1,103 @@
 "use client";
 
-import { useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronUp, Minus, Plus, Trash2 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Plus, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { formatPeso } from "@/lib/format";
 import { updateProduct } from "@/lib/store/store";
 import { useStore } from "@/lib/store/use-store";
-import { effectiveProductPrice, ingredientRowCost, productCostPerJar } from "@/lib/summary/recipe-cost";
+import { ingredientRowCost, productCostPerJar } from "@/lib/summary/recipe-cost";
 import { CostBreakdownChart } from "@/components/finance/cost-breakdown-chart";
-import { PricingMethodPicker } from "@/components/finance/pricing-method-picker";
 import { CostBreakdownLines } from "@/components/finance/cost-breakdown-lines";
 import { LaborEditor } from "@/components/finance/labor-editor";
-import { useViewMode } from "@/lib/summary/view-mode";
 import { useCostContext } from "@/lib/summary/use-cost-context";
 import { useNumericDraft } from "@/lib/use-numeric-draft";
 import type { Product, RawMaterialStock, RecipeExtraRow, RecipeIngredientRow } from "@/lib/store/types";
-import { cn } from "@/lib/utils";
+
+/**
+ * What one jar costs to make, and the recipe that decides it.
+ *
+ * This panel used to carry the whole pricing screen a second time — the method picker, the
+ * markup box, the resulting price, the friend and wholesale tiers — all of which are on the
+ * page behind it, while the recipe it is named after sat collapsed behind a "See more"
+ * link. Opening "Edit recipe & costs" showed you everything except the recipe.
+ *
+ * So it answers one question now: where ₱63.25 a jar comes from. The figure first, the
+ * three things that add up to it beside it, and nothing that belongs to pricing. Planning a
+ * production run moved out too — Inventory's "Plan a batch" already does that properly,
+ * against live stock.
+ */
 
 function genRowId(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function ExtraRow({
-  row,
-  onChange,
-  onRemove,
-}: {
-  row: RecipeExtraRow;
-  onChange: (id: string, patch: Partial<RecipeExtraRow>) => void;
-  onRemove: (id: string) => void;
-}) {
-  const costField = useNumericDraft(row.cost, (n) => onChange(row.id, { cost: n }));
-  return (
-    <div className="flex items-center gap-2">
-      <Input
-        placeholder="What for?"
-        value={row.label}
-        onChange={(e) => onChange(row.id, { label: e.target.value })}
-        className="h-8 flex-1 text-sm"
-      />
-      <Input
-        type="number"
-        placeholder="₱"
-        value={costField.value}
-        onChange={(e) => costField.onChange(e.target.value)}
-        className="h-8 w-24 text-sm"
-      />
-      <Button size="icon-sm" variant="ghost" className="text-muted-foreground" onClick={() => onRemove(row.id)}>
-        <Trash2 className="h-3.5 w-3.5" />
-      </Button>
-    </div>
-  );
-}
-
-function ExtraRowsSection({
+/** A titled box, so the three editable parts of a recipe read as three things, not one list. */
+function Section({
   title,
-  subtitle,
-  rows,
-  onAdd,
-  onChange,
-  onRemove,
+  hint,
+  action,
+  children,
 }: {
   title: string;
-  subtitle?: string;
-  rows: RecipeExtraRow[];
-  onAdd: () => void;
-  onChange: (id: string, patch: Partial<RecipeExtraRow>) => void;
-  onRemove: (id: string) => void;
+  hint?: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <div>
-          <Label className="text-xs font-semibold text-muted-foreground">{title}</Label>
-          {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
+    <section className="rounded-2xl border border-line/15 bg-white px-4 py-3.5">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-[13px] font-semibold text-foreground">{title}</h3>
+          {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
         </div>
-        <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" onClick={onAdd}>
-          <Plus className="h-3.5 w-3.5" /> Add
-        </Button>
+        {action && <div className="shrink-0">{action}</div>}
       </div>
-      <div className="space-y-2">
-        {rows.map((row) => (
-          <ExtraRow key={row.id} row={row} onChange={onChange} onRemove={onRemove} />
-        ))}
+      {children}
+    </section>
+  );
+}
+
+/** Headline figures: the answer, the batch size that scales it, and the batch total. */
+function CostHeadline({
+  costPerJar,
+  batchTotal,
+  yieldField,
+}: {
+  costPerJar: number;
+  batchTotal: number;
+  yieldField: { value: string; onChange: (v: string) => void };
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-3 min-[640px]:grid-cols-3">
+      <div className="rounded-xl bg-cacao/[0.06] px-4 py-3">
+        <div className="text-xs font-semibold text-muted-foreground">Costs to make one jar</div>
+        <div className="font-display text-[26px] font-bold text-cacao">{formatPeso(costPerJar)}</div>
+      </div>
+      <div className="rounded-xl bg-secondary px-4 py-3">
+        <div className="text-xs font-semibold text-muted-foreground">One batch makes</div>
+        <div className="flex items-baseline gap-1.5">
+          <Input
+            type="number"
+            inputMode="decimal"
+            value={yieldField.value}
+            onChange={(e) => yieldField.onChange(e.target.value)}
+            className="h-9 w-20 font-display text-[22px] font-bold"
+          />
+          <span className="text-[13px] text-muted-foreground">jars</span>
+        </div>
+      </div>
+      <div className="rounded-xl bg-secondary px-4 py-3">
+        <div className="text-xs font-semibold text-muted-foreground">Cost of one batch</div>
+        <div className="font-display text-[26px] font-bold text-foreground">{formatPeso(batchTotal)}</div>
       </div>
     </div>
   );
 }
 
+const ING_GRID = "grid grid-cols-[minmax(0,1fr)_76px_40px_92px_32px] items-center gap-2";
+
+/** One ingredient on one line — it used to take two, which made six ingredients a scroll. */
 function IngredientRowEditor({
   row,
   material,
@@ -107,70 +114,79 @@ function IngredientRowEditor({
   const qtyField = useNumericDraft(row.quantity, (n) => onUpdate(row.id, { quantity: n }));
   const costCtx = useCostContext();
   return (
-    <div className="space-y-1.5 rounded-xl border border-border p-2.5">
-      <div className="flex items-center gap-2">
-        <select
-          value={row.materialId}
-          onChange={(e) => onUpdate(row.id, { materialId: e.target.value })}
-          className="h-8 flex-1 rounded-md border border-input bg-transparent px-2 text-sm"
-        >
-          {rawMaterials.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.name}
-            </option>
-          ))}
-        </select>
-        <Button size="icon-sm" variant="ghost" className="text-muted-foreground" onClick={() => onRemove(row.id)}>
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
-      </div>
-      <div className="flex items-center gap-2">
-        <Input
-          type="number"
-          value={qtyField.value}
-          onChange={(e) => qtyField.onChange(e.target.value)}
-          className="h-8 flex-1 text-sm"
-        />
-        <span className="w-10 shrink-0 text-xs text-muted-foreground">{material?.unit ?? ""}</span>
-        <span className="w-20 shrink-0 text-right text-xs font-medium text-foreground">
-          {formatPeso(ingredientRowCost(row, costCtx))}
-        </span>
-      </div>
+    <div className={ING_GRID}>
+      <select
+        value={row.materialId}
+        onChange={(e) => onUpdate(row.id, { materialId: e.target.value })}
+        className="h-8 w-full rounded-md border border-input bg-transparent px-2 text-sm"
+      >
+        {rawMaterials.map((m) => (
+          <option key={m.id} value={m.id}>
+            {m.name}
+          </option>
+        ))}
+      </select>
+      <Input
+        type="number"
+        inputMode="decimal"
+        value={qtyField.value}
+        onChange={(e) => qtyField.onChange(e.target.value)}
+        className="h-8 text-sm"
+      />
+      <span className="text-xs text-muted-foreground">{material?.unit ?? ""}</span>
+      <span className="text-right text-[13px] font-medium tabular-nums text-foreground">
+        {formatPeso(ingredientRowCost(row, costCtx))}
+      </span>
+      <Button size="icon-sm" variant="ghost" className="text-muted-foreground" onClick={() => onRemove(row.id)}>
+        <Trash2 className="h-3.5 w-3.5" />
+      </Button>
     </div>
   );
 }
 
-function TierRow({
-  tier,
+function ExtraRow({
+  row,
+  onChange,
+  onRemove,
 }: {
-  tier: { label: string; price: number; onChange: (n: number) => void; profit: number; belowCost: boolean };
+  row: RecipeExtraRow;
+  onChange: (id: string, patch: Partial<RecipeExtraRow>) => void;
+  onRemove: (id: string) => void;
 }) {
-  const field = useNumericDraft(tier.price, tier.onChange);
+  const costField = useNumericDraft(row.cost, (n) => onChange(row.id, { cost: n }));
   return (
-    <div className="flex items-center justify-between gap-2 text-sm">
-      <span className="flex items-center gap-2 text-muted-foreground">
-        {tier.label}
-        <Input type="number" value={field.value} onChange={(e) => field.onChange(e.target.value)} className="h-7 w-20 text-xs" />
-      </span>
-      <span
-        className={cn(
-          "flex items-center gap-1 font-medium",
-          tier.belowCost ? "text-[var(--status-warning)]" : "text-[var(--status-good)]",
-        )}
-      >
-        {tier.belowCost && <AlertTriangle className="h-3.5 w-3.5" />}
-        {tier.belowCost ? "Losing money" : `${formatPeso(tier.profit)} profit`}
-      </span>
+    <div className="grid grid-cols-[minmax(0,1fr)_92px_32px] items-center gap-2">
+      <Input
+        placeholder="What for?"
+        value={row.label}
+        onChange={(e) => onChange(row.id, { label: e.target.value })}
+        className="h-8 text-sm"
+      />
+      <Input
+        type="number"
+        placeholder="₱"
+        value={costField.value}
+        onChange={(e) => costField.onChange(e.target.value)}
+        className="h-8 text-sm"
+      />
+      <Button size="icon-sm" variant="ghost" className="text-muted-foreground" onClick={() => onRemove(row.id)}>
+        <Trash2 className="h-3.5 w-3.5" />
+      </Button>
     </div>
+  );
+}
+
+function AddButton({ onClick, disabled, children }: { onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
+  return (
+    <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" onClick={onClick} disabled={disabled}>
+      <Plus className="h-3.5 w-3.5" /> {children}
+    </Button>
   );
 }
 
 export function PricingCalculatorCard({ product }: { product: Product }) {
   const { rawMaterials } = useStore();
   const costCtx = useCostContext();
-  const [showMore, setShowMore] = useState(false);
-  const [batchCount, setBatchCount] = useState(1);
-  const [viewMode] = useViewMode();
 
   const ingredients = product.recipeIngredients;
   // Still written back on every save so the rows survive, but no longer costed: labor now
@@ -179,33 +195,7 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
   const misc = product.recipeMisc;
 
   const cost = productCostPerJar(product, costCtx);
-  const totalForRun = cost.batchTotal * batchCount;
-  const jarsForRun = product.batchYield * batchCount;
-
-  const effectivePrice = effectiveProductPrice(product, cost);
-
-  const standardProfit = effectivePrice - cost.costPerJar;
-  const standardBelowCost = standardProfit < 0;
-
   const yieldField = useNumericDraft(product.batchYield, (n) => persist(ingredients, labor, misc, n));
-
-  const otherTiers = [
-    { label: "Friend rate", price: product.friendPrice, onChange: (n: number) => updateProduct(product.id, { friendPrice: n }) },
-    { label: "Wholesale", price: product.wholesalePrice, onChange: (n: number) => updateProduct(product.id, { wholesalePrice: n }) },
-  ].map((tier) => {
-    const profit = tier.price - cost.costPerJar;
-    return { ...tier, profit, belowCost: profit < 0 };
-  });
-
-  const shortages = ingredients
-    .map((row) => {
-      const material = rawMaterials.find((m) => m.id === row.materialId);
-      if (!material) return null;
-      const needed = Math.round(row.quantity * batchCount * 100) / 100;
-      const short = Math.round((needed - material.qty) * 100) / 100;
-      return short > 0 ? { material, needed, short } : null;
-    })
-    .filter((x): x is { material: (typeof rawMaterials)[number]; needed: number; short: number } => x !== null);
 
   function persist(
     nextIngredients: RecipeIngredientRow[],
@@ -223,12 +213,7 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
 
   function addIngredient() {
     if (rawMaterials.length === 0) return;
-    persist(
-      [...ingredients, { id: genRowId("ing"), materialId: rawMaterials[0].id, quantity: 0 }],
-      labor,
-      misc,
-      product.batchYield,
-    );
+    persist([...ingredients, { id: genRowId("ing"), materialId: rawMaterials[0].id, quantity: 0 }], labor, misc, product.batchYield);
   }
   function updateIngredient(id: string, patch: Partial<RecipeIngredientRow>) {
     persist(
@@ -268,146 +253,77 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">{product.name}</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="grid gap-4 min-[640px]:grid-cols-[1fr_auto]">
-          <PricingMethodPicker product={product} costPerJar={cost.costPerJar} effectivePrice={effectivePrice} />
-          <div className="space-y-1.5 min-[640px]:text-right">
-            <Label className="text-xs font-semibold text-muted-foreground">Total cost</Label>
-            <p className="text-lg font-semibold text-foreground">
-              {formatPeso(cost.costPerJar)} <span className="text-xs font-normal text-muted-foreground">/jar</span>
-            </p>
-          </div>
-        </div>
+    <div className="space-y-4">
+      <CostHeadline costPerJar={cost.costPerJar} batchTotal={cost.batchTotal} yieldField={yieldField} />
 
-        <p
-          className={cn(
-            "text-sm font-medium",
-            standardBelowCost ? "text-[var(--status-warning)]" : "text-[var(--status-good)]",
-          )}
-        >
-          {standardBelowCost
-            ? `You lose ${formatPeso(Math.abs(standardProfit))} on every jar you sell at the regular price.`
-            : `You make ${formatPeso(standardProfit)} profit on every jar you sell at the regular price.`}
-        </p>
-
-        <Button size="sm" variant="ghost" className="w-full gap-1 text-xs text-muted-foreground" onClick={() => setShowMore((v) => !v)}>
-          {showMore ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-          {showMore ? "Show less" : "See more"}
-        </Button>
-
-        {showMore && (
-          <div className="space-y-5 border-t border-border pt-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-muted-foreground">Other prices</Label>
-              <div className="space-y-1.5">
-                {otherTiers.map((tier) => (
-                  <TierRow key={tier.label} tier={tier} />
+      {/* The recipe on the left, what it adds up to on the right — inputs and result side by
+          side rather than stacked in one column you have to scroll to connect. */}
+      <div className="grid gap-4 min-[1100px]:grid-cols-[minmax(0,1fr)_300px] min-[1100px]:items-start">
+        <div className="space-y-3">
+          <Section
+            title="Ingredients"
+            hint="What goes into one batch, including jars and labels"
+            action={
+              <AddButton onClick={addIngredient} disabled={rawMaterials.length === 0}>
+                Add ingredient
+              </AddButton>
+            }
+          >
+            {rawMaterials.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No materials tracked yet — add one under Inventory first.</p>
+            ) : ingredients.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Nothing here yet. Tap &quot;Add ingredient&quot; to start.</p>
+            ) : (
+              <div className="space-y-2">
+                <div className={`${ING_GRID} text-[11px] font-bold uppercase tracking-wide text-muted-foreground`}>
+                  <span>Item</span>
+                  <span>Qty</span>
+                  <span />
+                  <span className="text-right">Cost</span>
+                  <span />
+                </div>
+                {ingredients.map((row) => (
+                  <IngredientRowEditor
+                    key={row.id}
+                    row={row}
+                    material={rawMaterials.find((m) => m.id === row.materialId)}
+                    rawMaterials={rawMaterials}
+                    onUpdate={updateIngredient}
+                    onRemove={removeIngredient}
+                  />
                 ))}
               </div>
-            </div>
+            )}
+          </Section>
 
-            <div className="space-y-2">
+          <Section title="Labor" hint="How long one batch takes to make">
+            <LaborEditor product={product} hourlyRate={costCtx.hourlyLaborRate} laborPerBatch={cost.laborTotal} />
+          </Section>
+
+          <Section
+            title="Other costs"
+            hint="Electricity, gas, anything else a batch uses"
+            action={<AddButton onClick={addMisc}>Add cost</AddButton>}
+          >
+            {misc.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Nothing here yet — most recipes don&apos;t need this.</p>
+            ) : (
               <div className="space-y-2">
-                <Label className="text-xs font-semibold text-muted-foreground">What this jar costs to make</Label>
-                <CostBreakdownLines cost={cost} />
+                {misc.map((row) => (
+                  <ExtraRow key={row.id} row={row} onChange={updateMisc} onRemove={removeMisc} />
+                ))}
               </div>
+            )}
+          </Section>
+        </div>
 
-              {viewMode === "advanced" && <CostBreakdownChart cost={cost} />}
-
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Ingredients in a batch</span>
-                <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" onClick={addIngredient} disabled={rawMaterials.length === 0}>
-                  <Plus className="h-3.5 w-3.5" /> Add ingredient
-                </Button>
-              </div>
-
-              {rawMaterials.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  No ingredients tracked yet — add one in Ingredient costs above first.
-                </p>
-              ) : ingredients.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No ingredients yet. Tap &quot;Add ingredient&quot; to get started.</p>
-              ) : (
-                <div className="space-y-2">
-                  {ingredients.map((row) => (
-                    <IngredientRowEditor
-                      key={row.id}
-                      row={row}
-                      material={rawMaterials.find((m) => m.id === row.materialId)}
-                      rawMaterials={rawMaterials}
-                      onUpdate={updateIngredient}
-                      onRemove={removeIngredient}
-                    />
-                  ))}
-                </div>
-              )}
-
-              <LaborEditor product={product} hourlyRate={costCtx.hourlyLaborRate} laborPerBatch={cost.laborTotal} />
-              <ExtraRowsSection
-                title="Other costs per batch"
-                subtitle="Electricity, gas, misc."
-                rows={misc}
-                onAdd={addMisc}
-                onChange={updateMisc}
-                onRemove={removeMisc}
-              />
-
-              <div className="space-y-1.5">
-                <Label className="text-xs">Jars per batch</Label>
-                <Input
-                  type="number"
-                  value={yieldField.value}
-                  onChange={(e) => yieldField.onChange(e.target.value)}
-                  className="h-8 w-28"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2 rounded-xl border border-border p-3">
-              <Label className="text-xs font-semibold text-muted-foreground">Making more than one batch?</Label>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5">
-                  <Button
-                    size="icon-sm"
-                    variant="outline"
-                    aria-label="Fewer batches"
-                    onClick={() => setBatchCount((n) => Math.max(1, n - 1))}
-                  >
-                    <Minus className="h-3.5 w-3.5" />
-                  </Button>
-                  <span className="w-6 text-center text-sm font-semibold text-foreground">{batchCount}</span>
-                  <Button size="icon-sm" variant="outline" aria-label="More batches" onClick={() => setBatchCount((n) => n + 1)}>
-                    <Plus className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-                <span className="text-sm text-muted-foreground">batch{batchCount === 1 ? "" : "es"}</span>
-              </div>
-              <p className="text-sm text-foreground">
-                Needs <span className="font-semibold">{formatPeso(totalForRun)}</span> total · makes{" "}
-                <span className="font-semibold">{jarsForRun}</span> jars
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Cost per jar stays {formatPeso(cost.costPerJar)} no matter how many batches you make.
-              </p>
-              {shortages.length > 0 && (
-                <div className="space-y-1 rounded-lg border border-[var(--status-warning)] bg-amber-50 p-2 dark:bg-amber-950/30">
-                  {shortages.map(({ material, needed, short }) => (
-                    <p key={material.id} className="flex items-start gap-1.5 text-xs text-[var(--status-warning)]">
-                      <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
-                      Not enough {material.name} — have {material.qty} {material.unit}, need {needed} {material.unit} ({short}{" "}
-                      {material.unit} short)
-                    </p>
-                  ))}
-                </div>
-              )}
-            </div>
+        <Section title="Where the cost goes" hint="Per jar">
+          <CostBreakdownLines cost={cost} />
+          <div className="mt-3">
+            <CostBreakdownChart cost={cost} />
           </div>
-        )}
-      </CardContent>
-    </Card>
+        </Section>
+      </div>
+    </div>
   );
 }

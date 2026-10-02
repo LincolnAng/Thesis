@@ -15,7 +15,7 @@ import { SupplierNameInput } from "@/components/suppliers/supplier-name-input";
 import { ConfirmDeleteButton } from "@/components/data-table/confirm-delete-button";
 import { useStore } from "@/lib/store/use-store";
 import { EXPENSE_CATEGORY_LABELS, ENTRY_TYPE_LABELS, PRICE_TYPE_LABELS, formatPeso } from "@/lib/format";
-import { productUnit } from "@/lib/units";
+import { itemChoices, productForItem, selectedItemValue, unitForItem } from "@/lib/summary/item-catalog";
 import { useCostContext } from "@/lib/summary/use-cost-context";
 import { effectiveProductPrice, productCostPerJar } from "@/lib/summary/recipe-cost";
 import { allExpenseCategories } from "@/lib/summary/expenses-summary";
@@ -29,7 +29,7 @@ const PRICE_TYPES: Exclude<PriceType, null>[] = ["standard", "friend", "wholesal
 
 /** What one of this product sells for right now, at the price type on the draft. */
 function unitPriceFor(d: EntryDraft, products: Product[], ctx: CostContext): number | null {
-  const product = products.find((p) => p.name === d.sku);
+  const product = productForItem(d.sku, products);
   if (!product) return null;
   if (d.priceType === "friend" && product.friendPrice > 0) return product.friendPrice;
   if (d.priceType === "wholesale" && product.wholesalePrice > 0) return product.wholesalePrice;
@@ -127,16 +127,13 @@ export function QuickEditForm({
     addSupplier({ name: typed, type: "raw_materials", items: "", lastPrice: 0, contact: "" });
   }
 
-  const skuOptions = Array.from(
-    new Set([...(draft.sku ? [draft.sku] : []), ...products.map((p) => p.name), ...rawMaterials.map((m) => m.name)]),
-  );
+  // Grouped and labelled rather than one flat list, and a sale can only be a product —
+  // the Products tab is the catalog of record. See lib/summary/item-catalog.
+  const choices = itemChoices(draft.type, products, rawMaterials, draft.sku);
 
   /** The unit the catalog already knows for an item, so it's never asked for per transaction. */
   function unitOfItem(name: string | null): string | null {
-    if (!name) return null;
-    const product = products.find((p) => p.name === name);
-    if (product) return productUnit(product);
-    return rawMaterials.find((m) => m.name === name)?.unit?.trim() || null;
+    return unitForItem(name, products, rawMaterials);
   }
 
   /**
@@ -197,7 +194,7 @@ export function QuickEditForm({
           <select
             className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
             aria-invalid={missingProduct}
-            value={draft.sku ?? ""}
+            value={selectedItemValue(draft.sku, choices)}
             onChange={(e) => {
               if (e.target.value === "__new__") {
                 setAddingProduct(true);
@@ -208,11 +205,25 @@ export function QuickEditForm({
             }}
           >
             <option value="">Select…</option>
-            {skuOptions.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
+            {choices.unknown && <option value={choices.unknown}>{choices.unknown} (not in Products)</option>}
+            {choices.products.length > 0 && (
+              <optgroup label="Products">
+                {choices.products.map((item) => (
+                  <option key={item.name} value={item.name}>
+                    {item.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {choices.materials.length > 0 && (
+              <optgroup label="Materials">
+                {choices.materials.map((item) => (
+                  <option key={item.name} value={item.name}>
+                    {item.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
             <option value="__new__">+ Add a new product…</option>
           </select>
         </div>

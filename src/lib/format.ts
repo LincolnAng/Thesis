@@ -104,3 +104,9 @@ export function previousMonthShortLabel(now: Date = new Date()): string {
   const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   return d.toLocaleDateString("en-PH", { month: "long" });
 }
+
+/** "a", "a and b", "a, b and c" — for figures read back as a sentence. */
+export function listPhrase(parts: string[]): string {
+  if (parts.length <= 1) return parts[0] ?? "";
+  return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+}

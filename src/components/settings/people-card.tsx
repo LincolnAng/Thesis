@@ -68,7 +68,7 @@ export function PeopleCard() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <Users className="h-4 w-4" /> People using this app
+            <Users className="h-4 w-4" /> Who can use this app
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">

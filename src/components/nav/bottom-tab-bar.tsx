@@ -20,12 +20,14 @@ export function BottomTabBar() {
             key={item.href}
             href={item.href}
             className={cn(
-              "flex w-20 shrink-0 flex-col items-center gap-1 py-3 text-sm font-medium",
+              // 11px rather than 14: the longest labels ("Transactions", "Stakeholders")
+              // have to fit one line in an 80px tab without being cut off.
+              "flex w-20 shrink-0 flex-col items-center gap-1 px-1 py-3 text-[11px] font-medium",
               active ? "text-cacao font-semibold" : "text-muted-foreground",
             )}
           >
             <Icon className="h-6 w-6" />
-            {mode === "simple" ? (item.simpleLabel ?? item.label) : item.label}
+            <span className="max-w-full truncate">{mode === "simple" ? (item.simpleLabel ?? item.label) : item.label}</span>
           </Link>
         );
       })}

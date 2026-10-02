@@ -78,8 +78,8 @@ export function SimpleStock({
                 <SentenceRow
                   key={n.productId}
                   sub={
-                    n.missingYield
-                      ? "Tell me how many jars one batch makes (tap the product below) to plan batches."
+                    n.missingMinutes
+                      ? "Tell me how long one jar takes to make (tap the product below) so it can be planned."
                       : day
                         ? `A good day to make it: ${dayName(day)}`
                         : "No free day found before the end of next month."
@@ -92,7 +92,7 @@ export function SimpleStock({
                 >
                   Make{" "}
                   <strong>
-                    {n.missingYield ? `about ${n.jarsToMake} jars` : `${pluralize(n.batchesNeeded, "batch", "batches")} (about ${n.jarsToMake} jars)`}
+                    {pluralize(n.jarsToMake, "jar")}
                   </strong>{" "}
                   of {n.productName}
                 </SentenceRow>

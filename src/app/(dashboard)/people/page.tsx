@@ -26,15 +26,17 @@ function PeoplePageInner() {
 
   if (viewMode === "simple") {
     return (
-      <Page title="People">
+      <Page title="Stakeholders" simpleTitle="Contacts">
         <SimplePeople />
       </Page>
     );
   }
 
   return (
-    <Page title="People">
-      <div className="mb-6">
+    <Page title="Stakeholders" simpleTitle="Contacts">
+      {/* Said once, at the top: everything on this page is outside the business. The old
+          "People" title read as staff, which is the one thing this section isn't. */}
+      <div className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-2">
         <PageTabs
           tabs={[
             ["customers", "Customers"],
@@ -44,6 +46,9 @@ function PeoplePageInner() {
           value={tab}
           onChange={selectTab}
         />
+        <p className="text-[13px] text-muted-foreground">
+          Everyone outside the business — who buys from you, who you buy from, and where you sell.
+        </p>
       </div>
       <div className="max-w-[1100px]">
         {tab === "customers" && <CustomersTab />}
