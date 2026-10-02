@@ -8,7 +8,17 @@ import { useChatSessions } from "@/lib/home/use-chat-sessions";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { ConfirmDeleteButton } from "@/components/data-table/confirm-delete-button";
 
-function ChatSidebarList({ onNavigate }: { onNavigate?: () => void }) {
+function ChatSidebarList({
+  onNavigate,
+  title = "Chats",
+  reserveClose = false,
+}: {
+  onNavigate?: () => void;
+  title?: string;
+  /** Keeps the top-right corner clear for the slide-in panel's own close button, which is
+   * absolutely positioned there — "New chat" is full width and was sitting underneath it. */
+  reserveClose?: boolean;
+}) {
   const { sessions, currentSessionId } = useChatSessions();
   const ordered = [...sessions].reverse(); // most recent conversation first
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -26,7 +36,10 @@ function ChatSidebarList({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="p-3">
+      <div className={cn("flex items-center gap-2 px-3 pb-1 pt-3.5", reserveClose && "pr-12")}>
+        <h2 className="truncate text-sm font-semibold text-foreground">{title}</h2>
+      </div>
+      <div className="px-3 pb-3 pt-2">
         <button
           type="button"
           onClick={() => {
@@ -129,7 +142,7 @@ export function ChatSidebarMobileTrigger() {
       </SheetTrigger>
       <SheetContent side="left" className="w-72 p-0">
         <SheetTitle className="sr-only">Conversations</SheetTitle>
-        <ChatSidebarList onNavigate={() => setOpen(false)} />
+        <ChatSidebarList title="Chats" reserveClose onNavigate={() => setOpen(false)} />
       </SheetContent>
     </Sheet>
   );
@@ -150,7 +163,7 @@ export function PastChatsButton() {
       </SheetTrigger>
       <SheetContent side="right" className="w-80 p-0">
         <SheetTitle className="sr-only">Past chats</SheetTitle>
-        <ChatSidebarList onNavigate={() => setOpen(false)} />
+        <ChatSidebarList title="Past chats" reserveClose onNavigate={() => setOpen(false)} />
       </SheetContent>
     </Sheet>
   );
