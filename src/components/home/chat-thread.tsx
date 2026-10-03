@@ -11,20 +11,31 @@ import { EntryCard } from "@/components/home/entry-card";
 import { ClarifyCard } from "@/components/home/clarify-card";
 import { QuickEditForm } from "@/components/home/quick-edit-form";
 import { ReviewCard } from "@/components/home/review-card";
+import { AdviceCard } from "@/components/home/advice-card";
+import { PromptGateCard } from "@/components/home/prompt-gate-card";
 
 // A JSON-mode reply can't be streamed token by token, so there's no real progress to report —
 // this just makes the wait feel shorter than one motionless bubble does. Mounted only while a
 // reply is in flight, so each appearance restarts at the first stage on its own.
 const TYPING_STAGES = ["Reading your message…", "Checking your numbers…", "Almost done…"];
+// Looking something up takes far longer than answering from her own figures, so the wait gets
+// its own wording — a silent 60 seconds reads as the app having hung.
+const LOOKUP_STAGES = [
+  "That's not in your records — looking it up…",
+  "Searching…",
+  "Reading what I found…",
+  "Working out what it means for you…",
+];
 const TYPING_STAGE_MS = 2200;
 
-function TypingIndicator() {
+function TypingIndicator({ lookingUp }: { lookingUp?: boolean }) {
+  const stages = lookingUp ? LOOKUP_STAGES : TYPING_STAGES;
   const [stage, setStage] = useState(0);
 
   useEffect(() => {
-    const id = setInterval(() => setStage((s) => Math.min(s + 1, TYPING_STAGES.length - 1)), TYPING_STAGE_MS);
+    const id = setInterval(() => setStage((s) => Math.min(s + 1, stages.length - 1)), TYPING_STAGE_MS);
     return () => clearInterval(id);
-  }, []);
+  }, [stages.length]);
 
   return (
     <div className="flex justify-start">
@@ -34,7 +45,7 @@ function TypingIndicator() {
           <span className="h-2 w-2 animate-bounce rounded-full bg-secondary-foreground/50 [animation-delay:-0.15s]" />
           <span className="h-2 w-2 animate-bounce rounded-full bg-secondary-foreground/50" />
         </span>
-        <span className="text-xs text-secondary-foreground/70">{TYPING_STAGES[stage]}</span>
+        <span className="text-xs text-secondary-foreground/70">{stages[stage]}</span>
       </div>
     </div>
   );
@@ -50,6 +61,10 @@ export function ChatThread({
   onConfirmReview,
   onEditReview,
   onRetry,
+  onGatePick,
+  onGateRefine,
+  refiningGateId,
+  isLookingUp,
   isTyping = false,
 }: {
   messages: ChatMessage[];
@@ -62,7 +77,11 @@ export function ChatThread({
   onConfirmReview: (id: string) => void;
   onEditReview: (id: string) => void;
   onRetry: (text: string) => void;
-  /** Shows a floating "Kuya AI is typing" bubble while a response is in flight. */
+  onGatePick: (messageId: string, text: string) => void;
+  onGateRefine: (messageId: string, extra: string) => void;
+  refiningGateId: string | null;
+  isLookingUp?: boolean;
+  /** Shows a floating "Jamal is typing" bubble while a response is in flight. */
   isTyping?: boolean;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -132,6 +151,20 @@ export function ChatThread({
             />
           )}
 
+          {m.kind === "advice" && <AdviceCard advice={m.advice} />}
+
+          {m.kind === "prompt-gate" && (
+            <PromptGateCard
+              rawText={m.rawText}
+              suggestions={m.suggestions}
+              reasons={m.reasons}
+              resolved={m.resolved}
+              refining={refiningGateId === m.id}
+              onPick={(text) => onGatePick(m.id, text)}
+              onRefine={(extra) => onGateRefine(m.id, extra)}
+            />
+          )}
+
           {m.kind === "insight" && (
             <div className="max-w-[85%] space-y-1.5 rounded-2xl bg-secondary px-3.5 py-2.5 text-sm text-secondary-foreground">
               <div className="flex items-start gap-2">
@@ -146,7 +179,7 @@ export function ChatThread({
         </div>
         );
       })}
-      {isTyping && <TypingIndicator />}
+      {isTyping && <TypingIndicator key={isLookingUp ? "lookup" : "normal"} lookingUp={isLookingUp} />}
       <div ref={bottomRef} />
     </div>
   );

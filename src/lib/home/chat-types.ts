@@ -1,4 +1,5 @@
 import type { EntryDraft } from "@/lib/home/describe-entry";
+import type { AdviceResult } from "@/app/api/advisor/route";
 
 export interface ClarifyOption {
   label: string;
@@ -51,6 +52,34 @@ export type ChatMessage =
       draft: EntryDraft;
       /** Fields the owner actually said. Anything else the model filled is shown as a guess. */
       stated: string[];
+      createdAt: string;
+      sessionId: string;
+    }
+  // Business advice, grounded in the owner's own figures. Kept apart from "text" because it
+  // has real structure — the "needs checking" list in particular has to stay visually distinct
+  // from the parts that came from her own data.
+  | {
+      id: string;
+      role: "assistant";
+      kind: "advice";
+      question: string;
+      advice: AdviceResult;
+      topic: string;
+      createdAt: string;
+      sessionId: string;
+    }
+  // Offered before a vague question is sent, never instead of sending it. The owner can pick a
+  // sharper version, add her own words, or send what she originally typed.
+  | {
+      id: string;
+      role: "assistant";
+      kind: "prompt-gate";
+      rawText: string;
+      suggestions: string[];
+      /** Why her message was judged vague, in her words. */
+      reasons: string[];
+      /** Set once she has chosen, so the card stops offering. */
+      resolved?: boolean;
       createdAt: string;
       sessionId: string;
     }

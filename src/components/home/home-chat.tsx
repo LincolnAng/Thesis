@@ -11,6 +11,10 @@ import type { EntryDraft } from "@/lib/home/describe-entry";
 import { useAiStatus } from "@/lib/ai/use-ai-status";
 import { useStore } from "@/lib/store/use-store";
 import { requestAssistant } from "@/lib/ai/assistant-client";
+import { requestAdvice, requestSharpen, requestTriage } from "@/lib/ai/advisor-client";
+import { buildAdvisorContext } from "@/lib/ai/advisor-context";
+import { classifyIntent } from "@/lib/ai/intent";
+import { assessSharpness } from "@/lib/ai/prompt-gate";
 import { localAnswer } from "@/lib/ai/local-fallback";
 import { buildDataSummary } from "@/lib/ai/data-summary";
 import { allExpenseCategories } from "@/lib/summary/expenses-summary";
@@ -60,6 +64,10 @@ export function HomeChat() {
   const ready = useChatReady();
   const [input, setInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  /** Which gate card is waiting on fresh suggestions, so only that one shows a spinner. */
+  const [refiningGateId, setRefiningGateId] = useState<string | null>(null);
+  /** True while a question is being handed to the advisor to look up, so the wait is explained. */
+  const [lookingUp, setLookingUp] = useState(false);
   const { degraded } = useAiStatus();
   const state = useStore();
   const saveCount = useRef(0);
@@ -113,7 +121,81 @@ export function HomeChat() {
     });
   }
 
-  async function handleSubmit(override?: string, opts: { freshChat?: boolean } = {}) {
+  async function askAdvisor(question: string) {
+    setSubmitting(true);
+    setLookingUp(true);
+    const outcome = await requestAdvice(question, buildAdvisorContext(state));
+    setSubmitting(false);
+    setLookingUp(false);
+
+    if (outcome.status === "ok") {
+      push({
+        id: genId(),
+        role: "assistant",
+        kind: "advice",
+        question,
+        advice: outcome.advice,
+        topic: outcome.topic,
+        createdAt: nowIso(),
+      });
+      return;
+    }
+
+    // Same rule as the assistant: when the AI never ran, say so. An answer assembled locally
+    // would sound just as confident and be worth nothing.
+    const text =
+      outcome.status === "unavailable"
+        ? "I can't reach the AI right now, so I won't guess at business advice. Check the API key under Settings → AI assistant."
+        : outcome.status === "unreachable"
+          ? "I couldn't reach the AI just now, so I won't guess at an answer. Check the API key under Settings → AI assistant."
+          : "The AI replied with something I couldn't read. Try asking again, or reword it.";
+    push({ id: genId(), role: "assistant", kind: "text", text, retryText: question, createdAt: nowIso() });
+  }
+
+  /** The owner picked one of the sharper questions, or chose to send her own words anyway. */
+  async function handleGateChoice(messageId: string, chosen: string) {
+    const message = messages.find((m) => m.id === messageId);
+    if (message && message.kind === "prompt-gate") {
+      replace(messageId, { ...message, resolved: true });
+    }
+    push({ id: genId(), role: "user", kind: "text", text: chosen, createdAt: nowIso() });
+    await askAdvisor(chosen);
+  }
+
+  /**
+   * "Others" — she added her own words.
+   *
+   * This is the way through the gate, so it has to actually lead somewhere. If what she has
+   * written is now specific enough to answer, it goes to the advisor UNREWRITTEN: the gate
+   * exists to stop vague questions, not to make her ask in the app's words.
+   */
+  async function handleGateRefine(messageId: string, extra: string) {
+    const message = messages.find((m) => m.id === messageId);
+    if (!message || message.kind !== "prompt-gate") return;
+
+    const combined = `${message.rawText} — ${extra}`;
+    if (assessSharpness(combined).sharp) {
+      replace(messageId, { ...message, resolved: true });
+      push({ id: genId(), role: "user", kind: "text", text: combined, createdAt: nowIso() });
+      await askAdvisor(combined);
+      return;
+    }
+
+    setRefiningGateId(messageId);
+    const outcome = await requestSharpen(message.rawText, buildAdvisorContext(state), extra);
+    setRefiningGateId(null);
+    if (outcome.status === "ok") {
+      replace(messageId, { ...message, suggestions: outcome.suggestions });
+      return;
+    }
+    // Sharpening failed — the assistant is unreachable, which is not her fault and not a reason
+    // to leave her with no way forward. Answer what she gave rather than blocking on a 500.
+    replace(messageId, { ...message, resolved: true });
+    push({ id: genId(), role: "user", kind: "text", text: combined, createdAt: nowIso() });
+    await askAdvisor(combined);
+  }
+
+  async function handleSubmit(override?: string, opts: { freshChat?: boolean; skipGate?: boolean } = {}) {
     if (!ready) return; // still loading history from Sheets — don't guess which chat this belongs to
     const rawText = (override ?? input).trim();
     if (!rawText) return;
@@ -129,6 +211,45 @@ export function HomeChat() {
         draft: blankDraft(rawText),
         createdAt: nowIso(),
       });
+      return;
+    }
+
+    // Which helper should answer. The word rules settle the obvious cases for free; when they
+    // admit they are guessing, the small model decides instead of a keyword list that has
+    // never seen this phrasing.
+    const guess = classifyIntent(rawText);
+    let intent = guess.intent;
+    if (!guess.confident) {
+      setSubmitting(true);
+      const triaged = await requestTriage(rawText, state.products.map((p) => p.name));
+      setSubmitting(false);
+      if (triaged) intent = triaged;
+    }
+
+    // Advice questions take a different road: a bigger briefing, a longer answer, and a gate in
+    // front of the vague ones. Transaction logs never come down here.
+    if (!opts.skipGate && intent === "advice") {
+      const sharpness = assessSharpness(rawText);
+      if (!sharpness.sharp) {
+        setSubmitting(true);
+        const suggestions = await requestSharpen(rawText, buildAdvisorContext(state));
+        setSubmitting(false);
+        if (suggestions.status === "ok") {
+          push({
+            id: genId(),
+            role: "assistant",
+            kind: "prompt-gate",
+            rawText,
+            suggestions: suggestions.suggestions,
+            reasons: sharpness.reasons,
+            createdAt: nowIso(),
+          });
+          return;
+        }
+        // Couldn't reach the sharpener. The gate blocks vague questions, but it must not block
+        // on an outage she didn't cause and can't fix — so this one goes through.
+      }
+      await askAdvisor(rawText);
       return;
     }
 
@@ -208,6 +329,14 @@ export function HomeChat() {
     }
 
     if (outcome.status === "chat") {
+      // It couldn't answer from her own records. Rather than showing an apology and making her
+      // ask again, hand straight over to the advisor, which can search. She never sees the seam.
+      if (outcome.needsLookup) {
+        setLookingUp(true);
+        await askAdvisor(rawText);
+        setLookingUp(false);
+        return;
+      }
       const fallback = outcome.reply.trim() || localAnswer(rawText, state);
       push({ id: genId(), role: "assistant", kind: "text", text: fallback, createdAt: nowIso() });
       return;
@@ -376,7 +505,11 @@ export function HomeChat() {
         onConfirmReview={handleConfirmReview}
         onEditReview={handleEditReview}
         onRetry={handleRetry}
+        onGatePick={(id, text) => void handleGateChoice(id, text)}
+        onGateRefine={(id, extra) => void handleGateRefine(id, extra)}
+        refiningGateId={refiningGateId}
         isTyping={submitting}
+        isLookingUp={lookingUp}
       />
       <ChatComposer
         value={input}

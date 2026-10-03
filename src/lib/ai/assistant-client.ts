@@ -2,7 +2,8 @@ import { addTokenUsage, setApiKeyMissing } from "@/lib/store/store";
 import type { AssistantClarifyOption, AssistantEntryResult } from "@/app/api/assistant/route";
 
 export type AssistantOutcome =
-  | { status: "chat"; reply: string }
+  /** `needsLookup` means the question needs the outside world — hand it to the advisor. */
+  | { status: "chat"; reply: string; needsLookup: boolean }
   | {
       status: "entry";
       entry: AssistantEntryResult;
@@ -34,7 +35,7 @@ export async function requestAssistant(
     }
 
     if (json.success && json.mode === "chat") {
-      return { status: "chat", reply: json.reply as string };
+      return { status: "chat", reply: json.reply as string, needsLookup: json.needsLookup === true };
     }
 
     if (json.success && json.mode === "entry") {

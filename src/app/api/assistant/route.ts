@@ -152,13 +152,15 @@ export async function POST(req: NextRequest) {
     { type: "text" as const, text: assistantSystemPromptDynamic(body.dataSummary ?? "No data available.") },
   ];
 
-  // Real alternating turns instead of one flattened "Owner: ... / Kuya AI: ..." blob.
+  // Real alternating turns instead of one flattened "Owner: ... / Jamal: ..." blob.
   const historyMessages: AnthropicMessage[] = (body.history ?? [])
     .slice(-6)
     .map((m) => ({ role: m.role, content: m.content }));
   const messages = mergeConsecutiveRoles([...historyMessages, { role: "user", content: buildAssistantPrompt(text, today) }]);
 
-  const result = await callClaude({ system, messages, maxTokens: 600, apiKey, model });
+  // Pulling fields out of "sold 10 jars to Nena" is extraction, not reasoning. Low effort is
+  // both cheaper and faster on the thing the owner does many times a day.
+  const result = await callClaude({ system, messages, maxTokens: 600, apiKey, model, effort: "low" });
 
   if (!result.ok) {
     // The caller only ever sees "ai_error", which is all the owner can act on — but without
@@ -183,7 +185,10 @@ export async function POST(req: NextRequest) {
 
     if (parsed.mode === "chat") {
       const reply = typeof parsed.reply === "string" ? parsed.reply : "";
-      return NextResponse.json({ success: true, mode: "chat", reply, usage: result.usage });
+      // The model says this needs something outside her ledger. An empty reply means the same
+      // thing by accident, so treat it the same rather than showing her a blank bubble.
+      const needsLookup = parsed.needsLookup === true || reply.trim() === "";
+      return NextResponse.json({ success: true, mode: "chat", reply, needsLookup, usage: result.usage });
     }
 
     const entry = coerceEntry(isRecord(parsed.entry) ? parsed.entry : {}, today, validCategories);
