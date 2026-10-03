@@ -15,6 +15,7 @@ import { OwnerNameCard } from "@/components/settings/owner-name-card";
 import { PeopleCard } from "@/components/settings/people-card";
 import { SpreadsheetButton } from "@/components/settings/spreadsheet-button";
 import { UnitsCard } from "@/components/settings/units-card";
+import { SeasonalityCard } from "@/components/settings/seasonality-card";
 import { cn } from "@/lib/utils";
 import { Page, PageTabs } from "@/components/layout/page";
 import { SimpleSettings } from "@/components/simple/simple-settings";
@@ -71,7 +72,7 @@ export default function SettingsPage() {
   const [keyTest, setKeyTest] = useState<{ ok: boolean; message: string } | null>(null);
   const [testing, setTesting] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [tab, setTab] = useState<"general" | "people" | "ai" | "sheet">("general");
+  const [tab, setTab] = useState<"general" | "seasons" | "people" | "ai" | "sheet">("general");
 
   // next-themes resolves the real theme synchronously on the client's first render
   // (to avoid a flash), which is already ahead of what the server rendered — so
@@ -269,6 +270,7 @@ export default function SettingsPage() {
         <PageTabs
           tabs={[
             ["general", "General"],
+            ["seasons", "Busy months"],
             ["people", "People & activity"],
             ["ai", "AI assistant"],
             ["sheet", "Google Sheet"],
@@ -277,6 +279,8 @@ export default function SettingsPage() {
           onChange={setTab}
         />
       </div>
+
+      {tab === "seasons" && <SeasonalityCard />}
 
       {tab === "general" && (
         <div className="flex flex-col gap-4">

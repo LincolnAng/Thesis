@@ -95,6 +95,8 @@ export interface PlanInput {
   shelfLifeDays: (productId: string) => number;
   /** Share of raw cacao that's usable, 0–1. */
   cacaoUtilization: number;
+  /** Seasonal multipliers per product, so next month's forecast reflects the calendar. */
+  seasonMultipliers?: (productId: string) => number[] | undefined;
   strategy: ScheduleStrategy;
   now?: Date;
 }
@@ -143,7 +145,7 @@ export function buildProductionPlan(input: PlanInput): ProductionPlan {
   // The calendar runs through next month so late batches still have somewhere to land.
   const windowEnd = toIsoDate(new Date(now.getFullYear(), now.getMonth() + 2, 0));
 
-  const forecasts = forecastAll(input.products, input.entries, now);
+  const forecasts = forecastAll(input.products, input.entries, now, input.seasonMultipliers);
 
   // --- Demand: forecast by month end, each upcoming event by the day before it --------------
   const upcomingEvents = input.events.filter(

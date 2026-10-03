@@ -6,13 +6,15 @@ import { SimpleStock } from "@/components/simple/simple-stock";
 import { useViewMode } from "@/lib/summary/view-mode";
 import { EventPlanDialog } from "@/components/inventory/event-plan-dialog";
 import { PlanSettingsDialog } from "@/components/inventory/plan-settings-dialog";
+import { SeasonalBreakdown } from "@/components/inventory/seasonal-breakdown";
+import { ConfidenceDonut } from "@/components/inventory/confidence-donut";
 import { AddStockDialog } from "@/components/stock/add-stock-dialog";
 import { AddProductDialog, EditProductDialog } from "@/components/stock/edit-product-dialog";
 import { stockLevel } from "@/components/data-table/stock-level";
 import { useStore } from "@/lib/store/use-store";
 import { chipColor } from "@/lib/chart-colors";
 import { formatNumber, pluralize } from "@/lib/format";
-import { MOVING_AVERAGE_MONTHS } from "@/lib/summary/forecast";
+import { MOVING_AVERAGE_MONTHS, type ForecastReliability } from "@/lib/summary/forecast";
 import { isRawCacao } from "@/lib/summary/cacao";
 import {
   buildProductionPlan,
@@ -24,6 +26,7 @@ import {
 } from "@/lib/summary/production-schedule";
 import {
   cacaoUtilizationPct,
+  multipliersFor,
   eventPlan,
   setCacaoUtilizationPct,
   shelfLifeDays,
@@ -153,10 +156,12 @@ function Calendar({
 function StockVsForecast({
   products,
   forecastOf,
+  reliabilityOf,
   onPick,
 }: {
   products: Product[];
   forecastOf: (id: string) => number;
+  reliabilityOf: (id: string) => ForecastReliability | undefined;
   onPick: (p: Product) => void;
 }) {
   const max = Math.max(10, ...products.map((p) => Math.max(p.stockQty, forecastOf(p.id)))) * 1.05;
@@ -164,31 +169,65 @@ function StockVsForecast({
     .map((p) => ({ p, f: forecastOf(p.id), gap: p.stockQty - forecastOf(p.id) }))
     .sort((a, b) => a.p.stockQty / Math.max(1, a.f) - b.p.stockQty / Math.max(1, b.f));
 
+  // Two bars per product, each with its own figure at the end of it. The forecast used to be a
+  // thin tick on the stock bar with its number in a column far to the right — two things that
+  // have to be read together, placed as far apart as the row allowed.
+  const COLS = "grid grid-cols-[minmax(0,1.2fr)_minmax(0,2.4fr)_70px_64px] items-center gap-4";
+
   return (
     <div className="flex flex-col">
+      <div className={`${COLS} border-b border-line/10 pb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground`}>
+        <span>Product</span>
+        <span>On hand vs. expected to sell</span>
+        <span className="text-right">Spare</span>
+        <span className="text-right">Confidence</span>
+      </div>
+
       {rows.map(({ p, f, gap }) => {
         const short = gap < 0;
+        const reliability = reliabilityOf(p.id);
+        const pct = (v: number) => `${Math.max(v > 0 ? 2 : 0, (v / max) * 100)}%`;
         return (
           <button
             key={p.id}
             type="button"
             onClick={() => onPick(p)}
             title="Click to edit"
-            className="-mx-2 grid grid-cols-[minmax(0,190px)_1fr_210px] items-center gap-5 rounded-lg px-2 py-2 text-left hover:bg-secondary"
+            className={`${COLS} -mx-2 w-[calc(100%+1rem)] rounded-lg px-2 py-2.5 text-left hover:bg-secondary`}
           >
             <span className="truncate text-[13px] font-medium">{p.name}</span>
-            <span className="relative h-5 rounded bg-[#F0EEE6]">
-              <span className="absolute inset-y-0 left-0 rounded" style={{ width: `${(p.stockQty / max) * 100}%`, background: short ? "#B3261E" : "#7B4B2A" }} />
-              <span className="absolute -bottom-1 -top-1 w-[3px] rounded-full bg-ink" style={{ left: `calc(${(f / max) * 100}% - 1px)` }} />
-            </span>
-            <span className="grid grid-cols-[1fr_84px] items-center gap-3 text-[12px]">
-              <span className="whitespace-nowrap text-right text-muted-foreground">
-                {p.stockQty} / {f} jars
+
+            <span className="flex flex-col gap-1">
+              <span className="flex items-center gap-2">
+                <span className="relative h-3.5 flex-1 rounded bg-[#F0EEE6]">
+                  <span
+                    className="absolute inset-y-0 left-0 rounded"
+                    style={{ width: pct(p.stockQty), background: "#7B4B2A" }}
+                  />
+                </span>
+                <span className="w-[72px] shrink-0 text-[12px] tabular-nums">
+                  <span className="font-semibold">{p.stockQty}</span>
+                  <span className="text-muted-foreground"> on hand</span>
+                </span>
               </span>
-              <span className={`rounded-md py-0.5 text-center font-semibold text-white ${short ? "bg-danger" : "bg-success"}`}>
-                {short ? `Short: ${-gap}` : `Spare: ${gap}`}
+              <span className="flex items-center gap-2">
+                <span className="relative h-3.5 flex-1 rounded bg-[#F0EEE6]">
+                  <span
+                    className="absolute inset-y-0 left-0 rounded"
+                    style={{ width: pct(f), background: "#E8A013" }}
+                  />
+                </span>
+                <span className="w-[72px] shrink-0 text-[12px] tabular-nums">
+                  <span className="font-semibold">{f}</span>
+                  <span className="text-muted-foreground"> expected</span>
+                </span>
               </span>
             </span>
+
+            <span className={`text-right text-[13px] font-semibold tabular-nums ${short ? "text-danger" : "text-success"}`}>
+              {short ? `−${-gap}` : `+${gap}`}
+            </span>
+            <span className="flex justify-end">{reliability && <ConfidenceDonut reliability={reliability} />}</span>
           </button>
         );
       })}
@@ -236,6 +275,7 @@ export default function InventoryPage() {
         unavailable: new Set(unavailableDays(businessSettings)),
         shelfLifeDays: (id) => shelfLifeDays(businessSettings, id),
         cacaoUtilization: cacaoUtilizationPct(businessSettings) / 100,
+        seasonMultipliers: (productId) => multipliersFor(businessSettings, productId),
         strategy,
       }),
     [products, entries, machines, rawMaterials, events, eventPlans, businessSettings, strategy],
@@ -479,6 +519,7 @@ export default function InventoryPage() {
             </div>
           </div>
         ) : (
+          <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-4 rounded-2xl border border-line/15 bg-white p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -487,7 +528,7 @@ export default function InventoryPage() {
                 </div>
                 <div className="mt-0.5 text-xs text-muted-foreground">
                   {basisMonths.length
-                    ? `Forecast = average monthly sales from ${basisMonths.join(", ")} (${MOVING_AVERAGE_MONTHS}-month moving average)`
+                    ? `Fitted on ${basisMonths.join(", ")} — "What to expect each month" below shows the working`
                     : "No complete months of sales yet — the forecast fills in as sales are logged"}
                 </div>
               </div>
@@ -497,16 +538,17 @@ export default function InventoryPage() {
                   On hand
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="h-3.5 w-[3px] rounded-full bg-ink" />
-                  Expected to sell in {nextMonth}
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-3 rounded-sm bg-danger" />
-                  Not enough
+                  <span className="h-2.5 w-3 rounded-sm" style={{ background: "#E8A013" }} />
+                  {`Expected to sell in ${nextMonth}`}
                 </span>
               </div>
             </div>
-            <StockVsForecast products={products} forecastOf={forecastOf} onPick={(p) => setEditingProductId(p.id)} />
+            <StockVsForecast
+              products={products}
+              forecastOf={forecastOf}
+              reliabilityOf={(id) => plan.forecasts.find((f) => f.productId === id)?.reliability}
+              onPick={(p) => setEditingProductId(p.id)}
+            />
             <div className="grid grid-cols-1 gap-4 border-t border-line/10 pt-3 text-xs text-muted-foreground min-[1000px]:grid-cols-[1fr_auto]">
               {rawMaterials.length > 0 && (
                 <div className="leading-relaxed">
@@ -539,6 +581,8 @@ export default function InventoryPage() {
                 </label>
               )}
             </div>
+          </div>
+          <SeasonalBreakdown forecasts={plan.forecasts} />
           </div>
         )}
       </div>
