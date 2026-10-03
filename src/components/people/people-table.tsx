@@ -61,27 +61,19 @@ export function PeopleTable({ columns, rows, empty }: { columns: PeopleColumn[];
   );
 }
 
-/**
- * The few headline numbers above a table.
- *
- * Carded and left-aligned to match Inventory's tiles — these used to be bare centered
- * figures floating on the page background, the only place in the app that did that, which
- * made this section read as a different product from the rest.
- */
+/** The few headline numbers above a table, centered under their labels. */
 export function PeopleSummary({ items, right }: { items: { label: string; value: string }[]; right?: ReactNode }) {
   return (
-    <div className="mb-4 flex flex-col gap-4">
-      {right && <div className="flex justify-end">{right}</div>}
-      <div className="grid grid-cols-1 gap-4 min-[640px]:grid-cols-3">
+    <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
+      <div className="flex flex-wrap gap-8">
         {items.map((i) => (
-          <div key={i.label} className="rounded-2xl border border-line/15 bg-white px-5 py-4">
+          <div key={i.label} className="text-center">
             <div className="text-xs font-semibold text-muted-foreground">{i.label}</div>
-            <div className="truncate font-display text-[22px] font-semibold" title={i.value}>
-              {i.value}
-            </div>
+            <div className="font-display text-[22px] font-semibold">{i.value}</div>
           </div>
         ))}
       </div>
+      {right}
     </div>
   );
 }

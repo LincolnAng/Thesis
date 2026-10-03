@@ -11,7 +11,7 @@ import { nameKey } from "@/lib/summary/name-match";
 import { allExpenseCategories } from "@/lib/summary/expenses-summary";
 import { effectiveProductPrice, productCostPerJar } from "@/lib/summary/recipe-cost";
 import { useCostContext } from "@/lib/summary/use-cost-context";
-import { itemChoices, productForItem, selectedItemValue, unitForItem } from "@/lib/summary/item-catalog";
+import { productUnit } from "@/lib/units";
 import { EXPENSE_CATEGORY_LABELS, PRICE_TYPE_LABELS, formatPeso } from "@/lib/format";
 import type { Entry, ExpenseCategory, PriceType } from "@/lib/store/types";
 
@@ -116,16 +116,20 @@ export function TransactionGrid({
   const costCtx = useCostContext();
   const [newRow, setNewRow] = useState<EntryDraft>(() => blankEntryDraft(defaultType, "Added in the table"));
 
+  const itemNames = [...products.map((p) => p.name), ...rawMaterials.map((m) => m.name)];
   const customerNames = deriveCustomers(entries).map((c) => c.name);
   const expenseCategories = allExpenseCategories(categoryBudgets);
 
   /** The unit the catalog knows for an item — shown beside the quantity, never typed. */
   function unitOf(sku: string | null): string | null {
-    return unitForItem(sku, products, rawMaterials);
+    if (!sku) return null;
+    const product = products.find((p) => p.name === sku);
+    if (product) return productUnit(product);
+    return rawMaterials.find((m) => m.name === sku)?.unit?.trim() || null;
   }
 
   function unitPrice(sku: string | null, priceType: PriceType): number | null {
-    const product = productForItem(sku, products);
+    const product = products.find((p) => p.name === sku);
     if (!product) return null;
     if (priceType === "friend" && product.friendPrice > 0) return product.friendPrice;
     if (priceType === "wholesale" && product.wholesalePrice > 0) return product.wholesalePrice;
@@ -171,42 +175,17 @@ export function TransactionGrid({
     patch(entry, { counterparty: name });
   }
 
-  /**
-   * Item, who and category are the same three dropdowns whether adding or editing.
-   *
-   * The item list is grouped by where the name comes from: products are exactly the cards
-   * on the Products tab, materials are what the business buys, and a sale is offered
-   * products only. A stray name from an older row still shows, flagged, so it can be read
-   * and corrected rather than quietly lost.
-   */
-  function itemCell(type: EntryDraft["type"], value: string | null, onPick: (sku: string | null) => void) {
-    const choices = itemChoices(type, products, rawMaterials, value);
+  /** Item, who and category are the same three dropdowns whether adding or editing. */
+  function itemCell(value: string | null, onPick: (sku: string | null) => void) {
     return (
-      <select
-        className={CELL}
-        value={selectedItemValue(value, choices)}
-        onChange={(e) => onPick(e.target.value || null)}
-      >
+      <select className={CELL} value={value ?? ""} onChange={(e) => onPick(e.target.value || null)}>
         <option value="">—</option>
-        {choices.unknown && <option value={choices.unknown}>{choices.unknown} (not in Products)</option>}
-        {choices.products.length > 0 && (
-          <optgroup label="Products">
-            {choices.products.map((item) => (
-              <option key={item.name} value={item.name}>
-                {item.name}
-              </option>
-            ))}
-          </optgroup>
-        )}
-        {choices.materials.length > 0 && (
-          <optgroup label="Materials">
-            {choices.materials.map((item) => (
-              <option key={item.name} value={item.name}>
-                {item.name}
-              </option>
-            ))}
-          </optgroup>
-        )}
+        {value && !itemNames.includes(value) && <option value={value}>{value}</option>}
+        {itemNames.map((name) => (
+          <option key={name} value={name}>
+            {name}
+          </option>
+        ))}
       </select>
     );
   }
@@ -278,7 +257,7 @@ export function TransactionGrid({
               <option value="SALE">Sale</option>
               <option value="EXPENSE">Expense</option>
             </select>
-            {itemCell(newRow.type, newRow.sku, (sku) => changeNew({ sku }))}
+            {itemCell(newRow.sku, (sku) => changeNew({ sku }))}
             <div className="flex items-center gap-1 pr-1">
               <CommitCell
                 type="number"
@@ -354,7 +333,7 @@ export function TransactionGrid({
               <option value="SALE">Sale</option>
               <option value="EXPENSE">Expense</option>
             </select>
-            {itemCell(e.type, e.sku, (sku) => patch(e, { sku }))}
+            {itemCell(e.sku, (sku) => patch(e, { sku }))}
             <div className="flex items-center gap-1 pr-1">
               <CommitCell
                 type="number"

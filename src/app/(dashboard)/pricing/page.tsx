@@ -230,9 +230,9 @@ function PricingDetail({ product, cost, actual }: { product: Product; cost: Prod
 
       {editingRecipe && (
         <Dialog open onOpenChange={(o) => !o && setEditingRecipe(false)}>
-          <DialogContent className="max-h-[88vh] overflow-y-auto rounded-2xl sm:max-w-5xl">
+          <DialogContent className="max-h-[88vh] overflow-y-auto rounded-2xl sm:max-w-3xl">
             <DialogHeader>
-              <DialogTitle>{product.name} — what it costs to make</DialogTitle>
+              <DialogTitle>{product.name} — recipe & costs</DialogTitle>
             </DialogHeader>
             <PricingCalculatorCard product={product} />
           </DialogContent>

@@ -269,7 +269,7 @@ export default function SettingsPage() {
         <PageTabs
           tabs={[
             ["general", "General"],
-            ["people", "Users & activity"],
+            ["people", "People & activity"],
             ["ai", "AI assistant"],
             ["sheet", "Google Sheet"],
           ]}

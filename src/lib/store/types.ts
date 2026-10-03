@@ -80,10 +80,6 @@ export interface Product {
   unit?: string;
   /** Hands-on time one batch takes. Labor cost is derived from this and the hourly rate in
    * settings, so a change to the rate reprices every product at once. */
-  /** Minutes to make ONE jar, cacao through to sealed jar. The single figure behind both
-   * labor cost and how much equipment time a jar takes on the calendar. */
-  minutesPerUnit?: number;
-  /** Superseded by `minutesPerUnit`; read only as a fallback for products saved before it. */
   minutesPerBatch?: number;
   /** A labor figure typed in directly. When set it wins over the derived one, and the UI
    * says so — existing per-batch labor costs migrated here rather than being recomputed
@@ -199,12 +195,7 @@ export interface EventStockMovement {
 export interface Machine {
   id: string;
   name: string;
-  /** Hours this machine runs in a working day. Capacity is time: a day holds as many
-   * batches as their minutes fit into, so equipment and recipes are measured in the same
-   * currency instead of "batches", which meant different things per product. */
-  hoursPerDay: number;
-  /** Superseded by `hoursPerDay`. Kept so its column keeps its position and old rows aren't
-   * blanked on save — nothing reads it for scheduling any more. */
+  /** Batches this machine can finish in a single working day. */
   batchesPerDay: number;
   /** How many days a week it runs, counted from Monday — 6 means Mon-Sat. */
   workingDaysPerWeek: number;

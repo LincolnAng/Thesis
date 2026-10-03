@@ -115,10 +115,7 @@ export function ingredientRowCost(
  */
 export function batchLaborCost(product: Product, hourlyLaborRate: number): { cost: number; isOverride: boolean } {
   if (product.laborCostOverride != null) return { cost: product.laborCostOverride, isOverride: true };
-  // Minutes are recorded per jar now, so a batch is that times the yield. Products saved
-  // before the change still carry a per-batch figure, which stands in until one is entered.
-  const perUnit = product.minutesPerUnit ?? 0;
-  const minutes = perUnit > 0 ? perUnit * Math.max(0, product.batchYield) : (product.minutesPerBatch ?? 0);
+  const minutes = product.minutesPerBatch ?? 0;
   return { cost: (minutes / 60) * hourlyLaborRate, isOverride: false };
 }
 

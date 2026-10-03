@@ -39,7 +39,7 @@ export function Page({
   );
 }
 
-/** Tab strip used inside pages (Stakeholders, Inventory): grey track, white pill for the active tab. */
+/** Tab strip used inside pages (People, Inventory): grey track, white pill for the active tab. */
 export function PageTabs<T extends string>({
   tabs,
   value,

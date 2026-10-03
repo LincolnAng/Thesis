@@ -21,7 +21,9 @@ function daysLabel(days: number): string {
 }
 
 function MachineRow({ machine }: { machine: Machine }) {
-  const hoursField = useNumericDraft(machine.hoursPerDay, (n) => updateMachine(machine.id, { hoursPerDay: n }));
+  const capacityField = useNumericDraft(machine.batchesPerDay, (n) =>
+    updateMachine(machine.id, { batchesPerDay: n }),
+  );
 
   return (
     <li className="flex flex-wrap items-center gap-3 py-3">
@@ -38,10 +40,10 @@ function MachineRow({ machine }: { machine: Machine }) {
           type="number"
           inputMode="decimal"
           className="h-8 w-16"
-          value={hoursField.value}
-          onChange={(e) => hoursField.onChange(e.target.value)}
+          value={capacityField.value}
+          onChange={(e) => capacityField.onChange(e.target.value)}
         />
-        hours a day
+        batches a day
       </span>
       <select
         className="h-8 rounded-md border border-input bg-transparent px-2 text-sm"
@@ -68,7 +70,7 @@ export function MachinesPanel({ machines }: { machines: Machine[] }) {
   function submit() {
     const trimmed = name.trim();
     if (!trimmed) return;
-    addMachine({ name: trimmed, hoursPerDay: 8, batchesPerDay: 0, workingDaysPerWeek: 6, notes: "" });
+    addMachine({ name: trimmed, batchesPerDay: 2, workingDaysPerWeek: 6, notes: "" });
     setName("");
     setAdding(false);
   }
@@ -79,15 +81,15 @@ export function MachinesPanel({ machines }: { machines: Machine[] }) {
         <h2 className="text-sm font-semibold text-foreground">Equipment</h2>
         {machines.length > 0 && (
           <p className="text-xs text-muted-foreground">
-            {machines.reduce((sum, m) => sum + m.hoursPerDay, 0)} hours a day at full run
+            {machines.reduce((sum, m) => sum + m.batchesPerDay, 0)} batches a day at full run
           </p>
         )}
       </div>
 
       {machines.length === 0 && !adding && (
         <p className="text-sm text-muted-foreground">
-          Add the equipment you make on, and how many hours a day it runs. The calendar fills a day with as
-          many jars as their minutes fit into.
+          Add the equipment you make batches on. The plan below can only be worked out once it knows how much
+          can be finished in a day.
         </p>
       )}
 
@@ -126,7 +128,7 @@ export function MachinesPanel({ machines }: { machines: Machine[] }) {
 
       {machines.length > 0 && (
         <p className="text-xs text-muted-foreground">
-          {machines.map((m) => `${m.name}: ${m.hoursPerDay}h/day, ${daysLabel(m.workingDaysPerWeek).toLowerCase()}`).join(" · ")}
+          {machines.map((m) => `${m.name}: ${m.batchesPerDay}/day, ${daysLabel(m.workingDaysPerWeek).toLowerCase()}`).join(" · ")}
         </p>
       )}
     </section>

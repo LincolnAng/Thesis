@@ -17,7 +17,7 @@ function unitPrice(n: number) {
   return Number.isInteger(r) ? formatPeso(r) : `₱${r.toFixed(2)}`;
 }
 
-/** Contacts in Simple mode: who buys from you, who you buy from, and what's coming up. */
+/** People in Simple mode: who buys from you, who you buy from, and what's coming up. */
 export function SimplePeople() {
   const { entries, suppliers, supplierPrices, rawMaterials, events, eventStock, products } = useStore();
   const [adding, setAdding] = useState(false);

@@ -25,7 +25,6 @@ const PRODUCT_HEADER = [
   "minutesPerBatch",
   "laborCostOverride",
   "unit",
-  "minutesPerUnit",
 ];
 
 function productToRow(p: ProductRow): string[] {
@@ -45,7 +44,6 @@ function productToRow(p: ProductRow): string[] {
     p.minutesPerBatch == null ? "" : String(p.minutesPerBatch),
     p.laborCostOverride == null ? "" : String(p.laborCostOverride),
     p.unit ?? "",
-    p.minutesPerUnit == null ? "" : String(p.minutesPerUnit),
   ];
 }
 
@@ -66,7 +64,6 @@ function productFromRow(row: string[]): ProductRow | null {
     minutesPerBatch,
     laborCostOverride,
     unit,
-    minutesPerUnit,
   ] = row;
   if (!id) return null;
   return {
@@ -87,7 +84,6 @@ function productFromRow(row: string[]): ProductRow | null {
     // answer (a product that costs no labor) and must survive a round trip.
     laborCostOverride: laborCostOverride === "" || laborCostOverride === undefined ? null : Number(laborCostOverride),
     unit: unit || undefined,
-    minutesPerUnit: minutesPerUnit ? Number(minutesPerUnit) : undefined,
   };
 }
 

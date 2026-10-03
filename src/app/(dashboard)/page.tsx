@@ -123,7 +123,7 @@ function buildTiles(
     {
       href: "/people",
       icon: Users,
-      label: "Customers — this month",
+      label: "People — this month",
       value: `${pluralize(sales.length, "order")} · ${pluralize(buyers.length, "customer")}`,
       note: buyers.length ? `${buyers.slice(0, 2).join(", ")}${buyers.length > 2 ? ` +${buyers.length - 2} more` : ""}` : "No orders yet",
     },
@@ -135,7 +135,7 @@ function buildTiles(
           value: next.name,
           note: `${pluralize(daysAway, "day")} away${bringing ? ` · bringing ${bringing}` : ""}`,
         }
-      : { href: "/people?tab=events", icon: CalendarDays, label: "Events", value: "Nothing planned", note: "Add one under Stakeholders → Events" },
+      : { href: "/people?tab=events", icon: CalendarDays, label: "Events", value: "Nothing planned", note: "Add one under People → Events" },
     best
       ? {
           href: "/pricing",

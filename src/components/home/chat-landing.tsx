@@ -10,39 +10,9 @@ import { useViewMode } from "@/lib/summary/view-mode";
 
 interface Question {
   icon: LucideIcon;
-  /** What the chip says: a thing, in one or two words. */
   label: string;
-  /** What actually gets asked — the full question, kept specific. */
   text: string;
-  /** Shown in Simple mode too, rather than only in Advanced. */
-  simple?: boolean;
 }
-
-/**
- * The chips under the message box.
- *
- * The label is deliberately not the question. A row of four question-shaped sentences is
- * four sentences to read before tapping anything, which is slower than reading four nouns —
- * so the chip names the subject ("Running low") and the question sent underneath stays as
- * specific as it ever was. Nothing was simplified about what gets asked; the asking got
- * shorter to look at. The full wording is on the tooltip for anyone who wants it.
- */
-const QUESTIONS: Question[] = [
-  {
-    icon: TrendingUp,
-    label: "Money",
-    text: "How much did I make this month, and how does that compare with last month?",
-    simple: true,
-  },
-  {
-    icon: TriangleAlert,
-    label: "Running low",
-    text: "What's running low on stock, and when will it run out?",
-    simple: true,
-  },
-  { icon: Users, label: "Top buyers", text: "Who are my top customers, and what do they usually buy?" },
-  { icon: Box, label: "What to make", text: "What should I make next, and how many batches?" },
-];
 
 /**
  * The start screen: a greeting by name, one big message box, buttons for logging what
@@ -59,7 +29,17 @@ export function ChatLanding({ onSubmit, disabled }: { onSubmit: (text: string) =
   const [mode] = useViewMode();
   const simple = mode === "simple";
 
-  const questions = simple ? QUESTIONS.filter((q) => q.simple) : QUESTIONS;
+  const questions: Question[] = simple
+    ? [
+        { icon: TrendingUp, label: "How am I doing?", text: "How much did I make this month?" },
+        { icon: TriangleAlert, label: "What's running low?", text: "What's running low on stock?" },
+      ]
+    : [
+        { icon: TrendingUp, label: "How am I doing?", text: "How much did I make this month?" },
+        { icon: TriangleAlert, label: "What's running low?", text: "What's running low on stock?" },
+        { icon: Users, label: "Top customers", text: "Who are my top customers?" },
+        { icon: Box, label: "What should I make next?", text: "What should I make next, and how much?" },
+      ];
 
   function submit(text: string) {
     const trimmed = text.trim();
