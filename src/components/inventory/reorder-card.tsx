@@ -5,6 +5,7 @@ import { Phone, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatNumber, formatPeso } from "@/lib/format";
 import { getUnitCost } from "@/lib/summary/cost-engine";
+import { cacaoUtilizationPct } from "@/lib/summary/business-config";
 import { useStore } from "@/lib/store/use-store";
 import type { IngredientReach } from "@/lib/summary/ingredient-reach";
 
@@ -17,7 +18,7 @@ import type { IngredientReach } from "@/lib/summary/ingredient-reach";
  * this ingredient is who to call.
  */
 export function ReorderCard({ reach }: { reach: IngredientReach }) {
-  const { suppliers, supplierPrices, rawMaterials } = useStore();
+  const { suppliers, supplierPrices, rawMaterials, entries, products, businessSettings } = useStore();
   const material = reach.material;
 
   const latestPrice = supplierPrices
@@ -25,7 +26,14 @@ export function ReorderCard({ reach }: { reach: IngredientReach }) {
     .sort((a, b) => b.loggedAt.localeCompare(a.loggedAt))[0];
   const supplier = latestPrice ? suppliers.find((s) => s.id === latestPrice.supplierId) : undefined;
 
-  const unitCost = getUnitCost(material.id, rawMaterials, supplierPrices);
+  const unitCost = getUnitCost(
+    material.id,
+    rawMaterials,
+    supplierPrices,
+    entries,
+    products,
+    cacaoUtilizationPct(businessSettings) / 100,
+  );
   const previous = supplierPrices
     .filter((p) => p.materialId === material.id)
     .sort((a, b) => b.loggedAt.localeCompare(a.loggedAt))[1];

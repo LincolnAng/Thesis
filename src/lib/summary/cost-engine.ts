@@ -1,6 +1,8 @@
 import { convertQuantity } from "@/lib/units";
 import { rawQuantityNeeded } from "./cacao";
+import { valueMaterial } from "./ingredient-cost";
 import type {
+  Entry,
   Product,
   RawMaterialStock,
   RecipeExtraRow,
@@ -24,7 +26,7 @@ import type {
 export interface UnitCost {
   /** Cost of one of the material's own unit — a kilo of beans, a single jar. */
   cost: number;
-  source: "supplier" | "stored" | "none";
+  source: "transactions" | "supplier" | "stored" | "none";
   supplierId: string | null;
   loggedAt: string | null;
 }
@@ -67,20 +69,45 @@ function isPackaging(material: RawMaterialStock): boolean {
 }
 
 /**
- * What one unit of an ingredient costs, from the most recent supplier price that names it.
+ * What one unit of an ingredient costs.
  *
- * A supplier logs what they actually paid — ₱450 for 2 kg — so the per-unit figure is
- * derived, and converted into the material's own unit. Falls back to the material's stored
- * unitCost when no supplier prices it, which is what keeps ingredients nobody supplies
- * (or a fresh install) costing something sensible.
+ * In order of how much the number can be trusted:
+ *
+ *  1. HER EXPENSES. Money that actually left the account, FIFO-drawn against what production
+ *     has eaten and averaged over what is left (see ingredient-cost.ts). This is the source
+ *     of truth, because it is the only one that cannot quietly go stale.
+ *  2. A supplier price she logged. Real, but maintained by hand, so it is only as current as
+ *     the last time she remembered.
+ *  3. The material's stored unitCost. A typed-in guess; it keeps a fresh install from costing
+ *     everything at zero and nothing more than that.
+ *
+ * Expenses used to come LAST — in fact they were not in this chain at all, only offered as a
+ * suggestion to copy into one of the other two. So the price of a jar moved when she did
+ * bookkeeping rather than when beans got dearer.
  */
 export function getUnitCost(
   materialId: string,
   rawMaterials: RawMaterialStock[],
   supplierPrices: SupplierPrice[],
+  /** Her ledger. Omitted only by callers that genuinely have no entries to hand. */
+  entries: Entry[] = [],
+  products: Product[] = [],
+  cacaoUtilization = 1,
 ): UnitCost {
   const material = rawMaterials.find((m) => m.id === materialId);
   if (!material) return { cost: 0, source: "none", supplierId: null, loggedAt: null };
+
+  if (entries.length > 0) {
+    const valued = valueMaterial(entries, products, material, cacaoUtilization);
+    if (valued.unitCost !== null && valued.unitCost > 0) {
+      return {
+        cost: valued.unitCost,
+        source: "transactions",
+        supplierId: null,
+        loggedAt: valued.layers[valued.layers.length - 1]?.date ?? null,
+      };
+    }
+  }
 
   const priced = supplierPrices
     .filter((p) => p.materialId === materialId && p.quantity > 0)
@@ -105,8 +132,13 @@ export function ingredientRowCost(
   row: RecipeIngredientRow,
   rawMaterials: RawMaterialStock[],
   supplierPrices: SupplierPrice[],
+  entries: Entry[] = [],
+  products: Product[] = [],
+  cacaoUtilization = 1,
 ): number {
-  return getUnitCost(row.materialId, rawMaterials, supplierPrices).cost * row.quantity;
+  return (
+    getUnitCost(row.materialId, rawMaterials, supplierPrices, entries, products, cacaoUtilization).cost * row.quantity
+  );
 }
 
 /**
@@ -133,6 +165,9 @@ export function getProductCost(
   hourlyLaborRate: number,
   /** Share of raw cacao that's usable, 0–1. Recipes are written in usable cacao. */
   cacaoUtilization = 1,
+  /** Her ledger, so ingredient prices come from receipts rather than a stored guess. */
+  entries: Entry[] = [],
+  products: Product[] = [],
 ): ProductCost {
   const ingredientLines: CostLine[] = [];
   const packagingLines: CostLine[] = [];
@@ -141,7 +176,7 @@ export function getProductCost(
   for (const row of product.recipeIngredients) {
     const material = rawMaterials.find((m) => m.id === row.materialId);
     if (!material) continue;
-    const unitCost = getUnitCost(row.materialId, rawMaterials, supplierPrices);
+    const unitCost = getUnitCost(row.materialId, rawMaterials, supplierPrices, entries, products, cacaoUtilization);
     // Raw quantity actually bought — more than the recipe's usable amount for cacao.
     const rawQty = rawQuantityNeeded(material.name, row.quantity, cacaoUtilization);
     const line: CostLine = {

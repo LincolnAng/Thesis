@@ -1,7 +1,7 @@
 import { priceFromMargin, priceFromMarkup } from "./pricing-methods";
 import { batchLaborCost, getProductCost, getUnitCost, type CostLine } from "./cost-engine";
 import { rawQuantityNeeded } from "./cacao";
-import type { Product, RawMaterialStock, RecipeExtraRow, RecipeIngredientRow, SupplierPrice } from "@/lib/store/types";
+import type { Entry, Product, RawMaterialStock, RecipeExtraRow, RecipeIngredientRow, SupplierPrice } from "@/lib/store/types";
 
 /**
  * The costing surface every page reads. It is a thin shell over cost-engine — the actual
@@ -16,6 +16,10 @@ export interface CostContext {
   hourlyLaborRate: number;
   /** Share of raw cacao that's usable after processing, 0–1 (1 = no loss). */
   cacaoUtilization: number;
+  /** The ledger. Ingredient prices are read from purchases first — see ingredient-cost.ts. */
+  entries: Entry[];
+  /** Needed to work out what production has consumed, which drives the FIFO drawdown. */
+  products: Product[];
 }
 
 export interface ProductCostBreakdown {
@@ -46,7 +50,10 @@ function sumExtras(rows: RecipeExtraRow[]): number {
 export function ingredientRowCost(row: RecipeIngredientRow, ctx: CostContext): number {
   const material = ctx.rawMaterials.find((m) => m.id === row.materialId);
   const rawQty = material ? rawQuantityNeeded(material.name, row.quantity, ctx.cacaoUtilization) : row.quantity;
-  return getUnitCost(row.materialId, ctx.rawMaterials, ctx.supplierPrices).cost * rawQty;
+  return (
+    getUnitCost(row.materialId, ctx.rawMaterials, ctx.supplierPrices, ctx.entries, ctx.products, ctx.cacaoUtilization)
+      .cost * rawQty
+  );
 }
 
 export function ingredientBatchTotal(rows: RecipeIngredientRow[], ctx: CostContext): number {
@@ -68,7 +75,15 @@ export function effectiveProductPrice(product: Product, cost: ProductCostBreakdo
  * cached on the product — so it can't go stale when an ingredient's price changes.
  */
 export function productCostPerJar(product: Product, ctx: CostContext): ProductCostBreakdown {
-  const cost = getProductCost(product, ctx.rawMaterials, ctx.supplierPrices, ctx.hourlyLaborRate, ctx.cacaoUtilization);
+  const cost = getProductCost(
+    product,
+    ctx.rawMaterials,
+    ctx.supplierPrices,
+    ctx.hourlyLaborRate,
+    ctx.cacaoUtilization,
+    ctx.entries,
+    ctx.products,
+  );
   const ingredientTotal = cost.ingredientLines.reduce((sum, l) => sum + l.batchCost, 0);
   const packagingTotal = cost.packagingLines.reduce((sum, l) => sum + l.batchCost, 0);
   const laborTotal = batchLaborCost(product, ctx.hourlyLaborRate).cost;

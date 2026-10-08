@@ -89,6 +89,8 @@ function productLines(state: StoreState): string[] {
     supplierPrices: state.supplierPrices,
     hourlyLaborRate: hourlyLaborRateFrom(state.businessSettings),
     cacaoUtilization: cacaoUtilizationPct(state.businessSettings) / 100,
+    entries: state.entries,
+    products: state.products,
   };
   return state.products.map((p) => {
     const cost = productCostPerJar(p, ctx);

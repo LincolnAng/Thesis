@@ -86,5 +86,6 @@ export function buildBatchPlan(
 
 /** Current cost of one unit of a material — used by the planner's shortfall pricing. */
 export function materialUnitCost(materialId: string, ctx: CostContext): number {
-  return getUnitCost(materialId, ctx.rawMaterials, ctx.supplierPrices).cost;
+  return getUnitCost(materialId, ctx.rawMaterials, ctx.supplierPrices, ctx.entries, ctx.products, ctx.cacaoUtilization)
+    .cost;
 }

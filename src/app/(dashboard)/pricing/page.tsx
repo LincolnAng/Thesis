@@ -11,6 +11,7 @@ import { updateProduct } from "@/lib/store/store";
 import { effectiveProductPrice, productCostPerJar, type ProductCostBreakdown } from "@/lib/summary/recipe-cost";
 import { useCostContext } from "@/lib/summary/use-cost-context";
 import { MAX_MARGIN_PCT, PRICING_METHODS, pricingModeChange } from "@/lib/summary/pricing-methods";
+import { CostBreakdown } from "@/components/pricing/cost-breakdown";
 import { buildPricingRows, PRICING_WINDOW_DAYS } from "@/lib/summary/pricing-reality";
 import type { PricingMode, Product } from "@/lib/store/types";
 import { SimplePrices } from "@/components/simple/simple-prices";
@@ -78,25 +79,6 @@ function Step({ n, children, dark }: { n: number; children: React.ReactNode; dar
   );
 }
 
-function CostLines({ cost }: { cost: ProductCostBreakdown }) {
-  const lines = [
-    ["Ingredients", cost.ingredientPerJar],
-    ["Packaging", cost.packagingPerJar],
-    ["Labor", cost.laborPerJar],
-    ["Other", cost.miscPerJar],
-  ] as const;
-  return (
-    <div className="mt-3 grid grid-cols-2 gap-x-8 gap-y-1.5 text-[13px] min-[900px]:grid-cols-4">
-      {lines.map(([label, v]) => (
-        <div key={label} className="flex justify-between gap-3">
-          <span className="text-muted-foreground">{label}</span>
-          <span className="font-semibold">{peso(v)}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function PricingDetail({ product, cost, actual }: { product: Product; cost: ProductCostBreakdown; actual: { price: number | null; sales: number } }) {
   const [showCosts, setShowCosts] = useState(false);
   const [editingRecipe, setEditingRecipe] = useState(false);
@@ -124,7 +106,7 @@ function PricingDetail({ product, cost, actual }: { product: Product; cost: Prod
               </button>
             </div>
           </div>
-          {showCosts && <CostLines cost={cost} />}
+          {showCosts && <CostBreakdown product={product} cost={cost} />}
           {cost.unconvertible.length > 0 && (
             <div className="mt-2 text-xs text-danger">Couldn&apos;t price {cost.unconvertible.join(", ")} — check the units in the recipe.</div>
           )}

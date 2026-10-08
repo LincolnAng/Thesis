@@ -41,6 +41,8 @@ export function buildDataSummary(state: StoreState): string {
     supplierPrices: state.supplierPrices,
     hourlyLaborRate: hourlyLaborRateFrom(state.businessSettings),
     cacaoUtilization: cacaoUtilizationPct(state.businessSettings) / 100,
+    entries: state.entries,
+    products: state.products,
   };
 
   // Cost of goods for the month, so margin can be stated rather than guessed at.

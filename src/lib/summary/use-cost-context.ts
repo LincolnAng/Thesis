@@ -18,11 +18,11 @@ export function hourlyLaborRateFrom(settings: Record<string, string>): number {
  * them on another.
  */
 export function useCostContext(): CostContext {
-  const { rawMaterials, supplierPrices, businessSettings } = useStore();
+  const { rawMaterials, supplierPrices, businessSettings, entries, products } = useStore();
   const hourlyLaborRate = hourlyLaborRateFrom(businessSettings);
   const cacaoUtilization = cacaoUtilizationPct(businessSettings) / 100;
   return useMemo(
-    () => ({ rawMaterials, supplierPrices, hourlyLaborRate, cacaoUtilization }),
-    [rawMaterials, supplierPrices, hourlyLaborRate, cacaoUtilization],
+    () => ({ rawMaterials, supplierPrices, hourlyLaborRate, cacaoUtilization, entries, products }),
+    [rawMaterials, supplierPrices, hourlyLaborRate, cacaoUtilization, entries, products],
   );
 }
