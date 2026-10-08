@@ -1,12 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Pencil, Plus } from "lucide-react";
 import { useStore } from "@/lib/store/use-store";
 import { addRawMaterial, updateRawMaterial } from "@/lib/store/store";
 import { cacaoUtilizationPct, setCacaoUtilizationPct } from "@/lib/summary/business-config";
 import { allStandings, kindForGroup, usedBy, type MaterialGroup } from "@/lib/summary/material-stock";
 import { isRawCacao } from "@/lib/summary/cacao";
+import { CARD_GRADIENTS, ItemIcon } from "@/lib/summary/item-icons";
 import { formatNumber, formatPrice } from "@/lib/format";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -25,17 +25,6 @@ import { Button } from "@/components/ui/button";
  * to remember to update, which is the point: the old stored figures were right until the first
  * time something was missed, and then wrong forever.
  */
-
-const EMPTY_COPY: Record<MaterialGroup, { title: string; blurb: string }> = {
-  ingredient: {
-    title: "Nothing bought yet",
-    blurb: "Log what you buy under Money and it appears here, with what it cost you.",
-  },
-  supply: {
-    title: "Nothing bought yet",
-    blurb: "Jars, labels, lids — log a purchase under Money and it shows up here.",
-  },
-};
 
 function UtilizationSlider() {
   const { businessSettings } = useStore();
@@ -106,7 +95,6 @@ function AddRow({ group, onDone }: { group: MaterialGroup; onDone: () => void })
   );
 }
 
-const COLS = "grid grid-cols-[minmax(0,1.6fr)_100px_120px_minmax(0,1.1fr)_36px] items-center gap-3";
 
 export function MaterialsPanel({ group }: { group: MaterialGroup }) {
   const { rawMaterials, entries, products, businessSettings } = useStore();
@@ -120,144 +108,136 @@ export function MaterialsPanel({ group }: { group: MaterialGroup }) {
   );
 
   return (
-    <div className="rounded-2xl border border-line/15 bg-white p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="font-display text-[17px] font-semibold">
-              {group === "ingredient" ? "Raw materials" : "Supplies"}
-            </h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {group === "ingredient"
-                ? "What goes in the jar. On hand and price come from what you bought, minus what your batches used."
-                : "What the jar is. On hand and price come from what you bought, minus what your batches used."}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setAdding((v) => !v)}
-            className="flex items-center gap-1.5 rounded-[10px] border border-cacao/30 px-3 py-2 text-xs font-semibold text-cacao hover:bg-cacao/[0.06]"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            {group === "ingredient" ? "Add an ingredient" : "Add a supply"}
-          </button>
+    <>
+      <div className="mb-3 mt-8 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+        {group === "ingredient" ? "Raw materials" : "Supplies"}
+      </div>
+
+      {adding && (
+        <div className="mb-3">
+          <AddRow group={group} onDone={() => setAdding(false)} />
         </div>
+      )}
 
-        {adding && (
-          <div className="mt-3">
-            <AddRow group={group} onDone={() => setAdding(false)} />
-          </div>
-        )}
-
-        {rows.length === 0 ? (
-          <div className="mt-4 rounded-xl border border-dashed border-line/25 px-4 py-6 text-center">
-            <div className="text-sm font-semibold">{EMPTY_COPY[group].title}</div>
-            <p className="mt-1 text-[13px] text-muted-foreground">{EMPTY_COPY[group].blurb}</p>
-          </div>
-        ) : (
-          <>
+      <div className="grid grid-cols-1 gap-[18px] min-[600px]:grid-cols-2 min-[1000px]:grid-cols-3 min-[1300px]:grid-cols-4">
+        {rows.map((r, i) => {
+          const uses = usedBy(r.material, products);
+          const cacao = isRawCacao(r.material.name);
+          const open = editingId === r.material.id;
+          return (
             <div
-              className={`${COLS} mt-4 border-b border-line/10 pb-2 text-[10px] font-bold uppercase tracking-wide text-muted-foreground`}
+              key={r.material.id}
+              className="flex flex-col overflow-hidden rounded-2xl border border-line/15 bg-white transition hover:border-cacao/40 hover:shadow-sm"
             >
-              <span>Name</span>
-              <span className="text-right">On hand</span>
-              <span className="text-right">Average cost</span>
-              <span>Used in</span>
-              <span />
-            </div>
+              <div className={`flex h-[120px] items-center justify-center bg-gradient-to-br ${CARD_GRADIENTS[i % CARD_GRADIENTS.length]}`}>
+                <ItemIcon name={r.material.name} className="h-10 w-10 text-white/90" />
+              </div>
 
-            {rows.map((r) => {
-              const uses = usedBy(r.material, products);
-              return (
-                <div key={r.material.id} className={`${COLS} border-b border-line/10 py-2.5 text-[13px] last:border-0`}>
-                  <span className="flex min-w-0 flex-col">
-                    <span className="truncate font-medium">{r.material.name}</span>
-                    {isRawCacao(r.material.name) && <UtilizationSlider />}
-                  </span>
+              <button
+                type="button"
+                onClick={() => setEditingId(open ? null : r.material.id)}
+                title={`Edit ${r.material.name}`}
+                className="flex flex-col gap-1.5 p-4 text-left"
+              >
+                <div className="flex w-full items-start justify-between gap-2">
+                  <span className="text-sm font-semibold">{r.material.name}</span>
+                  <span className="shrink-0 text-[11px] font-semibold text-faint">Edit</span>
+                </div>
 
-                  <span className="text-right tabular-nums">
-                    {r.tracked ? (
-                      <span className={r.onHand <= 0 ? "font-semibold text-danger" : "font-semibold"}>
-                        {`${formatNumber(Math.round(r.onHand * 100) / 100)} ${r.material.unit}`}
-                      </span>
-                    ) : (
-                      <span className="text-[12px] text-muted-foreground">not bought yet</span>
-                    )}
-                  </span>
-
-                  <span className="text-right tabular-nums">
+                <div className="flex w-full items-center justify-between gap-2 text-[13px]">
+                  <span className="font-bold">
                     {r.avgCost !== null ? (
                       <>
-                        <span className="font-semibold">{formatPrice(r.avgCost)}</span>
-                        <span className="text-[11px] text-muted-foreground">{` / ${r.material.unit}`}</span>
+                        {formatPrice(r.avgCost)}
+                        <span className="text-[11px] font-normal text-muted-foreground">{` / ${r.material.unit}`}</span>
                       </>
                     ) : (
-                      <span className="text-[12px] text-muted-foreground">no price yet</span>
+                      <span className="text-[12px] font-normal text-muted-foreground">no price yet</span>
                     )}
                   </span>
-
-                  <span className="truncate text-[12px] text-muted-foreground">
-                    {uses.length ? uses.map((p) => p.name).join(", ") : "no recipe uses it"}
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                      !r.tracked
+                        ? "bg-secondary text-muted-foreground"
+                        : r.onHand <= 0
+                          ? "bg-danger/10 text-danger"
+                          : "bg-success/10 text-success"
+                    }`}
+                  >
+                    {r.tracked
+                      ? `${formatNumber(Math.round(r.onHand * 100) / 100)} ${r.material.unit}`
+                      : "not bought yet"}
                   </span>
-
-                  <span className="flex justify-end">
-                    <button
-                      type="button"
-                      aria-label={`Edit ${r.material.name}`}
-                      onClick={() => setEditingId(editingId === r.material.id ? null : r.material.id)}
-                      className="rounded-md p-1 text-muted-foreground hover:text-cacao"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                  </span>
-
-                  {editingId === r.material.id && (
-                    <div className="col-span-5 mt-1 flex flex-wrap items-end gap-2 rounded-xl border border-line/15 p-3">
-                      <div className="min-w-[12rem] flex-1 space-y-1">
-                        <label className="text-xs text-muted-foreground">Name</label>
-                        <Input
-                          defaultValue={r.material.name}
-                          className="h-9"
-                          onBlur={(e) => updateRawMaterial(r.material.id, { name: e.target.value.trim() || r.material.name })}
-                        />
-                      </div>
-                      <div className="w-24 space-y-1">
-                        <label className="text-xs text-muted-foreground">Measured in</label>
-                        <Input
-                          defaultValue={r.material.unit}
-                          className="h-9"
-                          onBlur={(e) => updateRawMaterial(r.material.id, { unit: e.target.value.trim() || r.material.unit })}
-                        />
-                      </div>
-                      <div className="w-36 space-y-1">
-                        <label className="text-xs text-muted-foreground">Counts as</label>
-                        <select
-                          className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
-                          value={r.group}
-                          onChange={(e) =>
-                            updateRawMaterial(r.material.id, { kind: kindForGroup(e.target.value as MaterialGroup) })
-                          }
-                        >
-                          <option value="ingredient">Ingredient</option>
-                          <option value="supply">Supply</option>
-                        </select>
-                      </div>
-                      <Button size="sm" variant="ghost" className="h-9" onClick={() => setEditingId(null)}>
-                        Done
-                      </Button>
-                    </div>
-                  )}
                 </div>
-              );
-            })}
-          </>
-        )}
 
-        {rows.some((r) => r.skipped > 0) && (
-          <p className="mt-3 text-[11px] text-danger">
-            Some purchases were logged in a unit that couldn&apos;t be converted, so they aren&apos;t counted above.
-            Check the units on those expenses.
-          </p>
-        )}
-    </div>
+                <div className="truncate text-xs text-muted-foreground">
+                  {uses.length ? `Used in ${uses.map((p) => p.name).join(", ")}` : "No recipe uses it yet"}
+                </div>
+              </button>
+
+              {cacao && (
+                <div className="border-t border-line/10 px-4 py-2.5">
+                  <UtilizationSlider />
+                </div>
+              )}
+
+              {open && (
+                <div className="flex flex-col gap-2 border-t border-line/10 p-4">
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Name</label>
+                    <Input
+                      defaultValue={r.material.name}
+                      className="h-9"
+                      onBlur={(e) => updateRawMaterial(r.material.id, { name: e.target.value.trim() || r.material.name })}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="w-24 space-y-1">
+                      <label className="text-xs text-muted-foreground">Measured in</label>
+                      <Input
+                        defaultValue={r.material.unit}
+                        className="h-9"
+                        onBlur={(e) => updateRawMaterial(r.material.id, { unit: e.target.value.trim() || r.material.unit })}
+                      />
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <label className="text-xs text-muted-foreground">Counts as</label>
+                      <select
+                        className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
+                        value={r.group}
+                        onChange={(e) =>
+                          updateRawMaterial(r.material.id, { kind: kindForGroup(e.target.value as MaterialGroup) })
+                        }
+                      >
+                        <option value="ingredient">Raw material</option>
+                        <option value="supply">Supply</option>
+                      </select>
+                    </div>
+                  </div>
+                  <Button size="sm" variant="ghost" className="h-9 self-start" onClick={() => setEditingId(null)}>
+                    Done
+                  </Button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        <button
+          type="button"
+          onClick={() => setAdding((v) => !v)}
+          className="min-h-[220px] rounded-2xl border border-dashed border-line/25 text-sm font-semibold text-muted-foreground transition hover:border-cacao/40 hover:text-cacao"
+        >
+          {group === "ingredient" ? "+ Add a raw material" : "+ Add a supply"}
+        </button>
+      </div>
+
+      {rows.some((r) => r.skipped > 0) && (
+        <p className="mt-3 text-[11px] text-danger">
+          Some purchases were logged in a unit that couldn&apos;t be converted, so they aren&apos;t counted above.
+          Check the units on those expenses.
+        </p>
+      )}
+    </>
   );
 }

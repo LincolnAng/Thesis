@@ -43,3 +43,14 @@ export function ItemIcon({ name, className }: { name: string; className?: string
   const Icon = ICONS[itemIconKey(name)];
   return <Icon className={className} />;
 }
+
+/** Card header gradients, shared by every tile on Inventory so the grids read as one page. */
+export const CARD_GRADIENTS = [
+  "from-[#7B4B2A] to-[#4A2D19]",
+  "from-[#C08552] to-[#8A5A33]",
+  "from-[#5E4536] to-[#3D3D3A]",
+  "from-[#788C5D] to-[#556943]",
+  "from-[#C46686] to-[#9C4E68]",
+  "from-[#6B4D9E] to-[#4A3570]",
+  "from-[#4D3B2F] to-[#2A2019]",
+];
