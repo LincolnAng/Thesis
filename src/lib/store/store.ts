@@ -18,6 +18,7 @@ import {
   type SupplierRow,
 } from "./sheet-shapes";
 import { findProduct } from "@/lib/summary/product-match";
+import { rawQuantityNeeded } from "@/lib/summary/cacao";
 import { ENTRY_TYPE_LABELS, formatPeso } from "@/lib/format";
 import { currentUser } from "@/lib/auth/current-user";
 import type { BusinessSettingRow } from "@/lib/sheets/business-settings";
@@ -595,11 +596,22 @@ interface SideEffectResult {
   touchedMaterialIds: string[];
 }
 
+/**
+ * Share of raw cacao that survives roasting, as stored in settings. Kept here rather than
+ * imported from summary/business-config so the store does not depend on a module that depends
+ * on it.
+ */
+function utilizationOf(snapshot: { businessSettings: Record<string, string> }): number {
+  const pct = Number(snapshot.businessSettings["cacaoUtilizationPct"]);
+  return Number.isFinite(pct) && pct > 0 ? Math.min(100, pct) / 100 : 1;
+}
+
 function applyEntrySideEffects(
   entry: Entry,
   direction: 1 | -1,
   products: Product[],
   rawMaterials: RawMaterialStock[],
+  cacaoUtilization: number,
 ): SideEffectResult {
   const touchedProductIds: string[] = [];
   const touchedMaterialIds: string[] = [];
@@ -607,7 +619,7 @@ function applyEntrySideEffects(
   const delta = entry.quantity * direction;
 
   // Anything sold or lost at an event/distributor comes out of the stock that was already
-  // moved there when it was borrowed — deducting from main stock again would double-count it.
+  // moved there when it was sent out — deducting from main stock again would double-count it.
   // Its effect on the event's holdings is derived from the entry itself (see summary/events.ts).
   const drawsFromEventHoldings = Boolean(entry.eventId);
 
@@ -623,6 +635,29 @@ function applyEntrySideEffects(
     if (product) {
       products = products.map((p) => (p.id === product.id ? { ...p, stockQty: Math.max(0, p.stockQty + delta) } : p));
       touchedProductIds.push(product.id);
+
+      // Making jars SPENDS ingredients. This used to live in recordBatch alone, which meant
+      // only the batch planner consumed anything: the same batch logged from Home, from Add
+      // stock, or by the assistant added jars and quietly left the beans on the shelf. Stock
+      // only ever went up, so the shopping list and every cost built on it drifted from
+      // reality the moment she stopped using one particular button.
+      //
+      // It belongs here because this is the one place every entry passes through, including
+      // edits and deletions — `direction` puts the ingredients back when a batch is undone.
+      const batches = product.batchYield > 0 ? delta / product.batchYield : 0;
+      if (batches !== 0) {
+        for (const row of product.recipeIngredients) {
+          const material = rawMaterials.find((m) => m.id === row.materialId);
+          if (!material) continue;
+          // Recipes are written in USABLE cacao; the shelf holds raw. Deducting the recipe
+          // figure would leave phantom beans that cannot be roasted into anything.
+          const used = rawQuantityNeeded(material.name, row.quantity, cacaoUtilization) * batches;
+          rawMaterials = rawMaterials.map((m) =>
+            m.id === material.id ? { ...m, qty: Math.max(0, m.qty - used) } : m,
+          );
+          touchedMaterialIds.push(material.id);
+        }
+      }
     }
   } else if (entry.type === "EXPENSE" && (entry.category === "raw_materials" || entry.category === "packaging")) {
     const material = findRawMaterialByName(rawMaterials, entry.sku);
@@ -660,7 +695,7 @@ export function addEntry(input: Omit<Entry, "id"> & { id?: string }): Entry {
   let touchedProductIds: string[] = [];
   let touchedMaterialIds: string[] = [];
   setState((prev) => {
-    const result = applyEntrySideEffects(entry, 1, prev.products, prev.rawMaterials);
+    const result = applyEntrySideEffects(entry, 1, prev.products, prev.rawMaterials, utilizationOf(prev));
     touchedProductIds = result.touchedProductIds;
     touchedMaterialIds = result.touchedMaterialIds;
     return { ...prev, entries: [entry, ...prev.entries], products: result.products, rawMaterials: result.rawMaterials };
@@ -679,7 +714,7 @@ export function deleteEntry(id: string) {
   setState((prev) => {
     const entry = prev.entries.find((e) => e.id === id);
     if (!entry) return prev;
-    const result = applyEntrySideEffects(entry, -1, prev.products, prev.rawMaterials);
+    const result = applyEntrySideEffects(entry, -1, prev.products, prev.rawMaterials, utilizationOf(prev));
     touchedProductIds = result.touchedProductIds;
     touchedMaterialIds = result.touchedMaterialIds;
     return {
@@ -701,9 +736,9 @@ export function replaceEntry(id: string, next: Omit<Entry, "id">) {
   setState((prev) => {
     const old = prev.entries.find((e) => e.id === id);
     if (!old) return prev;
-    const reversed = applyEntrySideEffects(old, -1, prev.products, prev.rawMaterials);
+    const reversed = applyEntrySideEffects(old, -1, prev.products, prev.rawMaterials, utilizationOf(prev));
     updatedEntry = { ...next, id };
-    const applied = applyEntrySideEffects(updatedEntry, 1, reversed.products, reversed.rawMaterials);
+    const applied = applyEntrySideEffects(updatedEntry, 1, reversed.products, reversed.rawMaterials, utilizationOf(prev));
     touchedProductIds = [...reversed.touchedProductIds, ...applied.touchedProductIds];
     touchedMaterialIds = [...reversed.touchedMaterialIds, ...applied.touchedMaterialIds];
     return {
@@ -1001,7 +1036,7 @@ export function deleteEvent(id: string) {
  * total, so an event's on-hand count is always recomputable from its movements and its
  * tagged sales (see summary/events.ts) and can never drift out of step with them.
  */
-function moveEventStock(eventId: string, productId: string, type: "borrow" | "return", quantity: number) {
+function moveEventStock(eventId: string, productId: string, type: "sent_out" | "sent_back", quantity: number) {
   if (quantity <= 0) return;
   const movement: EventStockMovement = {
     id: genId("evtstk"),
@@ -1011,9 +1046,9 @@ function moveEventStock(eventId: string, productId: string, type: "borrow" | "re
     quantity,
     createdAt: new Date().toISOString(),
   };
-  // Borrowing takes the stock out of main inventory now; from here on the event's own sales
+  // Sending stock out takes it of main inventory now; from here on the event's own sales
   // draw it down instead of touching main stock again (see applyEntrySideEffects).
-  const direction = type === "borrow" ? -1 : 1;
+  const direction = type === "sent_out" ? -1 : 1;
   setState((prev) => ({
     ...prev,
     eventStock: [...prev.eventStock, movement],
@@ -1025,12 +1060,12 @@ function moveEventStock(eventId: string, productId: string, type: "borrow" | "re
   mirrorStockRows([productId], []);
 }
 
-export function borrowStockForEvent(eventId: string, productId: string, quantity: number) {
-  moveEventStock(eventId, productId, "borrow", quantity);
+export function sendStockToEvent(eventId: string, productId: string, quantity: number) {
+  moveEventStock(eventId, productId, "sent_out", quantity);
 }
 
-export function returnStockFromEvent(eventId: string, productId: string, quantity: number) {
-  moveEventStock(eventId, productId, "return", quantity);
+export function sendStockBackFromEvent(eventId: string, productId: string, quantity: number) {
+  moveEventStock(eventId, productId, "sent_back", quantity);
 }
 
 // --- Machines ----------------------------------------------------------------
@@ -1114,20 +1149,10 @@ export function setBusinessSetting(key: string, value: string) {
 export function recordBatch(productId: string, jars: number) {
   const product = state.products.find((p) => p.id === productId);
   if (!product || jars <= 0) return;
-  const batches = product.batchYield > 0 ? jars / product.batchYield : 0;
 
-  const touchedMaterialIds: string[] = [];
-  setState((prev) => ({
-    ...prev,
-    rawMaterials: prev.rawMaterials.map((material) => {
-      const row = product.recipeIngredients.find((r) => r.materialId === material.id);
-      if (!row) return material;
-      touchedMaterialIds.push(material.id);
-      return { ...material, qty: Math.max(0, material.qty - row.quantity * batches) };
-    }),
-  }));
-  mirrorStockRows([], touchedMaterialIds);
-
+  // The ingredient side used to be applied right here. It now rides on the INVENTORY_IN entry
+  // instead, so that EVERY way of recording a batch spends the same ingredients — and so that
+  // deleting the entry puts them back. Deducting here as well would charge the shelf twice.
   addEntry({
     timestamp: new Date().toISOString(),
     type: "INVENTORY_IN",

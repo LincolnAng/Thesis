@@ -8,7 +8,7 @@ import { useStore } from "@/lib/store/use-store";
 import { useCostContext } from "@/lib/summary/use-cost-context";
 import { effectiveProductPrice, productCostPerJar } from "@/lib/summary/recipe-cost";
 import { setProductPhoto, shrinkImage, useProductPhotos } from "@/lib/products/photos";
-import { formatPeso } from "@/lib/format";
+import { formatPrice, pluralize } from "@/lib/format";
 import type { Product } from "@/lib/store/types";
 import { useViewMode } from "@/lib/summary/view-mode";
 
@@ -92,14 +92,7 @@ export default function ProductsPage() {
   const editing = products.find((p) => p.id === editingId) ?? null;
 
   return (
-    <Page
-      title="Products"
-      right={
-        <button type="button" onClick={() => setAdding(true)} className="rounded-[10px] bg-cacao px-[18px] py-2.5 text-[13px] font-semibold text-ivory">
-          + Add product
-        </button>
-      }
-    >
+    <Page title="Products">
       <div className="grid grid-cols-1 gap-[18px] min-[600px]:grid-cols-2 min-[1000px]:grid-cols-3 min-[1300px]:grid-cols-4">
         {products.map((p, i) => {
           const cost = productCostPerJar(p, costCtx);
@@ -120,23 +113,23 @@ export default function ProductsPage() {
                 {simple ? (
                   <div className="flex flex-col gap-1 text-[13px]">
                     <span>
-                      Sells for <span className="font-bold">{formatPeso(price)}</span>
+                      Sells for <span className="font-bold">{formatPrice(price)}</span>
                     </span>
                     <span className={low ? "font-semibold text-danger" : "text-muted-foreground"}>
-                      {p.stockQty} jars on the shelf{low ? " — running low" : ""}
+                      {pluralize(p.stockQty, "jar")} on the shelf{low ? " — running low" : ""}
                     </span>
                     <span className={`font-semibold ${price - cost.costPerJar > 0 ? "text-success" : "text-danger"}`}>
                       {price - cost.costPerJar > 0
-                        ? `You keep ${formatPeso(Math.round((price - cost.costPerJar) * 100) / 100)} a jar`
+                        ? `You keep ${formatPrice(price - cost.costPerJar)} a jar`
                         : "It costs more to make than it sells for"}
                     </span>
                   </div>
                 ) : (
                   <>
                     <div className="flex w-full justify-between text-[13px]">
-                      <span className="font-bold">{formatPeso(price)}</span>
+                      <span className="font-bold">{formatPrice(price)}</span>
                       <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${low ? "bg-danger/10 text-danger" : "bg-success/10 text-success"}`}>
-                        {p.stockQty} jars{low ? " left" : ""}
+                        {pluralize(p.stockQty, "jar")}{low ? " left" : ""}
                       </span>
                     </div>
                     <div className={`text-xs font-semibold ${marginPct >= 15 ? "text-success" : "text-danger"}`}>{Math.round(marginPct)}% margin</div>

@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { borrowStockForEvent, deleteEvent, returnStockFromEvent, updateEvent } from "@/lib/store/store";
+import { sendStockToEvent, deleteEvent, sendStockBackFromEvent, updateEvent } from "@/lib/store/store";
 import { ConfirmDeleteButton } from "@/components/data-table/confirm-delete-button";
 import { formatNumber, formatPeso } from "@/lib/format";
 import type { EventSummary } from "@/lib/summary/events";
@@ -28,37 +28,37 @@ export function EventDetailDialog({
   onClose: () => void;
 }) {
   const { event, holdings } = summary;
-  const [borrowProductId, setBorrowProductId] = useState(products[0]?.id ?? "");
-  const [borrowQty, setBorrowQty] = useState("");
+  const [sendProductId, setSendProductId] = useState(products[0]?.id ?? "");
+  const [sendQty, setSendQty] = useState("");
   const [returnQty, setReturnQty] = useState<Record<string, string>>({});
 
-  const borrowProduct = products.find((p) => p.id === borrowProductId);
-  const requested = parseQty(borrowQty);
-  // The main pool is the only place borrowed stock can come from, so asking for more than
+  const sendProduct = products.find((p) => p.id === sendProductId);
+  const requested = parseQty(sendQty);
+  // The main pool is the only place sent-out stock can come from, so asking for more than
   // it holds is blocked here rather than silently clamped to whatever is left.
-  const tooMuch = requested !== null && borrowProduct != null && requested > borrowProduct.stockQty;
+  const tooMuch = requested !== null && sendProduct != null && requested > sendProduct.stockQty;
 
-  function doBorrow() {
-    if (!borrowProduct || requested === null || tooMuch) return;
-    borrowStockForEvent(event.id, borrowProduct.id, requested);
-    setBorrowQty("");
+  function doSend() {
+    if (!sendProduct || requested === null || tooMuch) return;
+    sendStockToEvent(event.id, sendProduct.id, requested);
+    setSendQty("");
   }
 
   function doReturn(productId: string, onHand: number) {
     const qty = parseQty(returnQty[productId] ?? "");
     if (qty === null || qty > onHand) return;
-    returnStockFromEvent(event.id, productId, qty);
+    sendStockBackFromEvent(event.id, productId, qty);
     setReturnQty((prev) => ({ ...prev, [productId]: "" }));
   }
 
   function returnEverything() {
     for (const h of holdings) {
-      if (h.onHand > 0) returnStockFromEvent(event.id, h.productId, h.onHand);
+      if (h.onHand > 0) sendStockBackFromEvent(event.id, h.productId, h.onHand);
     }
   }
 
   // Unsold jars are sent back to main stock first — deleting the event outright would
-  // otherwise make stock that was borrowed out simply vanish. Sales already logged at the
+  // otherwise make stock that was sent out simply vanish. Sales already logged at the
   // event stay in your sales history.
   function removeEvent() {
     returnEverything();
@@ -99,8 +99,8 @@ export function EventDetailDialog({
                 <Label className="text-xs text-muted-foreground">Product</Label>
                 <select
                   className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
-                  value={borrowProductId}
-                  onChange={(e) => setBorrowProductId(e.target.value)}
+                  value={sendProductId}
+                  onChange={(e) => setSendProductId(e.target.value)}
                 >
                   {products.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -116,18 +116,18 @@ export function EventDetailDialog({
                   inputMode="decimal"
                   className="h-9"
                   aria-invalid={tooMuch}
-                  value={borrowQty}
-                  onChange={(e) => setBorrowQty(e.target.value)}
+                  value={sendQty}
+                  onChange={(e) => setSendQty(e.target.value)}
                 />
               </div>
-              <Button size="sm" className="h-9" disabled={requested === null || tooMuch} onClick={doBorrow}>
+              <Button size="sm" className="h-9" disabled={requested === null || tooMuch} onClick={doSend}>
                 <ArrowUpRight className="mr-1 h-4 w-4" />
                 Send
               </Button>
             </div>
-            {tooMuch && borrowProduct && (
+            {tooMuch && sendProduct && (
               <p className="text-xs text-destructive">
-                You only have {formatNumber(borrowProduct.stockQty)} of {borrowProduct.name} in main stock.
+                You only have {formatNumber(sendProduct.stockQty)} of {sendProduct.name} in main stock.
               </p>
             )}
           </div>
@@ -157,9 +157,9 @@ export function EventDetailDialog({
                       </p>
                     </div>
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                      {formatNumber(h.borrowed)} sent · {formatNumber(h.sold)} sold
+                      {formatNumber(h.sentOut)} sent · {formatNumber(h.sold)} sold
                       {h.lost > 0 && ` · ${formatNumber(h.lost)} lost`}
-                      {h.returned > 0 && ` · ${formatNumber(h.returned)} brought back`}
+                      {h.broughtBack > 0 && ` · ${formatNumber(h.broughtBack)} brought back`}
                       {h.revenue > 0 && ` · ${formatPeso(h.revenue)}`}
                     </p>
                     {h.oversold && (

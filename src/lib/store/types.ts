@@ -40,7 +40,7 @@ export interface Entry {
   notes?: string | null;
   /** Set when this sale/removal happened at an event or distributor rather than through
    * normal business operations. Stock for these was already taken out of the main pool when
-   * it was borrowed, so an event-tagged entry draws down that event's holdings instead of
+   * it was sent out, so an event-tagged entry draws down that event's holdings instead of
    * deducting from main stock a second time — see applyEntrySideEffects in store.ts. */
   eventId?: string | null;
 }
@@ -184,7 +184,15 @@ export interface EventStockMovement {
   id: string;
   eventId: string;
   productId: string;
-  type: "borrow" | "return";
+  /**
+   * "sent_out" — stock left the shelf for a bazaar or distributor.
+   * "sent_back" — unsold stock came home.
+   *
+   * These were "borrow" and "return", which read fine in code and badly in the spreadsheet the
+   * owner actually opens: nobody is lending anything. Legacy rows still say borrow/return and
+   * are mapped on read — see sheets/events.ts.
+   */
+  type: "sent_out" | "sent_back";
   quantity: number;
   createdAt: string;
 }

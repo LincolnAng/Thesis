@@ -4,21 +4,21 @@ import type { BusinessEvent, Entry, EventStockMovement, Product } from "@/lib/st
 /**
  * What an event or distributor is currently holding, and what it has sold.
  *
- * Nothing here is stored. Holdings are always recomputed from the borrow/return movements
+ * Nothing here is stored. Holdings are always recomputed from the sent-out/brought-back movements
  * plus the sales tagged to the event, so the number on screen can't drift away from the
  * rows it came from — the only way to change it is to record another movement or sale.
  */
 export interface EventProductHolding {
   productId: string;
   productName: string;
-  borrowed: number;
-  returned: number;
+  sentOut: number;
+  broughtBack: number;
   sold: number;
   /** Wasted or otherwise taken out at the event without a sale. */
   lost: number;
-  /** borrowed − returned − sold − lost. Never negative on screen, but see `oversold`. */
+  /** sent out − brought back − sold − lost. Never negative on screen, but see `oversold`. */
   onHand: number;
-  /** True when the event moved more stock than it ever borrowed — a sign of a miscount
+  /** True when the event moved more stock than it was ever sent — a sign of a miscount
    * or a sale logged against the wrong event, worth surfacing rather than hiding. */
   oversold: boolean;
   revenue: number;
@@ -49,8 +49,8 @@ export function summarizeEvent(
     const created: EventProductHolding = {
       productId,
       productName: products.find((p) => p.id === productId)?.name ?? "Unknown product",
-      borrowed: 0,
-      returned: 0,
+      sentOut: 0,
+      broughtBack: 0,
       sold: 0,
       lost: 0,
       onHand: 0,
@@ -68,8 +68,8 @@ export function summarizeEvent(
   for (const m of movements) {
     if (m.eventId !== event.id) continue;
     const row = slot(m.productId);
-    if (m.type === "borrow") row.borrowed += m.quantity;
-    else row.returned += m.quantity;
+    if (m.type === "sent_out") row.sentOut += m.quantity;
+    else row.broughtBack += m.quantity;
     noteActivity(m.createdAt);
   }
 
@@ -92,7 +92,7 @@ export function summarizeEvent(
   }
 
   const holdings = [...byProduct.values()].map((row) => {
-    const net = row.borrowed - row.returned - row.sold - row.lost;
+    const net = row.sentOut - row.broughtBack - row.sold - row.lost;
     return { ...row, onHand: Math.max(0, net), oversold: net < 0 };
   });
   holdings.sort((a, b) => b.onHand - a.onHand || a.productName.localeCompare(b.productName));
@@ -127,7 +127,7 @@ export function summarizeEvents(
     });
 }
 
-/** How much of a product is free to borrow right now — what's in main inventory. */
-export function availableToBorrow(product: Product): number {
+/** How much of a product is free to send out right now — what's in main inventory. */
+export function availableToSendOut(product: Product): number {
   return Math.max(0, product.stockQty);
 }

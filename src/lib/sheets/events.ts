@@ -41,15 +41,23 @@ function movementToRow(m: EventStockMovement): string[] {
   return [m.id, m.eventId, m.productId, m.type, String(m.quantity), m.createdAt, ""];
 }
 
+/** Accepts both vocabularies, so rows written before the rename keep working. */
+function movementType(raw: string): EventStockMovement["type"] | null {
+  if (raw === "sent_out" || raw === "borrow") return "sent_out";
+  if (raw === "sent_back" || raw === "return") return "sent_back";
+  return null;
+}
+
 function movementFromRow(row: string[]): EventStockMovement | null {
   const [id, eventId, productId, type, quantity, createdAt] = row;
   if (!id) return null;
-  if (type !== "borrow" && type !== "return") return null; // see the note in eventFromRow
+  const kind = movementType(type);
+  if (!kind) return null; // see the note in eventFromRow
   return {
     id,
     eventId,
     productId,
-    type,
+    type: kind,
     quantity: Number(quantity) || 0,
     createdAt: createdAt || new Date().toISOString(),
   };

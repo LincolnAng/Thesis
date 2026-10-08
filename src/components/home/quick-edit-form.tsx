@@ -127,9 +127,29 @@ export function QuickEditForm({
     addSupplier({ name: typed, type: "raw_materials", items: "", lastPrice: 0, contact: "" });
   }
 
+  /**
+   * Making, selling and moving stock are about FINISHED GOODS, and the Products tab is the only
+   * list of those. The dropdown used to merge in every raw material, so "Made a batch" offered
+   * jars, oil and mix-ins — things you buy, never things you make.
+   *
+   * Buying and spoilage keep both lists, because those genuinely happen to raw materials: she
+   * buys beans, and beans go bad. An existing sku is always kept so editing an old entry can't
+   * silently drop what it was about.
+   */
+  const materialsApply = draft.type === "EXPENSE" || draft.type === "WASTE";
   const skuOptions = Array.from(
-    new Set([...(draft.sku ? [draft.sku] : []), ...products.map((p) => p.name), ...rawMaterials.map((m) => m.name)]),
+    new Set([
+      ...(draft.sku ? [draft.sku] : []),
+      ...products.map((p) => p.name),
+      ...(materialsApply ? rawMaterials.map((m) => m.name) : []),
+    ]),
   );
+
+  // Stock that spoiled or went to an event moves QUANTITY, not money, and has no counterparty.
+  // Nothing in the app reads an amount off either one, so asking for it was asking her to type
+  // a number into a hole. A batch she made has no buyer either.
+  const movesMoney = draft.type !== "WASTE" && draft.type !== "INVENTORY_OUT";
+  const hasCounterparty = draft.type === "SALE" || draft.type === "EXPENSE";
 
   /** The unit the catalog already knows for an item, so it's never asked for per transaction. */
   function unitOfItem(name: string | null): string | null {
@@ -146,6 +166,19 @@ export function QuickEditForm({
    */
   function change(patch: Partial<EntryDraft>) {
     const next = { ...draft, ...patch };
+
+    // Fields that stop applying must stop being SAVED, not just stop being drawn. Filling in a
+    // sale and then switching it to spoilage would otherwise keep the buyer and the peso figure
+    // on the entry, invisibly — a record nobody typed and nobody can see to correct.
+    if (next.type === "WASTE" || next.type === "INVENTORY_OUT") {
+      next.amount = null;
+      next.counterparty = null;
+      setAmountText("");
+      setAutoFilledFrom(null);
+    } else if (next.type === "INVENTORY_IN") {
+      next.counterparty = null;
+    }
+
     if (!amountTyped && next.type === "SALE") {
       const unitPrice = unitPriceFor(next, products, costCtx);
       if (unitPrice && next.quantity && next.quantity > 0) {
@@ -239,6 +272,7 @@ export function QuickEditForm({
           </div>
         </div>
 
+        {movesMoney && (
         <div className="space-y-1">
           <div className="flex flex-wrap items-baseline justify-between gap-x-2">
             <Label className="text-xs text-muted-foreground">Amount (₱)</Label>
@@ -271,6 +305,7 @@ export function QuickEditForm({
             </p>
           )}
         </div>
+        )}
       </div>
 
       {addingProduct && (
@@ -301,17 +336,18 @@ export function QuickEditForm({
         </p>
       )}
 
-      {draft.type === "EXPENSE" ? (
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Paid to</Label>
-          <SupplierNameInput value={draft.counterparty ?? null} onChange={(name) => set("counterparty", name)} />
-        </div>
-      ) : (
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Buyer</Label>
-          <CustomerNameInput value={draft.counterparty ?? null} onChange={(name) => set("counterparty", name)} />
-        </div>
-      )}
+      {hasCounterparty &&
+        (draft.type === "EXPENSE" ? (
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Paid to</Label>
+            <SupplierNameInput value={draft.counterparty ?? null} onChange={(name) => set("counterparty", name)} />
+          </div>
+        ) : (
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Buyer</Label>
+            <CustomerNameInput value={draft.counterparty ?? null} onChange={(name) => set("counterparty", name)} />
+          </div>
+        ))}
 
       {canTagEvent && eventOptions.length > 0 && (
         <div className="space-y-1">

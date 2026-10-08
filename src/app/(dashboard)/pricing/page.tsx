@@ -5,7 +5,7 @@ import { Page } from "@/components/layout/page";
 import { PricingCalculatorCard } from "@/components/finance/pricing-calculator-card";
 import { AddProductDialog } from "@/components/stock/edit-product-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { formatPeso, pluralize } from "@/lib/format";
+import { formatPrice, pluralize } from "@/lib/format";
 import { useStore } from "@/lib/store/use-store";
 import { updateProduct } from "@/lib/store/store";
 import { effectiveProductPrice, productCostPerJar, type ProductCostBreakdown } from "@/lib/summary/recipe-cost";
@@ -17,10 +17,7 @@ import { SimplePrices } from "@/components/simple/simple-prices";
 import { useViewMode } from "@/lib/summary/view-mode";
 
 /** Pesos with centavos when there are any (₱57.60), whole otherwise (₱180). */
-function peso(n: number) {
-  const r = Math.round(n * 100) / 100;
-  return Number.isInteger(r) ? formatPeso(r) : `${r < 0 ? "−" : ""}₱${Math.abs(r).toFixed(2)}`;
-}
+const peso = formatPrice;
 
 const METHOD_PROMPTS: Record<PricingMode, string> = {
   manual: "Type the price you want to charge:",
@@ -253,7 +250,7 @@ export default function PricingPage() {
 
   if (viewMode === "simple") {
     return (
-      <Page title="Pricing" simpleTitle="Prices">
+      <Page title="Prices">
         <SimplePrices />
       </Page>
     );

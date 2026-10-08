@@ -8,11 +8,12 @@ import { Label } from "@/components/ui/label";
 import { addEvent, updateEvent } from "@/lib/store/store";
 import { setEventPlan } from "@/lib/summary/business-config";
 import type { BusinessEvent, Product } from "@/lib/store/types";
+import { pluralize } from "@/lib/format";
 
 /**
  * Plans stock for an event: when it is, and how many jars of each product to bring. The
  * jars are added to the production target, due the day before the event. The event itself
- * shows up on the Events page, where stock is borrowed and returned as usual.
+ * shows up on the Events page, where stock is sent out and brought back as usual.
  */
 export function EventPlanDialog({
   products,
@@ -89,7 +90,7 @@ export function EventPlanDialog({
             </ul>
             <p className="text-xs text-muted-foreground">
               {totalJars > 0
-                ? `${totalJars} jars added to the production target, ready the day before the event.`
+                ? `${pluralize(totalJars, "jar")} added to the production target, ready the day before the event.`
                 : "These jars are added to what needs making, due the day before the event."}
             </p>
           </div>

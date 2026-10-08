@@ -119,7 +119,7 @@ function TransactionsPageInner() {
 
   if (viewMode === "simple") {
     return (
-      <Page title="Transactions" simpleTitle="Money">
+      <Page title="Money">
         <SimpleMoney />
       </Page>
     );

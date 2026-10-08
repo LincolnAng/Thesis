@@ -4,6 +4,19 @@ export function formatPeso(amount: number | null | undefined): string {
   return value < 0 ? `−${text}` : text;
 }
 
+/**
+ * A price, as opposed to a running total.
+ *
+ * formatPeso drops a trailing zero, so ₱58.50 renders as "₱58.5" — fine for a sum, wrong for
+ * a price, and worse when the same figure appears as "₱58.5" on Products and "₱58.50" on
+ * Pricing. Whole pesos stay plain; anything with centavos shows both digits.
+ */
+export function formatPrice(amount: number | null | undefined): string {
+  const rounded = Math.round((amount ?? 0) * 100) / 100;
+  if (Number.isInteger(rounded)) return formatPeso(rounded);
+  return `${rounded < 0 ? "−" : ""}₱${Math.abs(rounded).toFixed(2)}`;
+}
+
 export function formatSignedPeso(amount: number | null | undefined, moneyIn: boolean): string {
   const value = Math.abs(amount ?? 0);
   const sign = moneyIn ? "+" : "−";
