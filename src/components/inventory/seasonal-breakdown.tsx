@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
-import type { ProductForecast } from "@/lib/summary/forecast";
+import { AGGREGATE_ID, aggregateForecast, type ProductForecast } from "@/lib/summary/forecast";
 import { seasonStrength } from "@/lib/summary/seasonality";
 import { ConfidenceDonut } from "@/components/inventory/confidence-donut";
 import { EMPTY, seasonColor } from "@/lib/summary/scale-colors";
@@ -47,7 +47,12 @@ const COLS = "grid grid-cols-[52px_minmax(0,1fr)_170px_72px] items-center gap-3"
 
 export function SeasonalBreakdown({ forecasts }: { forecasts: ProductForecast[] }) {
   const { businessSettings, products, entries } = useStore();
-  const withMonths = forecasts.filter((f) => f.monthly.length > 0);
+  const perProduct = forecasts.filter((f) => f.monthly.length > 0);
+  // The combined row goes FIRST and is what opens. Asking "how many jars of Classic in
+  // December?" is a useful question, but it was the only one this screen could answer — and
+  // "how many jars altogether?" is the one that decides whether a week has enough days in it.
+  const combined = aggregateForecast(perProduct);
+  const withMonths = combined ? [combined, ...perProduct] : perProduct;
   const [productId, setProductId] = useState<string>(withMonths[0]?.productId ?? "");
   const [learning, setLearning] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
@@ -55,7 +60,7 @@ export function SeasonalBreakdown({ forecasts }: { forecasts: ProductForecast[] 
 
   const chosen = withMonths.find((f) => f.productId === productId) ?? withMonths[0];
   const chosenId = chosen?.productId ?? "";
-  const stored = chosenId ? productPattern(businessSettings, chosenId) : null;
+  const stored = chosenId && chosenId !== AGGREGATE_ID ? productPattern(businessSettings, chosenId) : null;
   // A pattern carried over from the old dropdown is not an answer, it is a leftover. Treat it
   // as nothing so the app works out a real one.
   const pattern = stored && stored.source !== "legacy" ? stored : null;
@@ -64,7 +69,8 @@ export function SeasonalBreakdown({ forecasts }: { forecasts: ProductForecast[] 
   // her to go and set one. Measuring from her own sales costs nothing; only when there isn't
   // enough history does this reach the assistant.
   useEffect(() => {
-    if (!chosenId || pattern || attempted.has(chosenId) || running.current) return;
+    // The combined row is not a product and has no pattern of its own to work out.
+    if (!chosenId || chosenId === AGGREGATE_ID || pattern || attempted.has(chosenId) || running.current) return;
     const product = products.find((p) => p.id === chosenId);
     if (!product) return;
 

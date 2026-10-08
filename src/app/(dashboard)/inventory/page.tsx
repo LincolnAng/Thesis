@@ -7,6 +7,9 @@ import { useViewMode } from "@/lib/summary/view-mode";
 import { EventPlanDialog } from "@/components/inventory/event-plan-dialog";
 import { PlanSettingsDialog } from "@/components/inventory/plan-settings-dialog";
 import { SeasonalBreakdown } from "@/components/inventory/seasonal-breakdown";
+import { PlanFixes } from "@/components/inventory/plan-fixes";
+import { useProductionPlan } from "@/lib/summary/use-production-plan";
+import { planContingencies } from "@/lib/summary/plan-contingency";
 import { ConfidenceDonut } from "@/components/inventory/confidence-donut";
 import { AddStockDialog } from "@/components/stock/add-stock-dialog";
 import { AddProductDialog, EditProductDialog } from "@/components/stock/edit-product-dialog";
@@ -17,7 +20,6 @@ import { formatNumber, pluralize } from "@/lib/format";
 import { MOVING_AVERAGE_MONTHS, type ForecastReliability } from "@/lib/summary/forecast";
 import { isRawCacao } from "@/lib/summary/cacao";
 import {
-  buildProductionPlan,
   STRATEGY_HINTS,
   STRATEGY_LABELS,
   toIsoDate,
@@ -26,7 +28,6 @@ import {
 } from "@/lib/summary/production-schedule";
 import {
   cacaoUtilizationPct,
-  multipliersFor,
   eventPlan,
   setCacaoUtilizationPct,
   shelfLifeDays,
@@ -236,7 +237,7 @@ function StockVsForecast({
 }
 
 export default function InventoryPage() {
-  const { products, rawMaterials, entries, machines, events, businessSettings } = useStore();
+  const { products, rawMaterials, machines, events, businessSettings } = useStore();
   const [viewMode] = useViewMode();
   const simple = viewMode === "simple";
   const [strategy, setStrategy] = useState<ScheduleStrategy>("fastest");
@@ -263,22 +264,28 @@ export default function InventoryPage() {
     [events, businessSettings],
   );
 
-  const plan = useMemo(
+  // Shared with Home, deliberately — see use-production-plan. Two screens that disagree about
+  // what to make today cost more trust than either being slightly off.
+  const plan = useProductionPlan(strategy);
+
+  // When the plan can't be met, say what to change rather than only that it can't.
+  const fixes = useMemo(
     () =>
-      buildProductionPlan({
-        products,
-        entries,
-        machines,
-        rawMaterials,
-        events,
-        eventPlans,
-        unavailable: new Set(unavailableDays(businessSettings)),
-        shelfLifeDays: (id) => shelfLifeDays(businessSettings, id),
-        cacaoUtilization: cacaoUtilizationPct(businessSettings) / 100,
-        seasonMultipliers: (productId) => multipliersFor(businessSettings, productId),
-        strategy,
+      planContingencies({
+        totalJarsToMake: plan.totalJarsToMake,
+        batchesNeeded: plan.totalBatchesNeeded,
+        batchesScheduled: plan.totalBatchesScheduled,
+        batchesLate: plan.batchesLate,
+        batchesExpiring: plan.batchesExpiring,
+        hasEquipment: plan.hasEquipment,
+        days: plan.days,
+        unavailable: unavailableDays(businessSettings),
+        shortMaterials: plan.ingredientNeeds
+          .filter((n) => n.short > 0)
+          .map((n) => ({ name: n.name, short: n.short, unit: n.unit })),
+        batchesPerDay: machines.reduce((sum, m) => sum + m.batchesPerDay, 0),
       }),
-    [products, entries, machines, rawMaterials, events, eventPlans, businessSettings, strategy],
+    [plan, businessSettings, machines],
   );
 
   const forecastOf = (id: string) => plan.forecasts.find((f) => f.productId === id)?.forecastQty ?? 0;
@@ -319,8 +326,7 @@ export default function InventoryPage() {
 
   return (
     <Page
-      title="Inventory"
-      simpleTitle="Stock"
+      title="Stock"
       right={
         simple ? undefined : (
         <>
@@ -341,6 +347,8 @@ export default function InventoryPage() {
           onMade={() => setAddStockOpen(true)}
           onAddProduct={() => setAddProductOpen(true)}
           onEditProduct={(id) => setEditingProductId(id)}
+          shelfLifeOf={(id) => shelfLifeDays(businessSettings, id)}
+          fixes={fixes}
         />
       ) : (
       <div className="flex flex-col gap-5">
@@ -364,6 +372,11 @@ export default function InventoryPage() {
             </button>
           </div>
         )}
+
+        {/* The banner above already covers the no-equipment case, and does it better — it has
+            the button. Everything else that can stop the plan is spelled out here. */}
+        <PlanFixes fixes={fixes.filter((f) => f.id !== "no-equipment")} />
+
         <div className="grid grid-cols-1 gap-4 min-[1000px]:grid-cols-3">
           <div className={`rounded-2xl border bg-white px-5 py-4 ${low.length ? "border-danger/35" : "border-line/15"}`}>
             <TileHeader title="Running low" color="#B3261E" />
@@ -382,7 +395,7 @@ export default function InventoryPage() {
                   >
                     <span className="truncate">{p.name}</span>
                     <span className="shrink-0 whitespace-nowrap">
-                      <span className={`font-semibold ${belowWarning ? "text-danger" : "text-[#9A6B12]"}`}>{p.stockQty} jars</span>
+                      <span className={`font-semibold ${belowWarning ? "text-danger" : "text-[#9A6B12]"}`}>{pluralize(p.stockQty, "jar")}</span>
                       <span className="text-xs text-muted-foreground">
                         {" "}
                         / {need > p.stockQty ? `needs ${need}` : `warn below ${p.lowStockThreshold}`}
@@ -416,7 +429,7 @@ export default function InventoryPage() {
                   >
                     <span className="truncate">{n.productName}</span>
                     <span className="shrink-0 whitespace-nowrap">
-                      <span className="font-semibold">{n.jarsToMake} jars</span>
+                      <span className="font-semibold">{pluralize(n.jarsToMake, "jar")}</span>
                       <span className="text-xs text-muted-foreground">
                         {" "}
                         · {n.missingYield ? "set jars per batch" : pluralize(n.batchesNeeded, "batch", "batches")}
@@ -427,7 +440,7 @@ export default function InventoryPage() {
                 {toMake.length > 4 && <div className="text-xs text-muted-foreground">+{toMake.length - 4} more</div>}
                 {problem && plan.hasEquipment && (
                   <div className="mt-0.5 text-[11px] font-semibold text-danger">
-                    {pluralize(plan.batchesLate + plan.batchesUnscheduled, "batch", "batches")} won&apos;t be ready in time
+                    {`${pluralize(plan.batchesLate + plan.batchesUnscheduled, "batch", "batches")} won't be ready in time — see what to change above`}
                   </div>
                 )}
                 {plan.batchesExpiring > 0 && (
@@ -440,7 +453,7 @@ export default function InventoryPage() {
             )}
             {eventNeeds.map((en) => (
               <div key={en.event.id} className="mt-1.5 border-t border-line/10 pt-1.5 text-[11px] text-muted-foreground">
-                <span className="font-semibold text-foreground">{en.event.name}</span> needs {en.planned} jars —{" "}
+                <span className="font-semibold text-foreground">{en.event.name}</span> needs {pluralize(en.planned, "jar")} —{" "}
                 {en.make > 0 ? `${en.planned - en.make} on the shelf, ${en.make} to make` : "all of it already on the shelf"}
               </div>
             ))}

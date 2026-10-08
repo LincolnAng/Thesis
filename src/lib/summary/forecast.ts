@@ -413,3 +413,95 @@ export function forecastAll(
     .map((p) => forecastProduct(p, entries, products, now, multipliersFor?.(p.id)))
     .sort((a, b) => a.stockCover - b.stockCover || b.forecastQty - a.forecastQty);
 }
+
+/** The id the combined all-products forecast carries, so callers can tell it apart. */
+export const AGGREGATE_ID = "__all__";
+
+/**
+ * Every product's forecast added together.
+ *
+ * "What to expect each month" showed one product at a time, chosen from a dropdown, so the
+ * screen only ever answered "how many jars of this one?" — never "how many jars, in total, am I
+ * making next month?". That second question is the one that decides whether a week has enough
+ * production days in it, and it was nowhere on the page.
+ *
+ * Summing is the honest way to combine these. Three deliberate choices:
+ *
+ * - The season index is recomputed from the totals, not averaged. A busy December for a product
+ *   that sells three jars should not weigh the same as a flat month for one that sells ninety.
+ * - Confidence is weighted by volume, for the same reason, and then floored. Pooling genuinely
+ *   does cancel some error, but claiming a better grade than the products it is built from
+ *   needs an argument this does not have.
+ * - Ranges are added end to end, which assumes every product misses in the same direction at
+ *   once. That is the pessimistic case, and a planning band should be.
+ */
+export function aggregateForecast(forecasts: ProductForecast[]): ProductForecast | null {
+  const usable = forecasts.filter((f) => f.monthly.length > 0);
+  if (usable.length < 2) return null;
+
+  const months = usable[0].monthly.length;
+  const totalDemand = usable.reduce((sum, f) => sum + Math.max(0, f.forecastQty), 0);
+  const weightOf = (f: ProductForecast) =>
+    totalDemand > 0 ? Math.max(0, f.forecastQty) / totalDemand : 1 / usable.length;
+
+  const monthly: ForecastMonth[] = [];
+  for (let i = 0; i < months; i++) {
+    const slice = usable.map((f) => f.monthly[i]).filter(Boolean);
+    if (slice.length === 0) continue;
+    const units = slice.reduce((sum, m) => sum + m.units, 0);
+    const baseline = slice.reduce((sum, m) => sum + m.baseline, 0);
+    const withRange = slice.filter((m) => m.range);
+    const weightedBars = usable.reduce((sum, f) => sum + (f.monthly[i]?.bars ?? 0) * weightOf(f), 0);
+    monthly.push({
+      month: slice[0].month,
+      label: slice[0].label,
+      monthIndex: slice[0].monthIndex,
+      seasonIndex: baseline > 0 ? units / baseline : 1,
+      baseline,
+      units,
+      bars: Math.max(0, Math.floor(weightedBars)),
+      range:
+        withRange.length === slice.length
+          ? {
+              low: withRange.reduce((sum, m) => sum + (m.range?.low ?? 0), 0),
+              high: withRange.reduce((sum, m) => sum + (m.range?.high ?? 0), 0),
+            }
+          : null,
+      // The least-known product sets the tone: a total is only as trustworthy as the month
+      // inside it she has never traded through.
+      observed: Math.min(...slice.map((m) => m.observed)),
+    });
+  }
+
+  const bars = Math.max(0, Math.floor(usable.reduce((sum, f) => sum + f.reliability.bars * weightOf(f), 0)));
+  const level: ForecastConfidence = bars === 0 ? "none" : bars <= 2 ? "low" : bars <= 3 ? "medium" : "high";
+  const everyRange = usable.every((f) => f.reliability.range);
+
+  return {
+    productId: AGGREGATE_ID,
+    productName: "All products",
+    history: [],
+    monthsOfHistory: Math.max(...usable.map((f) => f.monthsOfHistory)),
+    forecastQty: usable.reduce((sum, f) => sum + f.forecastQty, 0),
+    method: usable[0].method,
+    confidence: level,
+    currentStock: usable.reduce((sum, f) => sum + f.currentStock, 0),
+    suggestedProduction: usable.reduce((sum, f) => sum + f.suggestedProduction, 0),
+    stockCover: 0,
+    reliability: {
+      level,
+      reason: `Across all ${usable.length} products, weighted by how much each one sells.`,
+      range: everyRange
+        ? {
+            low: usable.reduce((sum, f) => sum + (f.reliability.range?.low ?? 0), 0),
+            high: usable.reduce((sum, f) => sum + (f.reliability.range?.high ?? 0), 0),
+          }
+        : null,
+      variability: null,
+      bars,
+    },
+    monthly,
+    level: usable.reduce((sum, f) => sum + f.level, 0),
+    trendPerMonth: usable.reduce((sum, f) => sum + f.trendPerMonth, 0),
+  };
+}
