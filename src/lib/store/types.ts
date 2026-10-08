@@ -144,14 +144,6 @@ export interface SupplierPrice {
   loggedAt: string;
 }
 
-export interface SocialStatEntry {
-  id: string;
-  platform: "Facebook" | "TikTok" | "Instagram";
-  weekOf: string; // ISO date, start of week
-  followers: number;
-  reach: number;
-  engagements: number;
-}
 
 export interface TokenUsage {
   totalInputTokens: number;

@@ -2,7 +2,6 @@ import {
   initialEntries,
   initialProducts,
   initialRawMaterials,
-  initialSocialStats,
   initialSuppliers,
 } from "./initial-data";
 import {
@@ -31,7 +30,6 @@ import type {
   PriceHistoryPoint,
   Product,
   RawMaterialStock,
-  SocialStatEntry,
   Supplier,
   SyncStatus,
   TokenUsage,
@@ -46,7 +44,6 @@ export interface StoreState {
   products: Product[];
   rawMaterials: RawMaterialStock[];
   suppliers: Supplier[];
-  socialStats: SocialStatEntry[];
   categoryBudgets: Partial<Record<ExpenseCategory, number>>;
   events: BusinessEvent[];
   eventStock: EventStockMovement[];
@@ -68,7 +65,6 @@ const ENTRIES_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-entries-migrated-v1";
 const PRODUCTS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-products-migrated-v1";
 const RAW_MATERIALS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-raw-materials-migrated-v1";
 const SUPPLIERS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-suppliers-migrated-v1";
-const SOCIAL_STATS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-social-stats-migrated-v1";
 const BUDGETS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-budgets-migrated-v1";
 const EVENTS_MIGRATION_FLAG_KEY = "mang-kikos-cocoa-events-migrated-v1";
 const MACHINES_MIGRATION_FLAG_KEY = "mangkiko.migrated.machines";
@@ -95,7 +91,6 @@ function defaultState(): StoreState {
     products: initialProducts,
     rawMaterials: initialRawMaterials,
     suppliers: initialSuppliers,
-    socialStats: initialSocialStats,
     categoryBudgets: { ...DEFAULT_CATEGORY_BUDGETS },
     events: [],
     eventStock: [],
@@ -266,7 +261,6 @@ const COLLECTION_NOUNS: Record<string, string> = {
   suppliers: "supplier",
   supplierPrices: "supplier price",
   supplierPriceHistory: "supplier price",
-  socialStats: "social post",
   budgets: "budget",
   events: "event",
   eventStock: "event stock",
@@ -436,13 +430,6 @@ async function loadAllFromServer() {
       await migrateChildRows("supplierPriceHistory", historyRows);
     }
 
-    const socialStatsMigration = await migrateCollectionIfEmpty<SocialStatEntry>(
-      "socialStats",
-      SOCIAL_STATS_MIGRATION_FLAG_KEY,
-      Array.isArray(json.socialStats) ? json.socialStats : [],
-      state.socialStats,
-    );
-
     const budgetsMigration = await migrateCollectionIfEmpty<BudgetRow>(
       "budgets",
       BUDGETS_MIGRATION_FLAG_KEY,
@@ -499,7 +486,6 @@ async function loadAllFromServer() {
         products: productsMigration.items.map((row) => assembleProduct(row, recipeRows)),
         rawMaterials: rawMaterialsMigration.items,
         suppliers: suppliersMigration.items.map((row) => assembleSupplier(row, historyRows)),
-        socialStats: socialStatsMigration.items,
         categoryBudgets: budgetRowsToRecord(budgetsMigration.items),
         events: eventsMigration.items,
         eventStock: eventStockMigration.items,
@@ -915,15 +901,6 @@ export function addSupplier(input: Omit<Supplier, "id" | "priceHistory">): Suppl
   return supplier;
 }
 
-// --- Social stats --------------------------------------------------------
-
-export function addSocialStat(input: Omit<SocialStatEntry, "id">): SocialStatEntry {
-  const stat: SocialStatEntry = { ...input, id: genId("soc") };
-  setState((prev) => ({ ...prev, socialStats: [...prev.socialStats, stat] }));
-  void mirrorOp("socialStats", "append", { item: stat });
-  return stat;
-}
-
 // --- Token usage ------------------------------------------------------------
 
 export function addTokenUsage(inputTokens: number, outputTokens: number) {
@@ -973,7 +950,6 @@ export function restoreLocalCollections(data: {
   products?: Product[];
   rawMaterials?: RawMaterialStock[];
   suppliers?: Supplier[];
-  socialStats?: SocialStatEntry[];
   categoryBudgets?: Partial<Record<ExpenseCategory, number>>;
 }) {
   setState((prev) => ({
@@ -981,7 +957,6 @@ export function restoreLocalCollections(data: {
     products: data.products ?? prev.products,
     rawMaterials: data.rawMaterials ?? prev.rawMaterials,
     suppliers: data.suppliers ?? prev.suppliers,
-    socialStats: data.socialStats ?? prev.socialStats,
     categoryBudgets: data.categoryBudgets ?? prev.categoryBudgets,
   }));
 
@@ -994,7 +969,6 @@ export function restoreLocalCollections(data: {
     void mirrorOp("suppliers", "update", { id: s.id, item: toSupplierRow(s) });
     void migrateChildRows("supplierPriceHistory", priceHistoryToRows(s.id, s.priceHistory));
   });
-  data.socialStats?.forEach((stat) => void mirrorOp("socialStats", "update", { id: stat.id, item: stat }));
   if (data.categoryBudgets) {
     for (const [category, amount] of Object.entries(data.categoryBudgets)) {
       void mirrorOp("budgets", "update", { id: category, item: { category, monthlyBudget: amount } });

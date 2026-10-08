@@ -222,7 +222,6 @@ export default function SettingsPage() {
       products: snapshot.products,
       rawMaterials: snapshot.rawMaterials,
       suppliers: snapshot.suppliers,
-      socialStats: snapshot.socialStats,
       categoryBudgets: snapshot.categoryBudgets,
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });

@@ -3,7 +3,6 @@ import { entriesCollection } from "@/lib/sheets/entries";
 import { productsCollection, recipesCollection } from "@/lib/sheets/products";
 import { rawMaterialsCollection } from "@/lib/sheets/raw-materials";
 import { suppliersCollection, supplierPriceHistoryCollection } from "@/lib/sheets/suppliers";
-import { socialStatsCollection } from "@/lib/sheets/marketing";
 import { budgetsCollection } from "@/lib/sheets/budgets";
 import { eventsCollection, eventStockCollection } from "@/lib/sheets/events";
 import { machinesCollection } from "@/lib/sheets/machines";
@@ -20,7 +19,6 @@ const COLLECTIONS = {
   rawMaterials: rawMaterialsCollection,
   suppliers: suppliersCollection,
   supplierPriceHistory: supplierPriceHistoryCollection,
-  socialStats: socialStatsCollection,
   budgets: budgetsCollection,
   events: eventsCollection,
   eventStock: eventStockCollection,
@@ -39,7 +37,7 @@ function isCollectionName(value: unknown): value is CollectionName {
 
 export async function GET() {
   try {
-    const [entries, products, recipes, rawMaterials, suppliers, supplierPriceHistory, socialStats, budgets, events, eventStock, machines, supplierPrices, businessSettings, users, activity] =
+    const [entries, products, recipes, rawMaterials, suppliers, supplierPriceHistory, budgets, events, eventStock, machines, supplierPrices, businessSettings, users, activity] =
       await Promise.all([
       entriesCollection.getAll(),
       productsCollection.getAll(),
@@ -47,7 +45,6 @@ export async function GET() {
       rawMaterialsCollection.getAll(),
       suppliersCollection.getAll(),
       supplierPriceHistoryCollection.getAll(),
-      socialStatsCollection.getAll(),
       budgetsCollection.getAll(),
       eventsCollection.getAll(),
       eventStockCollection.getAll(),
@@ -65,7 +62,6 @@ export async function GET() {
       rawMaterials,
       suppliers,
       supplierPriceHistory,
-      socialStats,
       budgets,
       events,
       eventStock,

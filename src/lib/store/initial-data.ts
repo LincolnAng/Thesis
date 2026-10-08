@@ -1,4 +1,4 @@
-import type { Entry, Product, RawMaterialStock, SocialStatEntry, Supplier } from "./types";
+import type { Entry, Product, RawMaterialStock, Supplier } from "./types";
 
 function daysAgo(n: number): string {
   const d = new Date("2026-07-10T09:00:00.000Z");
@@ -131,17 +131,6 @@ export const initialSuppliers: Supplier[] = [
   },
 ];
 
-export const initialSocialStats: SocialStatEntry[] = [
-  { id: "soc-1", platform: "Facebook", weekOf: daysAgo(21), followers: 1200, reach: 4300, engagements: 310 },
-  { id: "soc-2", platform: "Facebook", weekOf: daysAgo(14), followers: 1250, reach: 5100, engagements: 380 },
-  { id: "soc-3", platform: "Facebook", weekOf: daysAgo(7), followers: 1310, reach: 6800, engagements: 510 },
-  { id: "soc-4", platform: "TikTok", weekOf: daysAgo(21), followers: 800, reach: 9000, engagements: 620 },
-  { id: "soc-5", platform: "TikTok", weekOf: daysAgo(14), followers: 950, reach: 15200, engagements: 1240 },
-  { id: "soc-6", platform: "TikTok", weekOf: daysAgo(7), followers: 1100, reach: 21000, engagements: 1890 },
-  { id: "soc-7", platform: "Instagram", weekOf: daysAgo(21), followers: 600, reach: 2100, engagements: 140 },
-  { id: "soc-8", platform: "Instagram", weekOf: daysAgo(14), followers: 640, reach: 2600, engagements: 190 },
-  { id: "soc-9", platform: "Instagram", weekOf: daysAgo(7), followers: 690, reach: 3400, engagements: 260 },
-];
 
 export const initialEntries: Entry[] = [
   {
