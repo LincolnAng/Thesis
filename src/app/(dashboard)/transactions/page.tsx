@@ -3,7 +3,8 @@
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowDown, ArrowRight, ArrowUp, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp } from "lucide-react";
+import { CarouselNav } from "@/components/ui/carousel-nav";
 import { Page } from "@/components/layout/page";
 import { SimpleMoney } from "@/components/simple/simple-money";
 import { useViewMode } from "@/lib/summary/view-mode";
@@ -127,7 +128,7 @@ function TransactionsPageInner() {
 
   return (
     <Page
-      title="Transactions"
+      title="Money"
       right={
         <>
           <button
@@ -153,29 +154,15 @@ function TransactionsPageInner() {
         {/* One month at a time with arrows, rather than a pill per month — the pill row grew
             by one every month and would have taken the whole header over within a year. */}
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center rounded-full border border-line/15 bg-white">
-            <button
-              type="button"
-              aria-label="Earlier month"
-              disabled={period === "all" || monthIndex >= months.length - 1}
-              onClick={() => setPeriod(months[monthIndex + 1])}
-              className="flex h-9 w-9 items-center justify-center rounded-l-full text-muted-foreground transition-colors hover:bg-secondary disabled:opacity-30"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <span className="min-w-[140px] px-1 text-center text-[13px] font-semibold">
-              {period === "all" ? "All time" : monthLabel(period)}
-            </span>
-            <button
-              type="button"
-              aria-label="Later month"
-              disabled={period === "all" || monthIndex <= 0}
-              onClick={() => setPeriod(months[monthIndex - 1])}
-              className="flex h-9 w-9 items-center justify-center rounded-r-full text-muted-foreground transition-colors hover:bg-secondary disabled:opacity-30"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
+          <CarouselNav
+            label={period === "all" ? "All time" : monthLabel(period)}
+            onPrev={() => setPeriod(months[monthIndex + 1])}
+            onNext={() => setPeriod(months[monthIndex - 1])}
+            atStart={period === "all" || monthIndex >= months.length - 1}
+            atEnd={period === "all" || monthIndex <= 0}
+            prevLabel="Earlier month"
+            nextLabel="Later month"
+          />
           <button
             type="button"
             onClick={() => setPeriod(period === "all" ? months[0] : "all")}
@@ -247,7 +234,7 @@ function TransactionsPageInner() {
         <div className="flex flex-col overflow-hidden rounded-2xl border border-line/15 bg-white">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line/10 px-[18px] py-3.5">
               <div className="text-sm font-semibold">
-                Transactions · <span className="font-medium text-muted-foreground">{period === "all" ? "All time" : monthLabel(period)}</span>
+                Money · <span className="font-medium text-muted-foreground">{period === "all" ? "All time" : monthLabel(period)}</span>
               </div>
               <div className="flex gap-1.5">
                 {(

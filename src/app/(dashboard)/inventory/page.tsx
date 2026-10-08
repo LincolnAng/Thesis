@@ -8,6 +8,7 @@ import { EventPlanDialog } from "@/components/inventory/event-plan-dialog";
 import { PlanSettingsDialog } from "@/components/inventory/plan-settings-dialog";
 import { SeasonalBreakdown } from "@/components/inventory/seasonal-breakdown";
 import { PlanFixes } from "@/components/inventory/plan-fixes";
+import { CarouselNav } from "@/components/ui/carousel-nav";
 import { useProductionPlan } from "@/lib/summary/use-production-plan";
 import { planContingencies } from "@/lib/summary/plan-contingency";
 import { ConfidenceDonut } from "@/components/inventory/confidence-donut";
@@ -73,20 +74,16 @@ function Calendar({
 
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between">
-        <div className="text-sm font-semibold">{fromIso(list[0].date).toLocaleDateString("en-US", { month: "long", year: "numeric" })}</div>
-        <div className="flex gap-1">
-          {keys.map((k, i) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => setIndex(i)}
-              className={`rounded-lg px-3 py-1 text-xs font-semibold ${i === index ? "bg-cacao/10 text-cacao" : "text-muted-foreground hover:bg-secondary"}`}
-            >
-              {fromIso(`${k}-01`).toLocaleDateString("en-US", { month: "short" })}
-            </button>
-          ))}
-        </div>
+      <div className="mb-2 flex items-center justify-end">
+        <CarouselNav
+          label={fromIso(list[0].date).toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+          onPrev={() => setIndex((n) => Math.max(0, n - 1))}
+          onNext={() => setIndex((n) => Math.min(keys.length - 1, n + 1))}
+          atStart={index <= 0}
+          atEnd={index >= keys.length - 1}
+          prevLabel="Earlier month"
+          nextLabel="Later month"
+        />
       </div>
       <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[10px] font-semibold text-faint">
         {WEEKDAYS.map((w) => (

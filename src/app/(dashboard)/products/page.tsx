@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { MaterialsPanel } from "@/components/products/materials-panel";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { CarouselNav } from "@/components/ui/carousel-nav";
 import { Package } from "lucide-react";
 import { Page } from "@/components/layout/page";
 import { AddProductDialog, EditProductDialog } from "@/components/stock/edit-product-dialog";
@@ -104,40 +104,16 @@ export default function ProductsPage() {
 
   return (
     <Page title="Inventory">
-      <div className="mb-4 flex items-center gap-3">
-        <button
-          type="button"
-          onClick={() => rotate(-1)}
-          aria-label="Previous section"
-          className="flex h-8 w-8 items-center justify-center rounded-full border border-line/20 text-muted-foreground transition hover:border-cacao/40 hover:text-cacao"
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </button>
-
-        <div className="min-w-[9.5rem] text-center text-xs font-bold uppercase tracking-wide text-muted-foreground">
-          {SECTIONS[section]}
-        </div>
-
-        <button
-          type="button"
-          onClick={() => rotate(1)}
-          aria-label="Next section"
-          className="flex h-8 w-8 items-center justify-center rounded-full border border-line/20 text-muted-foreground transition hover:border-cacao/40 hover:text-cacao"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </button>
-
-        <div className="ml-1 flex items-center gap-1.5">
-          {SECTIONS.map((name, i) => (
-            <button
-              key={name}
-              type="button"
-              onClick={() => setSection(i)}
-              aria-label={`Show ${name}`}
-              className={`h-1.5 rounded-full transition-all ${i === section ? "w-5 bg-cacao" : "w-1.5 bg-line/30 hover:bg-cacao/40"}`}
-            />
-          ))}
-        </div>
+      <div className="mb-4">
+        <CarouselNav
+          label={SECTIONS[section]}
+          onPrev={() => rotate(-1)}
+          onNext={() => rotate(1)}
+          wrap
+          labelWidth="min-w-[150px]"
+          prevLabel="Previous section"
+          nextLabel="Next section"
+        />
       </div>
 
       {section === 1 && <MaterialsPanel group="ingredient" />}
