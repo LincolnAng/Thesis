@@ -109,10 +109,6 @@ export function MaterialsPanel({ group }: { group: MaterialGroup }) {
 
   return (
     <>
-      <div className="mb-3 mt-8 text-xs font-bold uppercase tracking-wide text-muted-foreground">
-        {group === "ingredient" ? "Raw materials" : "Supplies"}
-      </div>
-
       {adding && (
         <div className="mb-3">
           <AddRow group={group} onDone={() => setAdding(false)} />

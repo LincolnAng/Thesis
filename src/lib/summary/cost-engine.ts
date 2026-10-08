@@ -56,6 +56,8 @@ export interface ProductCost {
   packagingLines: CostLine[];
   /** Materials whose supplier price is logged in a unit that can't convert to theirs. */
   unconvertible: string[];
+  /** Materials with no price at all — nothing bought, nothing logged. Cost is incomplete. */
+  unpriced: string[];
 }
 
 function sumExtras(rows: RecipeExtraRow[]): number {
@@ -123,7 +125,13 @@ export function getUnitCost(
     };
   }
 
-  return { cost: material.unitCost, source: "stored", supplierId: null, loggedAt: null };
+  // Nothing real prices this. The stored unitCost used to be returned here, which meant a
+  // number somebody typed at setup was presented exactly like a number backed by a receipt —
+  // and a product could show a confident margin built on a guess for half its recipe.
+  //
+  // An unknown cost is now reported as unknown, and the screens that use it say so. Costing a
+  // jar you cannot cost is the failure this whole chain exists to prevent.
+  return { cost: 0, source: "none", supplierId: null, loggedAt: null };
 }
 
 /** Cost of one recipe row at the material's current unit cost. */
@@ -171,11 +179,13 @@ export function getProductCost(
   const ingredientLines: CostLine[] = [];
   const packagingLines: CostLine[] = [];
   const unconvertible: string[] = [];
+  const unpriced: string[] = [];
 
   for (const row of product.recipeIngredients) {
     const material = rawMaterials.find((m) => m.id === row.materialId);
     if (!material) continue;
     const unitCost = getUnitCost(row.materialId, rawMaterials, supplierPrices, entries, products, cacaoUtilization);
+    if (unitCost.source === "none") unpriced.push(material.name);
     // Raw quantity actually bought — more than the recipe's usable amount for cacao.
     const rawQty = rawQuantityNeeded(material.name, row.quantity, cacaoUtilization);
     const line: CostLine = {
@@ -214,5 +224,6 @@ export function getProductCost(
     ingredientLines,
     packagingLines,
     unconvertible,
+    unpriced,
   };
 }

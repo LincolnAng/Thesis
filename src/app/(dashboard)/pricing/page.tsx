@@ -86,6 +86,9 @@ function PricingDetail({ product, cost, actual }: { product: Product; cost: Prod
   const price = effectiveProductPrice(product, cost);
   const profit = price - cost.costPerJar;
   const margin = price > 0 ? (profit / price) * 100 : 0;
+  // Costing is only as complete as the receipts behind it. With part of the recipe unpriced,
+  // the profit and margin below would be arithmetic on a number that is missing pieces.
+  const costable = cost.unpriced.length === 0;
 
   return (
     <div className="flex flex-1 flex-col gap-4">
@@ -95,7 +98,16 @@ function PricingDetail({ product, cost, actual }: { product: Product; cost: Prod
         <Step n={1}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-sm">
-              It costs <span className="font-semibold">{peso(cost.costPerJar)}</span> to make one jar
+              {costable ? (
+                <>
+                  It costs <span className="font-semibold">{peso(cost.costPerJar)}</span> to make one jar
+                </>
+              ) : (
+                <>
+                  <span className="font-semibold text-[#9A6B12]">Can&apos;t work out what a jar costs yet</span>
+                  <span className="text-muted-foreground">{` — nothing bought for ${cost.unpriced.join(", ")}`}</span>
+                </>
+              )}
             </div>
             <div className="flex gap-3 text-xs font-semibold text-cacao">
               <button type="button" onClick={() => setShowCosts((v) => !v)}>
@@ -159,11 +171,19 @@ function PricingDetail({ product, cost, actual }: { product: Product; cost: Prod
             </div>
             <div className="rounded-xl bg-secondary px-4 py-3">
               <div className="text-xs font-semibold text-muted-foreground">You make per jar</div>
-              <div className={`font-display text-[26px] font-bold ${profit >= 0 ? "text-success" : "text-danger"}`}>{peso(profit)}</div>
+              {costable ? (
+                <div className={`font-display text-[26px] font-bold ${profit >= 0 ? "text-success" : "text-danger"}`}>{peso(profit)}</div>
+              ) : (
+                <div className="font-display text-[26px] font-bold text-muted-foreground">—</div>
+              )}
             </div>
             <div className="rounded-xl bg-secondary px-4 py-3">
               <div className="text-xs font-semibold text-muted-foreground">Margin</div>
-              <div className={`font-display text-[26px] font-bold ${margin >= 15 ? "text-success" : "text-danger"}`}>{Math.round(margin)}%</div>
+              {costable ? (
+                <div className={`font-display text-[26px] font-bold ${margin >= 15 ? "text-success" : "text-danger"}`}>{Math.round(margin)}%</div>
+              ) : (
+                <div className="font-display text-[26px] font-bold text-muted-foreground">—</div>
+              )}
             </div>
           </div>
           {actual.price !== null && Math.abs(actual.price - price) >= 1 && (
@@ -239,7 +259,7 @@ export default function PricingPage() {
   }
 
   return (
-    <Page title="Pricing">
+    <Page title="Prices">
       {products.length === 0 ? (
         <div className="rounded-2xl border border-line/15 bg-white px-6 py-12 text-center text-sm text-muted-foreground">
           No products yet.{" "}
@@ -266,7 +286,13 @@ export default function PricingPage() {
                   <div className="text-sm font-semibold">{p.name}</div>
                   <div className="mt-1.5 flex justify-between text-[13px] text-muted-foreground">
                     <span>{peso(price)} / jar</span>
-                    <span className={`font-semibold ${margin >= 15 ? "text-success" : "text-danger"}`}>{Math.round(margin)}% margin</span>
+                    {cost.unpriced.length === 0 ? (
+                      <span className={`font-semibold ${margin >= 15 ? "text-success" : "text-danger"}`}>
+                        {Math.round(margin)}% margin
+                      </span>
+                    ) : (
+                      <span className="font-semibold text-[#9A6B12]">margin unknown</span>
+                    )}
                   </div>
                 </button>
               );

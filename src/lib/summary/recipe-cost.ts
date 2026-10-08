@@ -40,6 +40,8 @@ export interface ProductCostBreakdown {
   ingredientLines: CostLine[];
   packagingLines: CostLine[];
   unconvertible: string[];
+  /** Materials with no price at all. Non-empty means costPerJar is incomplete. */
+  unpriced: string[];
 }
 
 function sumExtras(rows: RecipeExtraRow[]): number {
@@ -64,8 +66,14 @@ export function ingredientBatchTotal(rows: RecipeIngredientRow[], ctx: CostConte
  * pricing method — cost-, margin-, and market-based all compute this live rather than trusting
  * a possibly-stale `standardPrice`, which is only the source of truth in "manual" mode. */
 export function effectiveProductPrice(product: Product, cost: ProductCostBreakdown): number {
-  if (product.pricingMode === "cost_percent") return priceFromMarkup(cost.costPerJar, product.marginPercent);
-  if (product.pricingMode === "margin") return priceFromMargin(cost.costPerJar, product.marginPercent);
+  // A price worked out FROM the cost cannot be worked out when part of the cost is unknown.
+  // An unpriced ingredient contributes ₱0, which quietly drags a cost-based price DOWN — the
+  // jar would be marked up from a figure that is missing half its recipe, and she would
+  // undercharge without anything on screen having gone obviously wrong. Her last set price
+  // stands until the receipts can answer.
+  const costKnown = cost.unpriced.length === 0;
+  if (product.pricingMode === "cost_percent" && costKnown) return priceFromMarkup(cost.costPerJar, product.marginPercent);
+  if (product.pricingMode === "margin" && costKnown) return priceFromMargin(cost.costPerJar, product.marginPercent);
   if (product.pricingMode === "competitive") return product.marketPrice;
   return product.standardPrice;
 }
@@ -104,5 +112,6 @@ export function productCostPerJar(product: Product, ctx: CostContext): ProductCo
     ingredientLines: cost.ingredientLines,
     packagingLines: cost.packagingLines,
     unconvertible: cost.unconvertible,
+    unpriced: cost.unpriced,
   };
 }

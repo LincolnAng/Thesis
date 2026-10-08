@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { useStore } from "@/lib/store/use-store";
 import { buildProductionPlan, type ProductionPlan, type ScheduleStrategy } from "@/lib/summary/production-schedule";
+import { allStandings } from "@/lib/summary/material-stock";
 import {
   cacaoUtilizationPct,
   eventPlan,
@@ -33,13 +34,26 @@ export function useProductionPlan(strategy: ScheduleStrategy = "fastest"): Produ
     [events, businessSettings],
   );
 
+  // What the schedule plans against is what the LEDGER says is on the shelf, not the stored
+  // figure — otherwise the shopping list is built from a number that stopped being true the
+  // first time a purchase or a batch went unlogged. A material nobody has bought keeps its
+  // stored figure, because there the ledger knows nothing rather than knowing it is empty.
+  const onLedger = useMemo(() => {
+    const utilization = cacaoUtilizationPct(businessSettings) / 100;
+    const standings = allStandings(entries, products, rawMaterials, utilization);
+    return rawMaterials.map((m) => {
+      const s = standings.find((x) => x.material.id === m.id);
+      return s && s.tracked ? { ...m, qty: Math.max(0, s.onHand) } : m;
+    });
+  }, [entries, products, rawMaterials, businessSettings]);
+
   return useMemo(
     () =>
       buildProductionPlan({
         products,
         entries,
         machines,
-        rawMaterials,
+        rawMaterials: onLedger,
         events,
         eventPlans,
         unavailable: new Set(unavailableDays(businessSettings)),
@@ -48,6 +62,6 @@ export function useProductionPlan(strategy: ScheduleStrategy = "fastest"): Produ
         seasonMultipliers: (productId) => multipliersFor(businessSettings, productId),
         strategy,
       }),
-    [products, entries, machines, rawMaterials, events, eventPlans, businessSettings, strategy],
+    [products, entries, machines, onLedger, events, eventPlans, businessSettings, strategy],
   );
 }

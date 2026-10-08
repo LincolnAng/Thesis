@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { MaterialsPanel } from "@/components/products/materials-panel";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Package } from "lucide-react";
 import { Page } from "@/components/layout/page";
 import { AddProductDialog, EditProductDialog } from "@/components/stock/edit-product-dialog";
@@ -91,18 +92,66 @@ export default function ProductsPage() {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const editing = products.find((p) => p.id === editingId) ?? null;
+  const [section, setSection] = useState(0);
   // Everything production runs on, on one page and in the order it is used: what she sells,
   // what goes in it, what it is packed in. Stock answers "how much is left"; this answers
   // "what is it made of". Three tabs made that one question into three errands.
+  // One section at a time. Stacked, the three grids ran to three screens of scrolling for a
+  // shop with three products and six materials, and the one you wanted was never the one on
+  // screen. Rotating keeps each list whole and the page one screen tall.
+  const SECTIONS = ["Products", "Raw materials", "Supplies"] as const;
+  const rotate = (step: number) => setSection((n) => (n + step + SECTIONS.length) % SECTIONS.length);
+
   return (
     <Page title="Inventory">
-      <div className="mb-3 text-xs font-bold uppercase tracking-wide text-muted-foreground">Products</div>
+      <div className="mb-4 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => rotate(-1)}
+          aria-label="Previous section"
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-line/20 text-muted-foreground transition hover:border-cacao/40 hover:text-cacao"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+
+        <div className="min-w-[9.5rem] text-center text-xs font-bold uppercase tracking-wide text-muted-foreground">
+          {SECTIONS[section]}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => rotate(1)}
+          aria-label="Next section"
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-line/20 text-muted-foreground transition hover:border-cacao/40 hover:text-cacao"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
+
+        <div className="ml-1 flex items-center gap-1.5">
+          {SECTIONS.map((name, i) => (
+            <button
+              key={name}
+              type="button"
+              onClick={() => setSection(i)}
+              aria-label={`Show ${name}`}
+              className={`h-1.5 rounded-full transition-all ${i === section ? "w-5 bg-cacao" : "w-1.5 bg-line/30 hover:bg-cacao/40"}`}
+            />
+          ))}
+        </div>
+      </div>
+
+      {section === 1 && <MaterialsPanel group="ingredient" />}
+      {section === 2 && <MaterialsPanel group="supply" />}
+
+      {section === 0 && (
       <div className="grid grid-cols-1 gap-[18px] min-[600px]:grid-cols-2 min-[1000px]:grid-cols-3 min-[1300px]:grid-cols-4">
         {products.map((p, i) => {
           const cost = productCostPerJar(p, costCtx);
           const price = effectiveProductPrice(p, cost);
           const marginPct = price > 0 ? ((price - cost.costPerJar) / price) * 100 : 0;
           const low = p.stockQty <= p.lowStockThreshold;
+          // Half a recipe priced is not a margin, it is a flattering guess. Say what is missing.
+          const costable = cost.unpriced.length === 0;
           return (
             <div
               key={p.id}
@@ -122,10 +171,12 @@ export default function ProductsPage() {
                     <span className={low ? "font-semibold text-danger" : "text-muted-foreground"}>
                       {pluralize(p.stockQty, "jar")} on the shelf{low ? " — running low" : ""}
                     </span>
-                    <span className={`font-semibold ${price - cost.costPerJar > 0 ? "text-success" : "text-danger"}`}>
-                      {price - cost.costPerJar > 0
-                        ? `You keep ${formatPrice(price - cost.costPerJar)} a jar`
-                        : "It costs more to make than it sells for"}
+                    <span className={`font-semibold ${!costable ? "text-[#9A6B12]" : price - cost.costPerJar > 0 ? "text-success" : "text-danger"}`}>
+                      {!costable
+                        ? `Can't work this out until you log buying ${cost.unpriced.join(", ")}`
+                        : price - cost.costPerJar > 0
+                          ? `You keep ${formatPrice(price - cost.costPerJar)} a jar`
+                          : "It costs more to make than it sells for"}
                     </span>
                   </div>
                 ) : (
@@ -136,7 +187,15 @@ export default function ProductsPage() {
                         {pluralize(p.stockQty, "jar")}{low ? " left" : ""}
                       </span>
                     </div>
-                    <div className={`text-xs font-semibold ${marginPct >= 15 ? "text-success" : "text-danger"}`}>{Math.round(marginPct)}% margin</div>
+                    {costable ? (
+                      <div className={`text-xs font-semibold ${marginPct >= 15 ? "text-success" : "text-danger"}`}>
+                        {Math.round(marginPct)}% margin
+                      </div>
+                    ) : (
+                      <div className="text-xs font-semibold text-[#9A6B12]">
+                        {`No margin yet — nothing bought for ${cost.unpriced.join(", ")}`}
+                      </div>
+                    )}
                   </>
                 )}
               </button>
@@ -151,11 +210,7 @@ export default function ProductsPage() {
           + Add product
         </button>
       </div>
-
-      <div className="mt-8 flex flex-col gap-5">
-        <MaterialsPanel group="ingredient" />
-        <MaterialsPanel group="supply" />
-      </div>
+      )}
 
       {adding && <AddProductDialog products={products} onClose={() => setAdding(false)} />}
       {editing && <EditProductDialog key={editing.id} product={editing} products={products} onClose={() => setEditingId(null)} />}
