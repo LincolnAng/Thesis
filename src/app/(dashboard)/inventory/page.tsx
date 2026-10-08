@@ -8,6 +8,7 @@ import { EventPlanDialog } from "@/components/inventory/event-plan-dialog";
 import { PlanSettingsDialog } from "@/components/inventory/plan-settings-dialog";
 import { SeasonalBreakdown } from "@/components/inventory/seasonal-breakdown";
 import { PlanFixes } from "@/components/inventory/plan-fixes";
+import { MaterialLedger } from "@/components/inventory/material-ledger";
 import { useProductionPlan } from "@/lib/summary/use-production-plan";
 import { planContingencies } from "@/lib/summary/plan-contingency";
 import { ConfidenceDonut } from "@/components/inventory/confidence-donut";
@@ -595,6 +596,7 @@ export default function InventoryPage() {
               )}
             </div>
           </div>
+          <MaterialLedger />
           <SeasonalBreakdown forecasts={plan.forecasts} />
           </div>
         )}
