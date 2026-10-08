@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { MaterialsPanel } from "@/components/products/materials-panel";
 import { Package } from "lucide-react";
 import { Page } from "@/components/layout/page";
 import { AddProductDialog, EditProductDialog } from "@/components/stock/edit-product-dialog";
@@ -90,9 +91,12 @@ export default function ProductsPage() {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const editing = products.find((p) => p.id === editingId) ?? null;
-
+  // Everything production runs on, on one page and in the order it is used: what she sells,
+  // what goes in it, what it is packed in. Stock answers "how much is left"; this answers
+  // "what is it made of". Three tabs made that one question into three errands.
   return (
-    <Page title="Products">
+    <Page title="Inventory">
+      <div className="mb-3 text-xs font-bold uppercase tracking-wide text-muted-foreground">Products</div>
       <div className="grid grid-cols-1 gap-[18px] min-[600px]:grid-cols-2 min-[1000px]:grid-cols-3 min-[1300px]:grid-cols-4">
         {products.map((p, i) => {
           const cost = productCostPerJar(p, costCtx);
@@ -146,6 +150,11 @@ export default function ProductsPage() {
         >
           + Add product
         </button>
+      </div>
+
+      <div className="mt-8 flex flex-col gap-5">
+        <MaterialsPanel group="ingredient" />
+        <MaterialsPanel group="supply" />
       </div>
 
       {adding && <AddProductDialog products={products} onClose={() => setAdding(false)} />}

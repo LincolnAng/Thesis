@@ -8,18 +8,15 @@ import { EventPlanDialog } from "@/components/inventory/event-plan-dialog";
 import { PlanSettingsDialog } from "@/components/inventory/plan-settings-dialog";
 import { SeasonalBreakdown } from "@/components/inventory/seasonal-breakdown";
 import { PlanFixes } from "@/components/inventory/plan-fixes";
-import { MaterialLedger } from "@/components/inventory/material-ledger";
 import { useProductionPlan } from "@/lib/summary/use-production-plan";
 import { planContingencies } from "@/lib/summary/plan-contingency";
 import { ConfidenceDonut } from "@/components/inventory/confidence-donut";
 import { AddStockDialog } from "@/components/stock/add-stock-dialog";
 import { AddProductDialog, EditProductDialog } from "@/components/stock/edit-product-dialog";
-import { stockLevel } from "@/components/data-table/stock-level";
 import { useStore } from "@/lib/store/use-store";
 import { chipColor } from "@/lib/chart-colors";
-import { formatNumber, pluralize } from "@/lib/format";
+import { pluralize } from "@/lib/format";
 import { MOVING_AVERAGE_MONTHS, type ForecastReliability } from "@/lib/summary/forecast";
-import { isRawCacao } from "@/lib/summary/cacao";
 import {
   STRATEGY_HINTS,
   STRATEGY_LABELS,
@@ -28,9 +25,7 @@ import {
   type ScheduleStrategy,
 } from "@/lib/summary/production-schedule";
 import {
-  cacaoUtilizationPct,
   eventPlan,
-  setCacaoUtilizationPct,
   shelfLifeDays,
   toggleUnavailableDay,
   unavailableDays,
@@ -238,7 +233,7 @@ function StockVsForecast({
 }
 
 export default function InventoryPage() {
-  const { products, rawMaterials, machines, events, businessSettings } = useStore();
+  const { products, machines, events, businessSettings } = useStore();
   const [viewMode] = useViewMode();
   const simple = viewMode === "simple";
   const [strategy, setStrategy] = useState<ScheduleStrategy>("fastest");
@@ -321,8 +316,6 @@ export default function InventoryPage() {
     .filter((e) => e.planned > 0);
   const nextDay = plan.days.find((d) => d.status === "open" && d.runs.length > 0);
   const problem = plan.totalJarsToMake > 0 && (!plan.hasEquipment || plan.batchesLate > 0 || plan.batchesUnscheduled > 0);
-  const utilization = cacaoUtilizationPct(businessSettings);
-  const hasCacao = rawMaterials.some((m) => isRawCacao(m.name));
   const editingEvent = eventDialog?.eventId ? events.find((e) => e.id === eventDialog.eventId) : undefined;
 
   return (
@@ -563,40 +556,7 @@ export default function InventoryPage() {
               reliabilityOf={(id) => plan.forecasts.find((f) => f.productId === id)?.reliability}
               onPick={(p) => setEditingProductId(p.id)}
             />
-            <div className="grid grid-cols-1 gap-4 border-t border-line/10 pt-3 text-xs text-muted-foreground min-[1000px]:grid-cols-[1fr_auto]">
-              {rawMaterials.length > 0 && (
-                <div className="leading-relaxed">
-                  <span className="font-semibold text-ink">Raw materials: </span>
-                  {rawMaterials.map((m, i) => (
-                    <span key={m.id}>
-                      {i > 0 && " · "}
-                      {m.name}{" "}
-                      <span className={`font-semibold ${stockLevel(m.qty, m.lowStockThreshold) === "low" ? "text-danger" : "text-ink"}`}>
-                        {formatNumber(m.qty)} {m.unit}
-                      </span>
-                    </span>
-                  ))}
-                </div>
-              )}
-              {hasCacao && (
-                <label className="flex items-center gap-2 self-start whitespace-nowrap">
-                  Cacao utilization
-                  <input
-                    type="range"
-                    min={30}
-                    max={100}
-                    value={utilization}
-                    onChange={(e) => setCacaoUtilizationPct(Number(e.target.value))}
-                    className="h-1 w-28 accent-cacao"
-                    aria-label="Cacao utilization rate"
-                  />
-                  <span className="w-8 font-semibold text-ink">{utilization}%</span>
-                  <span>usable after roasting</span>
-                </label>
-              )}
-            </div>
           </div>
-          <MaterialLedger />
           <SeasonalBreakdown forecasts={plan.forecasts} />
           </div>
         )}

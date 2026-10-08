@@ -1,6 +1,7 @@
 import { convertQuantity } from "@/lib/units";
 import { rawQuantityNeeded } from "./cacao";
 import { valueMaterial } from "./ingredient-cost";
+import { groupOf } from "./material-stock";
 import type {
   Entry,
   Product,
@@ -61,11 +62,9 @@ function sumExtras(rows: RecipeExtraRow[]): number {
   return rows.reduce((total, row) => total + row.cost, 0);
 }
 
+/** One classification for the whole app — see material-stock.ts. */
 function isPackaging(material: RawMaterialStock): boolean {
-  if (material.kind) return material.kind === "packaging";
-  // Rows predating the kind column fall back to their name. Wrong guesses are visible and
-  // one edit away; refusing to classify would leave the breakdown blank for every product.
-  return /jar|label|lid|box|pack|wrap|sachet|tray|bottle|cap|seal|sticker/i.test(material.name);
+  return groupOf(material) === "supply";
 }
 
 /**
