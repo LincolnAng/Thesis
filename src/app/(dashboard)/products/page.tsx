@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { MaterialsPanel } from "@/components/products/materials-panel";
+import { ProductExpiryStrip } from "@/components/products/product-expiry-strip";
 import { CarouselNav } from "@/components/ui/carousel-nav";
 import { Package } from "lucide-react";
 import { Page } from "@/components/layout/page";
@@ -175,6 +176,7 @@ export default function ProductsPage() {
                   </>
                 )}
               </button>
+              <ProductExpiryStrip product={p} />
             </div>
           );
         })}

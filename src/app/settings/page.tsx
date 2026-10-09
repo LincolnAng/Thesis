@@ -2,13 +2,16 @@
 
 import { useEffect, useState, type ChangeEvent } from "react";
 import { useTheme } from "next-themes";
-import { ChevronDown, ChevronUp, Database, Download, KeyRound, Languages, Moon, Sheet, Trash2, Upload } from "lucide-react";
+import { CalendarClock, ChevronDown, ChevronUp, Database, Download, KeyRound, Languages, Minus, Moon, Plus, Sheet, Trash2, Type, Upload } from "lucide-react";
+import { TEXT_SIZE_LABELS, useTextSize } from "@/lib/summary/text-size";
+import { expiringWithinDays, setExpiringWithinDays } from "@/lib/summary/business-config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { getSnapshot, resetAllData, restoreLocalCollections, setApiKeyMissing } from "@/lib/store/store";
+import { useStore } from "@/lib/store/use-store";
 import type { BotLanguage } from "@/lib/sheets/settings";
 import { LaborRateCard } from "@/components/settings/labor-rate-card";
 import { OwnerNameCard } from "@/components/settings/owner-name-card";
@@ -55,6 +58,56 @@ interface SettingsState {
   spreadsheetUrl: string | null;
 }
 
+/**
+ * When a jar starts counting as "expiring".
+ *
+ * A counter rather than a dropdown of presets, because the right number depends on how she
+ * sells: a week of notice is useless to someone who clears a batch in three days, and far too
+ * little for someone who consigns to a shop. Zero means the day itself and nothing earlier.
+ */
+function ExpiryWarningCard() {
+  const { businessSettings } = useStore();
+  const days = expiringWithinDays(businessSettings);
+  return (
+    <Card>
+      <CardContent className="flex flex-wrap items-center justify-between gap-3">
+        <span className="min-w-0">
+          <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <CalendarClock className="h-4 w-4" /> Warn me this long before jars expire
+          </span>
+          <span className="mt-0.5 block text-xs text-muted-foreground">
+            {days === 0
+              ? "Only on the day they expire."
+              : `${days} ${days === 1 ? "day" : "days"} of notice before the date.`}
+          </span>
+        </span>
+        <div className="flex items-center gap-1 rounded-full border border-line/15 bg-white">
+          <button
+            type="button"
+            aria-label="Fewer days"
+            disabled={days <= 0}
+            onClick={() => setExpiringWithinDays(days - 1)}
+            className="flex h-9 w-9 items-center justify-center rounded-l-full text-muted-foreground transition-colors hover:bg-secondary disabled:opacity-30"
+          >
+            <Minus className="h-4 w-4" />
+          </button>
+          <span className="min-w-[72px] px-1 text-center text-[13px] font-semibold">
+            {days === 0 ? "Same day" : `${days} ${days === 1 ? "day" : "days"}`}
+          </span>
+          <button
+            type="button"
+            aria-label="More days"
+            onClick={() => setExpiringWithinDays(days + 1)}
+            className="flex h-9 w-9 items-center justify-center rounded-r-full text-muted-foreground transition-colors hover:bg-secondary"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function SettingsPage() {
   const [viewMode] = useViewMode();
   const { theme, setTheme } = useTheme();
@@ -73,6 +126,7 @@ export default function SettingsPage() {
   const [testing, setTesting] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [tab, setTab] = useState<"general" | "seasons" | "people" | "ai" | "sheet">("general");
+  const [textSize, setTextSize] = useTextSize();
 
   // next-themes resolves the real theme synchronously on the client's first render
   // (to avoid a flash), which is already ahead of what the server rendered — so
@@ -295,6 +349,30 @@ export default function SettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3">
+          <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <Type className="h-4 w-4" /> Text size
+          </span>
+          <div className="flex w-fit gap-1 rounded-[10px] bg-secondary p-1">
+            {(["small", "medium", "large"] as const).map((size) => (
+              <button
+                key={size}
+                type="button"
+                onClick={() => setTextSize(size)}
+                className={`rounded-lg px-3.5 py-1.5 ${
+                  textSize === size ? "bg-white font-semibold shadow-sm" : "font-medium text-muted-foreground"
+                } ${size === "small" ? "text-[13px]" : size === "medium" ? "text-[15px]" : "text-[17px]"}`}
+              >
+                {TEXT_SIZE_LABELS[size]}
+              </button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <ExpiryWarningCard />
 
       <LaborRateCard />
       <UnitsCard />

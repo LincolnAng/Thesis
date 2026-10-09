@@ -4,9 +4,11 @@ import { useMemo } from "react";
 import { useStore } from "@/lib/store/use-store";
 import { buildProductionPlan, type ProductionPlan, type ScheduleStrategy } from "@/lib/summary/production-schedule";
 import { allStandings } from "@/lib/summary/material-stock";
+import { productExpiry, sellableBy } from "@/lib/summary/product-lots";
 import {
   cacaoUtilizationPct,
   eventPlan,
+  expiringWithinDays,
   multipliersFor,
   shelfLifeDays,
   unavailableDays,
@@ -47,10 +49,30 @@ export function useProductionPlan(strategy: ScheduleStrategy = "fastest"): Produ
     });
   }, [entries, products, rawMaterials, businessSettings]);
 
+  /**
+   * Stock that will still be good when it is needed.
+   *
+   * "Do I need to make more?" was answered against every jar on the shelf, including ones
+   * that will have passed their date by the month they were counted as covering. A shelf of
+   * old stock could therefore hide a shortage completely — the plan said nothing to make, and
+   * the jars it was counting on went in the bin.
+   */
+  const stillGood = useMemo(() => {
+    const window = expiringWithinDays(businessSettings);
+    const needBy = new Date();
+    needBy.setMonth(needBy.getMonth() + 1, 1);
+    const needByDay = needBy.toISOString().slice(0, 10);
+    return products.map((p) => {
+      const expiry = productExpiry(entries, p, shelfLifeDays(businessSettings, p.id), window);
+      if (!expiry.tracksAnything) return p;
+      return { ...p, stockQty: Math.max(0, Math.round(sellableBy(expiry, needByDay) * 100) / 100) };
+    });
+  }, [products, entries, businessSettings]);
+
   return useMemo(
     () =>
       buildProductionPlan({
-        products,
+        products: stillGood,
         entries,
         machines,
         rawMaterials: onLedger,
@@ -62,6 +84,6 @@ export function useProductionPlan(strategy: ScheduleStrategy = "fastest"): Produ
         seasonMultipliers: (productId) => multipliersFor(businessSettings, productId),
         strategy,
       }),
-    [products, entries, machines, onLedger, events, eventPlans, businessSettings, strategy],
+    [stillGood, entries, machines, onLedger, events, eventPlans, businessSettings, strategy],
   );
 }
