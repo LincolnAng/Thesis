@@ -16,7 +16,7 @@ import type { AdviceResult } from "@/app/api/advisor/route";
  */
 export function AdviceCard({ advice }: { advice: AdviceResult }) {
   return (
-    <div className="max-w-[560px] space-y-3 rounded-2xl border border-line/15 bg-white p-4">
+    <div className="max-w-[560px] space-y-3 rounded-2xl border border-line/15 bg-card p-4">
       {advice.headline && <p className="font-display text-[17px] font-semibold leading-snug">{advice.headline}</p>}
 
       {advice.because && <p className="text-[13px] leading-relaxed text-muted-foreground">{advice.because}</p>}

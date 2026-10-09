@@ -48,7 +48,7 @@ function CommitNumber({
     setDraft(null);
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-lg border border-line/20 bg-white px-2 py-1 focus-within:border-cacao">
+    <span className="inline-flex items-center gap-1 rounded-lg border border-line/20 bg-card px-2 py-1 focus-within:border-cacao">
       {prefix && <span className="text-[13px] text-muted-foreground">{prefix}</span>}
       <input
         type="text"
@@ -93,7 +93,7 @@ function PricingDetail({ product, cost, actual }: { product: Product; cost: Prod
 
   return (
     <div className="flex flex-1 flex-col gap-4">
-      <div className="flex flex-col gap-5 rounded-2xl border border-line/15 bg-white p-[22px]">
+      <div className="flex flex-col gap-5 rounded-2xl border border-line/15 bg-card p-[22px]">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="font-display text-xl font-semibold">{product.name}</div>
           <PageTabs
@@ -195,7 +195,7 @@ function PricingDetail({ product, cost, actual }: { product: Product; cost: Prod
                   key={m.mode}
                   type="button"
                   onClick={() => updateProduct(product.id, pricingModeChange(product, m.mode, price))}
-                  className={`rounded-lg px-3.5 py-2 text-[13px] ${product.pricingMode === m.mode ? "bg-white font-semibold shadow-sm" : "font-medium text-muted-foreground"}`}
+                  className={`rounded-lg px-3.5 py-2 text-[13px] ${product.pricingMode === m.mode ? "bg-card font-semibold shadow-sm" : "font-medium text-muted-foreground"}`}
                 >
                   {m.label}
                 </button>
@@ -280,7 +280,7 @@ export default function PricingPage() {
   return (
     <Page title="Prices">
       {products.length === 0 ? (
-        <div className="rounded-2xl border border-line/15 bg-white px-6 py-12 text-center text-sm text-muted-foreground">
+        <div className="rounded-2xl border border-line/15 bg-card px-6 py-12 text-center text-sm text-muted-foreground">
           No products yet.{" "}
           <button type="button" onClick={() => setAdding(true)} className="font-semibold text-cacao">
             Add your first product
@@ -298,7 +298,7 @@ export default function PricingPage() {
                   key={p.id}
                   type="button"
                   onClick={() => setSelectedId(p.id)}
-                  className={`rounded-xl bg-white px-4 py-3.5 text-left transition ${
+                  className={`rounded-xl bg-card px-4 py-3.5 text-left transition ${
                     p.id === selected?.id ? "border border-cacao shadow-sm" : "border border-line/15 hover:border-cacao/40"
                   }`}
                 >

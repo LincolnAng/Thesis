@@ -147,7 +147,7 @@ export function QuickLog() {
             type="button"
             onClick={() => open(a.type, a.label)}
             title={`${a.label} — ${a.today}`}
-            className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-xl border border-line/15 bg-white px-3 py-2 transition hover:border-cacao/40 hover:shadow-sm"
+            className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-xl border border-line/15 bg-card px-3 py-2 transition hover:border-cacao/40 hover:shadow-sm"
           >
             <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg ${TONE_ICON[a.tone]}`}>
               <a.icon className="h-[14px] w-[14px]" strokeWidth={1.9} />

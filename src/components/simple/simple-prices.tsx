@@ -26,7 +26,7 @@ function PriceCard({ product, cost, price }: { product: Product; cost: number; p
   const max = Math.max(Math.ceil(cost * 3), Math.ceil(price * 1.5), min + 10);
 
   return (
-    <div className="flex flex-col gap-4 rounded-2xl border border-line/15 bg-white p-5">
+    <div className="flex flex-col gap-4 rounded-2xl border border-line/15 bg-card p-5">
       <div>
         <div className="font-display text-[18px] font-semibold">{product.name}</div>
         <p className="mt-1 text-[16px] leading-relaxed">

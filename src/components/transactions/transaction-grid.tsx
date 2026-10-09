@@ -30,7 +30,7 @@ const COLUMNS = "grid-cols-[124px_100px_minmax(0,1.1fr)_120px_minmax(0,1fr)_126p
 // Every cell carries its own box, empty or not: a grid of invisible inputs gives nothing to
 // aim at, and "is this editable?" shouldn't depend on guessing.
 const CELL =
-  "h-8 w-full rounded-md border border-line/15 bg-white px-2 text-[13px] outline-none focus:border-cacao focus:ring-2 focus:ring-cacao/15";
+  "h-8 w-full rounded-md border border-line/15 bg-card px-2 text-[13px] outline-none focus:border-cacao focus:ring-2 focus:ring-cacao/15";
 
 function isoDay(timestamp: string): string {
   const d = new Date(timestamp);
@@ -350,7 +350,7 @@ export function TransactionGrid({
         {rows.map((e, i) => (
           <div
             key={e.id}
-            className={`grid ${COLUMNS} items-center gap-1 border-b border-line/5 px-2 py-1.5 ${i % 2 === 0 ? "bg-white" : "bg-[#FBFAF7]"}`}
+            className={`grid ${COLUMNS} items-center gap-1 border-b border-line/5 px-2 py-1.5 ${i % 2 === 0 ? "bg-card" : "bg-[#FBFAF7]"}`}
           >
             <input
               type="date"

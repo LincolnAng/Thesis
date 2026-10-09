@@ -43,8 +43,13 @@ export const CONFIDENCE_COLORS = [
   "#12A150", // 5 bright green
 ] as const;
 
-/** Nothing on the scale at all — no history, so no claim either way. */
-export const EMPTY = "#D9D4CB";
+/**
+ * Nothing on the scale at all — no history, so no claim either way.
+ *
+ * A CSS variable rather than a hex: this is the unlit part of a meter, which is a surface and
+ * has to darken with the page. The lit colours above are data and deliberately do not.
+ */
+export const EMPTY = "var(--brand-track)";
 
 export function seasonColor(score: number): string {
   return SEASON_COLORS[Math.min(7, Math.max(1, score))];

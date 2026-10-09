@@ -40,7 +40,7 @@ export function SidebarNav() {
   return (
     <aside
       className={cn(
-        "sticky top-0 hidden h-svh shrink-0 flex-col border-r border-line/10 bg-white py-6",
+        "sticky top-0 hidden h-svh shrink-0 flex-col border-r border-line/10 bg-card py-6",
         "min-[768px]:flex min-[768px]:w-[var(--rail-w)] min-[768px]:items-center min-[768px]:px-2",
         "min-[1024px]:w-[var(--sidebar-w)] min-[1024px]:items-stretch min-[1024px]:px-4",
       )}

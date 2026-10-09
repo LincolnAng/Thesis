@@ -52,7 +52,7 @@ export function PageTabs<T extends string>({
           key={k}
           type="button"
           onClick={() => onChange(k)}
-          className={`rounded-lg px-4 py-2 text-[13px] ${value === k ? "bg-white font-semibold shadow-sm" : "font-medium text-muted-foreground"}`}
+          className={`rounded-lg px-4 py-2 text-[13px] ${value === k ? "bg-card font-semibold shadow-sm" : "font-medium text-muted-foreground"}`}
         >
           {label}
         </button>

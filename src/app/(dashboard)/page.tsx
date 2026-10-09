@@ -158,7 +158,7 @@ function HideableSection({ section, title, children }: { section: HomeSection; t
         <button
           type="button"
           onClick={() => setSectionHidden(section, false)}
-          className="rounded-full border border-line/15 bg-white px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground"
+          className="rounded-full border border-line/15 bg-card px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground"
         >
           Show {title.split(" · ")[0].toLowerCase()}
         </button>
@@ -188,7 +188,7 @@ function TodayAtAGlance({ tiles }: { tiles: Tile[] }) {
             <Link
               key={t.label}
               href={t.href}
-              className={`flex flex-col gap-2.5 rounded-2xl border bg-white p-[22px] transition hover:shadow-sm ${alert ? "border-danger/35" : "border-line/15"}`}
+              className={`flex flex-col gap-2.5 rounded-2xl border bg-card p-[22px] transition hover:shadow-sm ${alert ? "border-danger/35" : "border-line/15"}`}
             >
               <span className={`flex h-11 w-11 items-center justify-center rounded-xl ${alert ? "bg-danger/10" : "bg-cacao/10"}`}>
                 <t.icon className={`h-[21px] w-[21px] ${alert ? "text-danger" : "text-cacao"}`} strokeWidth={1.8} />

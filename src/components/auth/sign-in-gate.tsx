@@ -62,7 +62,7 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
         </div>
 
         {picked ? (
-          <div className="rounded-2xl border border-line/15 bg-white p-7">
+          <div className="rounded-2xl border border-line/15 bg-card p-7">
             <p className="mb-4 text-[14px] text-muted-foreground">
               Enter {picked.name}&apos;s 4-digit PIN.
             </p>

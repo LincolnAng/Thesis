@@ -78,7 +78,7 @@ export function ChatLanding({ onSubmit, disabled }: { onSubmit: (text: string) =
             disabled={disabled}
             onClick={() => submit(q.text)}
             title={q.text}
-            className="flex items-center gap-2 rounded-full border border-line/15 bg-white px-3.5 py-2 text-[13px] text-foreground transition-colors hover:bg-secondary disabled:opacity-50"
+            className="flex items-center gap-2 rounded-full border border-line/15 bg-card px-3.5 py-2 text-[13px] text-foreground transition-colors hover:bg-secondary disabled:opacity-50"
           >
             <q.icon className="h-4 w-4 text-muted-foreground" />
             {q.label}

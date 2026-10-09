@@ -6,7 +6,7 @@ import { Phone } from "lucide-react";
 import { addSupplierPrice, updateSupplier } from "@/lib/store/store";
 import type { RawMaterialStock, Supplier } from "@/lib/store/types";
 
-const field = "rounded-lg border border-line/20 bg-white px-2.5 py-1.5 text-[13px] outline-none focus:border-cacao";
+const field = "rounded-lg border border-line/20 bg-card px-2.5 py-1.5 text-[13px] outline-none focus:border-cacao";
 
 /**
  * What a supplier charged for one ingredient: amount paid and how much it bought. This is the
@@ -32,7 +32,7 @@ export function LogPurchaseForm({ supplier, materials }: { supplier: Supplier; m
   }
 
   return (
-    <div className="flex flex-col gap-2.5 rounded-xl border border-line/10 bg-white p-3.5">
+    <div className="flex flex-col gap-2.5 rounded-xl border border-line/10 bg-card p-3.5">
       <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] text-muted-foreground">
         <span className="text-[13px] font-semibold text-foreground">Log a purchase</span>
         <span className="flex items-center gap-4">

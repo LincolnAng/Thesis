@@ -71,7 +71,7 @@ export function PromptGateCard({
             type="button"
             disabled={resolved}
             onClick={() => onPick(s)}
-            className="rounded-xl border border-line/15 bg-white px-3.5 py-2.5 text-left text-[13px] transition hover:border-cacao/40 hover:bg-secondary/40 disabled:opacity-50"
+            className="rounded-xl border border-line/15 bg-card px-3.5 py-2.5 text-left text-[13px] transition hover:border-cacao/40 hover:bg-secondary/40 disabled:opacity-50"
           >
             {s}
           </button>
@@ -89,7 +89,7 @@ export function PromptGateCard({
               if (e.key === "Escape") setShowOther(false);
             }}
             placeholder="Which product? Which month? What are you deciding?"
-            className="h-9 min-w-[16rem] flex-1 rounded-lg border border-input bg-white px-2.5 text-[13px] outline-none focus:border-cacao"
+            className="h-9 min-w-[16rem] flex-1 rounded-lg border border-input bg-card px-2.5 text-[13px] outline-none focus:border-cacao"
           />
           <button
             type="button"

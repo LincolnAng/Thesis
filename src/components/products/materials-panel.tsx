@@ -123,7 +123,7 @@ export function MaterialsPanel({ group }: { group: MaterialGroup }) {
           return (
             <div
               key={r.material.id}
-              className="flex flex-col overflow-hidden rounded-2xl border border-line/15 bg-white transition hover:border-cacao/40 hover:shadow-sm"
+              className="flex flex-col overflow-hidden rounded-2xl border border-line/15 bg-card transition hover:border-cacao/40 hover:shadow-sm"
             >
               <div className={`flex h-[120px] items-center justify-center bg-gradient-to-br ${CARD_GRADIENTS[i % CARD_GRADIENTS.length]}`}>
                 <ItemIcon name={r.material.name} className="h-10 w-10 text-white/90" />

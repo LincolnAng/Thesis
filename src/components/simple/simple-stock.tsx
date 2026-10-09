@@ -177,7 +177,7 @@ export function SimpleStock({
 
       <div>
         <SectionTitle>On your shelf</SectionTitle>
-        <div className="flex flex-col gap-5 rounded-2xl border border-line/15 bg-white p-5">
+        <div className="flex flex-col gap-5 rounded-2xl border border-line/15 bg-card p-5">
           {shelf.map(({ p, weeks, tone, status, outlook, dated }) => (
             <button key={p.id} type="button" onClick={() => onEditProduct(p.id)} className="text-left" title="Tap to change this product">
               <Gauge

@@ -43,7 +43,7 @@ export function CarouselNav({
   const glyph = big ? "h-6 w-6" : "h-4 w-4";
 
   return (
-    <div className="flex w-fit items-center rounded-full border border-line/15 bg-white">
+    <div className="flex w-fit items-center rounded-full border border-line/15 bg-card">
       <button
         type="button"
         aria-label={prevLabel}

@@ -34,7 +34,7 @@ const attempted = new Set<string>();
 function Bar({ value, max }: { value: number; max: number }) {
   const pct = max > 0 ? (value / max) * 100 : 0;
   return (
-    <span className="relative block h-4 rounded bg-[#F0EEE6]">
+    <span className="relative block h-4 rounded bg-track">
       <span className="absolute inset-y-0 left-0 rounded bg-cacao/70" style={{ width: `${pct}%` }} />
     </span>
   );
@@ -183,7 +183,7 @@ function ProductFilter({
         <>
           {/* Clicking anywhere else closes it, which is what a menu is expected to do. */}
           <button type="button" aria-label="Close" className="fixed inset-0 z-10 cursor-default" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-20 mt-1 w-[17rem] rounded-xl border border-line/15 bg-white p-1.5 shadow-lg">
+          <div className="absolute right-0 z-20 mt-1 w-[17rem] rounded-xl border border-line/15 bg-card p-1.5 shadow-lg">
             <button
               type="button"
               onClick={() => onChange(new Set())}
@@ -305,7 +305,7 @@ export function SeasonalBreakdown({ forecasts }: { forecasts: ProductForecast[] 
 
   if (withMonths.length === 0) {
     return (
-      <section className="rounded-2xl border border-line/15 bg-white p-5">
+      <section className="rounded-2xl border border-line/15 bg-card p-5">
         <h2 className="font-display text-[17px] font-semibold">Month by month</h2>
         <p className="mt-1 text-[13px] text-muted-foreground">
           Nothing to break down yet — log a few sales and this fills in on its own.
@@ -320,7 +320,7 @@ export function SeasonalBreakdown({ forecasts }: { forecasts: ProductForecast[] 
   const max = Math.max(...chosen.monthly.map((m) => Math.round(m.units)), 1);
 
   return (
-    <section className="rounded-2xl border border-line/15 bg-white p-5">
+    <section className="rounded-2xl border border-line/15 bg-card p-5">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">

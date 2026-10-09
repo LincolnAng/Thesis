@@ -24,7 +24,7 @@ export function PeopleTable({ columns, rows, empty }: { columns: PeopleColumn[];
   const grid = { gridTemplateColumns: `${columns.map((c) => c.width ?? "1fr").join(" ")} 20px` };
 
   return (
-    <div className="overflow-x-auto rounded-2xl border border-line/15 bg-white">
+    <div className="overflow-x-auto rounded-2xl border border-line/15 bg-card">
       <div className="min-w-[640px]">
         <div className="grid gap-4 bg-secondary px-5 py-2.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground" style={grid}>
           {columns.map((c) => (
@@ -67,7 +67,7 @@ export function PeopleSummary({ items, right }: { items: { label: string; value:
     <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
       <div className="grid flex-1 grid-cols-1 gap-3 min-[600px]:grid-cols-3">
         {items.map((i) => (
-          <div key={i.label} className="rounded-2xl border border-line/15 bg-white px-5 py-4">
+          <div key={i.label} className="rounded-2xl border border-line/15 bg-card px-5 py-4">
             <div className="text-xs font-semibold text-muted-foreground">{i.label}</div>
             <div className="mt-0.5 truncate font-display text-[26px] font-semibold">{i.value}</div>
           </div>

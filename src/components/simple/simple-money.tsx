@@ -73,7 +73,7 @@ export function SimpleMoney() {
             key={k}
             type="button"
             onClick={() => (setOffset(k), setShowAll(false))}
-            className={`rounded-lg px-4 py-2 text-[13px] ${offset === k ? "bg-white font-semibold shadow-sm" : "font-medium text-muted-foreground"}`}
+            className={`rounded-lg px-4 py-2 text-[13px] ${offset === k ? "bg-card font-semibold shadow-sm" : "font-medium text-muted-foreground"}`}
           >
             {label}
           </button>
@@ -98,7 +98,7 @@ export function SimpleMoney() {
         </Headline>
       )}
 
-      <div className="flex flex-col gap-5 rounded-2xl border border-line/15 bg-white p-5">
+      <div className="flex flex-col gap-5 rounded-2xl border border-line/15 bg-card p-5">
         {goal > 0 && !editingGoal ? (
           <Gauge
             label="Sales goal"

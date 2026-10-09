@@ -25,7 +25,7 @@ const LANGUAGES: { value: BotLanguage; label: string }[] = [
 
 function Row({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line/15 bg-white px-5 py-4">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line/15 bg-card px-5 py-4">
       <div className="min-w-0">
         <div className="text-[15px] font-semibold">{title}</div>
         {hint && <div className="text-[13px] text-muted-foreground">{hint}</div>}
@@ -111,13 +111,13 @@ export function SimpleSettings() {
                 href={spreadsheet}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-[10px] border border-line/20 bg-white px-4 py-2.5 text-[13px] font-semibold"
+                className="inline-flex items-center gap-1.5 rounded-[10px] border border-line/20 bg-card px-4 py-2.5 text-[13px] font-semibold"
               >
                 Open it <ExternalLink className="h-3.5 w-3.5" />
               </a>
               <a
                 href={spreadsheet.replace(/\/edit.*$/, "") + "/export?format=xlsx"}
-                className="inline-flex items-center gap-1.5 rounded-[10px] border border-line/20 bg-white px-4 py-2.5 text-[13px] font-semibold"
+                className="inline-flex items-center gap-1.5 rounded-[10px] border border-line/20 bg-card px-4 py-2.5 text-[13px] font-semibold"
               >
                 <FileDown className="h-3.5 w-3.5" /> Excel
               </a>

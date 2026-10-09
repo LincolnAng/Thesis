@@ -11,7 +11,7 @@ export function BottomTabBar() {
   const [mode] = useViewMode();
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 flex overflow-x-auto border-t border-line/10 bg-white min-[900px]:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-40 flex overflow-x-auto border-t border-line/10 bg-card min-[900px]:hidden">
       {[...NAV_ITEMS, SETTINGS_ITEM].map((item) => {
         const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
         const Icon = item.icon;

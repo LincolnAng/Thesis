@@ -81,7 +81,7 @@ function ExpiryWarningCard() {
               : `${days} ${days === 1 ? "day" : "days"} of notice before the date.`}
           </span>
         </span>
-        <div className="flex items-center gap-1 rounded-full border border-line/15 bg-white">
+        <div className="flex items-center gap-1 rounded-full border border-line/15 bg-card">
           <button
             type="button"
             aria-label="Fewer days"
@@ -363,7 +363,7 @@ export default function SettingsPage() {
                 type="button"
                 onClick={() => setTextSize(size)}
                 className={`rounded-lg px-3.5 py-1.5 ${
-                  textSize === size ? "bg-white font-semibold shadow-sm" : "font-medium text-muted-foreground"
+                  textSize === size ? "bg-card font-semibold shadow-sm" : "font-medium text-muted-foreground"
                 } ${size === "small" ? "text-[13px]" : size === "medium" ? "text-[15px]" : "text-[17px]"}`}
               >
                 {TEXT_SIZE_LABELS[size]}

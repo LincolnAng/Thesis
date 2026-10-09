@@ -37,7 +37,7 @@ function ProductRow({ product, onEdit }: { product: Product; onEdit: () => void 
   const low = product.stockQty <= product.lowStockThreshold;
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-line/15 bg-white p-5">
+    <div className="flex flex-col gap-3 rounded-2xl border border-line/15 bg-card p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <button type="button" onClick={onEdit} className="font-display text-[18px] font-semibold hover:text-cacao">
           {product.name}
@@ -129,7 +129,7 @@ export function SimpleInventory({ onAddProduct, onEditProduct }: { onAddProduct:
         <SectionTitle>What you sell</SectionTitle>
         <div className="flex flex-col gap-4">
           {products.length === 0 ? (
-            <p className="rounded-2xl border border-line/15 bg-white p-5 text-[15px] text-muted-foreground">
+            <p className="rounded-2xl border border-line/15 bg-card p-5 text-[15px] text-muted-foreground">
               No products yet. Add the first one below.
             </p>
           ) : (

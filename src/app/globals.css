@@ -5,16 +5,21 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  /* Mang Kiko's palette (from the mkc design): warm ivory ground, cacao accent. */
-  --color-ivory: #FAF9F5;
-  --color-ink: #141413;
-  --color-cacao: #7B4B2A;
-  --color-sand: #C08552;
-  --color-oat: #E3DACC;
-  --color-faint: #9C9A92;
-  --color-success: #558A42;
-  --color-danger: #B3261E;
-  --color-line: #1F1E1D;
+  /* Mang Kiko's palette (from the mkc design): warm ivory ground, cacao accent.
+     These point at variables rather than holding hex, because they were fixed before and so
+     every surface painted with them stayed daylight-bright while the shadcn tokens around
+     them went dark — which is exactly what "spotty dark mode" looked like. The values live
+     in :root and .dark below. */
+  --color-ivory: var(--brand-ivory);
+  --color-ink: var(--brand-ink);
+  --color-cacao: var(--brand-cacao);
+  --color-sand: var(--brand-sand);
+  --color-oat: var(--brand-oat);
+  --color-faint: var(--brand-faint);
+  --color-success: var(--brand-success);
+  --color-danger: var(--brand-danger);
+  --color-line: var(--brand-line);
+  --color-track: var(--brand-track);
   --font-display: var(--font-display);
   --color-status-good: var(--status-good);
   --color-status-warning: var(--status-warning);
@@ -63,6 +68,18 @@
    green and amber are the only other strong colors, reserved for money
    in / money out and warnings. No gradients, no shadows. */
 :root {
+  --brand-ivory: #FAF9F5;
+  --brand-ink: #141413;
+  --brand-cacao: #7B4B2A;
+  --brand-sand: #C08552;
+  --brand-oat: #E3DACC;
+  --brand-faint: #9C9A92;
+  --brand-success: #558A42;
+  --brand-danger: #B3261E;
+  --brand-line: #1F1E1D;
+  /* The empty part of a bar. Was hardcoded #F0EEE6 in five places. */
+  --brand-track: #F0EEE6;
+
   --background: #FAF9F5;
   --foreground: #141413;
   --card: #FFFFFF;
@@ -110,6 +127,17 @@
 }
 
 .dark {
+  --brand-ivory: oklch(0.16 0.025 45);
+  --brand-ink: oklch(0.93 0.02 70);
+  --brand-cacao: #C99F6E;
+  --brand-sand: #D9A978;
+  --brand-oat: oklch(0.33 0.036 46);
+  --brand-faint: oklch(0.62 0.022 65);
+  --brand-success: oklch(0.78 0.15 152);
+  --brand-danger: oklch(0.72 0.17 25);
+  --brand-line: oklch(0.93 0.02 70);
+  --brand-track: oklch(0.30 0.034 46);
+
   --background: oklch(0.16 0.025 45);
   --foreground: oklch(0.93 0.02 70);
   --card: oklch(0.25 0.032 46);

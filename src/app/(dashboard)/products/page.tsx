@@ -58,7 +58,7 @@ function ProductPhoto({ product, gradient, photo }: { product: Product; gradient
           <button
             type="button"
             onClick={() => setProductPhoto(product.id, null)}
-            className="rounded-md bg-white/90 px-2.5 py-1 text-[11px] font-semibold text-danger shadow-sm"
+            className="rounded-md bg-card/90 px-2.5 py-1 text-[11px] font-semibold text-danger shadow-sm"
           >
             Remove
           </button>
@@ -66,7 +66,7 @@ function ProductPhoto({ product, gradient, photo }: { product: Product; gradient
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          className="rounded-md bg-white/90 px-2.5 py-1 text-[11px] font-semibold text-ink shadow-sm"
+          className="rounded-md bg-card/90 px-2.5 py-1 text-[11px] font-semibold text-ink shadow-sm"
         >
           {photo ? "Change photo" : "+ Add photo"}
         </button>
@@ -162,7 +162,7 @@ export default function ProductsPage() {
           return (
             <div
               key={p.id}
-              className="flex flex-col overflow-hidden rounded-2xl border border-line/15 bg-white transition hover:border-cacao/40 hover:shadow-sm"
+              className="flex flex-col overflow-hidden rounded-2xl border border-line/15 bg-card transition hover:border-cacao/40 hover:shadow-sm"
             >
               <ProductPhoto product={p} gradient={GRADIENTS[i % GRADIENTS.length]} photo={photos[p.id]} />
               <button type="button" onClick={() => setEditingId(p.id)} title="Edit product" className="flex flex-col gap-1.5 p-4 text-left">

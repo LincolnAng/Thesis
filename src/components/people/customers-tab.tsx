@@ -37,7 +37,7 @@ export function CustomersTab() {
             placeholder="Search customers…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-[200px] rounded-lg border border-line/20 bg-white px-3 py-2 text-[13px] outline-none focus:border-cacao"
+            className="w-[200px] rounded-lg border border-line/20 bg-card px-3 py-2 text-[13px] outline-none focus:border-cacao"
           />
         }
       />

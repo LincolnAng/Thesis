@@ -25,7 +25,7 @@ export const ChatComposer = forwardRef<
   return (
     <div
       className={cn(
-        "rounded-[20px] border border-line/20 bg-white px-4 pb-2.5 pt-3.5 shadow-[0_2px_12px_rgba(20,20,19,0.05)] transition-colors focus-within:border-cacao/50",
+        "rounded-[20px] border border-line/20 bg-card px-4 pb-2.5 pt-3.5 shadow-[0_2px_12px_rgba(20,20,19,0.05)] transition-colors focus-within:border-cacao/50",
         className,
       )}
     >

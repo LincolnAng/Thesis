@@ -17,7 +17,7 @@ const TONE_CARD: Record<Tone, string> = {
   good: "border-success/30 bg-success/[0.06]",
   warn: "border-[#9A6B12]/30 bg-[#9A6B12]/[0.06]",
   bad: "border-danger/30 bg-danger/[0.06]",
-  neutral: "border-line/15 bg-white",
+  neutral: "border-line/15 bg-card",
 };
 
 const TONE_TEXT: Record<Tone, string> = {
@@ -80,7 +80,7 @@ export function Gauge({
         </span>
         <span className="text-[13px] text-muted-foreground">{text}</span>
       </div>
-      <div className="h-3 overflow-hidden rounded-full bg-[#F0EEE6]">
+      <div className="h-3 overflow-hidden rounded-full bg-track">
         <div className={`h-full rounded-full ${TONE_BAR[tone]}`} style={{ width: `${Math.max(2, Math.min(100, pct))}%` }} />
       </div>
     </div>
@@ -93,7 +93,7 @@ export function BigButton({ icon: Icon, label, hint, onClick }: { icon: LucideIc
     <button
       type="button"
       onClick={onClick}
-      className="flex flex-1 items-center gap-3 rounded-2xl border border-line/15 bg-white px-5 py-4 text-left transition hover:border-cacao/40 hover:shadow-sm"
+      className="flex flex-1 items-center gap-3 rounded-2xl border border-line/15 bg-card px-5 py-4 text-left transition hover:border-cacao/40 hover:shadow-sm"
     >
       <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-cacao/10">
         <Icon className="h-5 w-5 text-cacao" strokeWidth={1.8} />
@@ -118,7 +118,7 @@ export function SectionTitle({ children, right }: { children: ReactNode; right?:
 
 /** A white card holding a short list of sentences. */
 export function SentenceList({ children }: { children: ReactNode }) {
-  return <div className="divide-y divide-line/10 overflow-hidden rounded-2xl border border-line/15 bg-white">{children}</div>;
+  return <div className="divide-y divide-line/10 overflow-hidden rounded-2xl border border-line/15 bg-card">{children}</div>;
 }
 
 export function SentenceRow({

@@ -69,9 +69,9 @@ function StatCard({
   sub?: string;
 }) {
   const solid = tone === "good" ? "bg-success border-success" : "bg-danger border-danger";
-  const iconBg = filled ? "bg-white/20" : tone === "good" ? "bg-success/10" : "bg-danger/10";
+  const iconBg = filled ? "bg-card/20" : tone === "good" ? "bg-success/10" : "bg-danger/10";
   return (
-    <div className={`flex items-center gap-3.5 rounded-2xl border px-[22px] py-4 ${filled ? `${solid} text-white` : "border-line/15 bg-white"}`}>
+    <div className={`flex items-center gap-3.5 rounded-2xl border px-[22px] py-4 ${filled ? `${solid} text-white` : "border-line/15 bg-card"}`}>
       <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconBg}`}>{icon}</div>
       <div className="min-w-0">
         <div className={`text-xs font-semibold ${filled ? "text-white/85" : "text-muted-foreground"}`}>{label}</div>
@@ -152,7 +152,7 @@ function TransactionsPageInner() {
           <button
             type="button"
             onClick={() => setShowBudget((v) => !v)}
-            className={`rounded-[10px] border px-4 py-2.5 text-[13px] font-semibold ${showBudget ? "border-cacao/30 bg-cacao/10 text-cacao" : "border-line/20 bg-white"}`}
+            className={`rounded-[10px] border px-4 py-2.5 text-[13px] font-semibold ${showBudget ? "border-cacao/30 bg-cacao/10 text-cacao" : "border-line/20 bg-card"}`}
           >
             {showBudget ? "Hide target & budget" : "Target & budget"}
           </button>
@@ -187,7 +187,7 @@ function TransactionsPageInner() {
             className={`rounded-full border px-3.5 py-1.5 text-[13px] ${
               period === "all"
                 ? "border-cacao bg-cacao font-semibold text-ivory"
-                : "border-line/15 bg-white font-medium text-muted-foreground"
+                : "border-line/15 bg-card font-medium text-muted-foreground"
             }`}
           >
             All time
@@ -235,7 +235,7 @@ function TransactionsPageInner() {
         </div>
 
         {showBudget && (
-          <div className="flex flex-col gap-4 rounded-2xl border border-line/15 bg-white p-5">
+          <div className="flex flex-col gap-4 rounded-2xl border border-line/15 bg-card p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="text-sm font-semibold">Target & budget</div>
               <label className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
@@ -255,7 +255,7 @@ function TransactionsPageInner() {
           </div>
         )}
 
-        <div className="flex flex-col overflow-hidden rounded-2xl border border-line/15 bg-white">
+        <div className="flex flex-col overflow-hidden rounded-2xl border border-line/15 bg-card">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line/10 px-[18px] py-3.5">
               <div className="text-sm font-semibold">
                 Money · <span className="font-medium text-muted-foreground">{period === "all" ? "All time" : monthLabel(period)}</span>

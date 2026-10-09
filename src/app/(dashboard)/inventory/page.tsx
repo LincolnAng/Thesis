@@ -112,12 +112,12 @@ function Calendar({
             }
             className={`flex min-h-[84px] flex-col gap-0.5 rounded-lg border p-1.5 text-left transition ${
               d.status === "past"
-                ? "cursor-default border-transparent bg-[#F0EEE6]/60 opacity-50"
+                ? "cursor-default border-transparent bg-track/60 opacity-50"
                 : d.status === "unavailable"
                   ? "border-dashed border-line/25 bg-[repeating-linear-gradient(135deg,#EDEBE3_0_5px,transparent_5px_10px)]"
                   : d.status === "no_equipment"
-                    ? "border-line/10 bg-white/60"
-                    : "border-line/10 bg-white hover:bg-secondary"
+                    ? "border-line/10 bg-card/60"
+                    : "border-line/10 bg-card hover:bg-secondary"
             } ${d.date === today ? "ring-2 ring-cacao" : ""}`}
           >
             <span className="flex items-center justify-between">
@@ -194,10 +194,10 @@ function StockVsForecast({
 
             <span className="flex flex-col gap-1">
               <span className="flex items-center gap-2">
-                <span className="relative h-3.5 flex-1 rounded bg-[#F0EEE6]">
+                <span className="relative h-3.5 flex-1 rounded bg-track">
                   <span
                     className="absolute inset-y-0 left-0 rounded"
-                    style={{ width: pct(p.stockQty), background: "#7B4B2A" }}
+                    style={{ width: pct(p.stockQty), background: "var(--brand-cacao)" }}
                   />
                 </span>
                 <span className="w-[72px] shrink-0 text-[12px] tabular-nums">
@@ -206,7 +206,7 @@ function StockVsForecast({
                 </span>
               </span>
               <span className="flex items-center gap-2">
-                <span className="relative h-3.5 flex-1 rounded bg-[#F0EEE6]">
+                <span className="relative h-3.5 flex-1 rounded bg-track">
                   <span
                     className="absolute inset-y-0 left-0 rounded"
                     style={{ width: pct(f), background: "#E8A013" }}
@@ -322,7 +322,7 @@ export default function InventoryPage() {
       right={
         simple ? undefined : (
         <>
-          <button type="button" onClick={() => setAddStockOpen(true)} className="rounded-[10px] border border-line/20 bg-white px-4 py-2.5 text-[13px] font-semibold">
+          <button type="button" onClick={() => setAddStockOpen(true)} className="rounded-[10px] border border-line/20 bg-card px-4 py-2.5 text-[13px] font-semibold">
             Add stock
           </button>
           <button type="button" onClick={() => setAddProductOpen(true)} className="rounded-[10px] bg-cacao px-4 py-2.5 text-[13px] font-semibold text-ivory">
@@ -372,7 +372,7 @@ export default function InventoryPage() {
         <PlanFixes fixes={fixes.filter((f) => f.id !== "no-equipment")} />
 
         <div className="grid grid-cols-1 gap-4 min-[1000px]:grid-cols-3">
-          <div className={`rounded-2xl border bg-white px-5 py-4 ${low.length ? "border-danger/35" : "border-line/15"}`}>
+          <div className={`rounded-2xl border bg-card px-5 py-4 ${low.length ? "border-danger/35" : "border-line/15"}`}>
             <TileHeader title="Running low" color="#B3261E" />
             {low.length === 0 ? (
               <>
@@ -405,7 +405,7 @@ export default function InventoryPage() {
             )}
           </div>
 
-          <div className={`rounded-2xl border bg-white px-5 py-4 ${problem ? "border-danger/35" : "border-line/15"}`}>
+          <div className={`rounded-2xl border bg-card px-5 py-4 ${problem ? "border-danger/35" : "border-line/15"}`}>
             <TileHeader title={`To make by end of ${thisMonth}`} color="#C08552" />
             {toMake.length === 0 ? (
               <>
@@ -452,7 +452,7 @@ export default function InventoryPage() {
             ))}
           </div>
 
-          <div className="rounded-2xl border border-cacao/40 bg-white px-5 py-4">
+          <div className="rounded-2xl border border-cacao/40 bg-card px-5 py-4">
             <TileHeader title="Next production day" color="#7B4B2A" />
             <div className="mt-0.5 font-display text-[22px] font-semibold text-cacao">
               {nextDay ? fromIso(nextDay.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) : "—"}
@@ -477,7 +477,7 @@ export default function InventoryPage() {
         />
 
         {tab === "plan" ? (
-          <div className="flex flex-col gap-4 rounded-2xl border border-line/15 bg-white p-5">
+          <div className="flex flex-col gap-4 rounded-2xl border border-line/15 bg-card p-5">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex flex-wrap items-center gap-2.5">
                 <span className="text-xs font-semibold text-muted-foreground">Schedule</span>
@@ -488,7 +488,7 @@ export default function InventoryPage() {
                       type="button"
                       onClick={() => setStrategy(st)}
                       title={STRATEGY_HINTS[st]}
-                      className={`rounded-full px-3 py-1 ${strategy === st ? "bg-white font-semibold shadow-sm" : "text-muted-foreground"}`}
+                      className={`rounded-full px-3 py-1 ${strategy === st ? "bg-card font-semibold shadow-sm" : "text-muted-foreground"}`}
                     >
                       {STRATEGY_LABELS[st]}
                     </button>
@@ -497,7 +497,7 @@ export default function InventoryPage() {
                 <span className="text-xs text-muted-foreground">{STRATEGY_HINTS[strategy]}</span>
               </div>
               <div className="flex shrink-0 gap-2">
-                <button type="button" onClick={() => setShowSettings(true)} className="rounded-[10px] border border-line/20 bg-white px-3.5 py-2 text-xs font-semibold">
+                <button type="button" onClick={() => setShowSettings(true)} className="rounded-[10px] border border-line/20 bg-card px-3.5 py-2 text-xs font-semibold">
                   Settings
                 </button>
                 <button type="button" onClick={() => setEventDialog({})} className="rounded-[10px] bg-cacao px-3.5 py-2 text-xs font-semibold text-ivory">
@@ -526,7 +526,7 @@ export default function InventoryPage() {
           </div>
         ) : (
           <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-4 rounded-2xl border border-line/15 bg-white p-5">
+          <div className="flex flex-col gap-4 rounded-2xl border border-line/15 bg-card p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="text-sm font-semibold">

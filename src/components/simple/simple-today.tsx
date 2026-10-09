@@ -131,7 +131,7 @@ export function SimpleToday() {
   return (
     <div className="flex flex-col gap-3">
       {cards.map((c, i) => (
-        <div key={i} className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-l-4 border-line/15 bg-white px-5 py-4 ${TONE_BORDER[c.tone]}`}>
+        <div key={i} className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-l-4 border-line/15 bg-card px-5 py-4 ${TONE_BORDER[c.tone]}`}>
           <p className="min-w-0 flex-1 text-[16px] leading-relaxed">{c.text}</p>
           <Link href={c.href} className="shrink-0 text-[13px] font-semibold text-cacao">
             {c.action} →
