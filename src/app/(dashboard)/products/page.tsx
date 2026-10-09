@@ -100,12 +100,14 @@ export default function ProductsPage() {
   // One section at a time. Stacked, the three grids ran to three screens of scrolling for a
   // shop with three products and six materials, and the one you wanted was never the one on
   // screen. Rotating keeps each list whole and the page one screen tall.
-  const SECTIONS = ["Products", "Raw materials", "Supplies"] as const;
+  // "Everything" first, so the carousel has a home position and opening the page still shows
+  // the whole picture — rotating is for narrowing down, not the only way to see things.
+  const SECTIONS = ["Everything", "Products", "Raw materials", "Supplies"] as const;
   const rotate = (step: number) => setSection((n) => (n + step + SECTIONS.length) % SECTIONS.length);
 
   return (
     <Page title="Inventory">
-      <div className="mb-4">
+      <div className="mb-4 flex flex-wrap items-center gap-4">
         <CarouselNav
           label={SECTIONS[section]}
           onPrev={() => rotate(-1)}
@@ -116,12 +118,26 @@ export default function ProductsPage() {
           prevLabel="Previous section"
           nextLabel="Next section"
         />
+        {/* Dots, so a carousel that wraps still says where you are and how many there are —
+            otherwise rotating past the end feels like the page is looping without end. */}
+        <div className="flex items-center gap-2">
+          {SECTIONS.map((name, i) => (
+            <button
+              key={name}
+              type="button"
+              onClick={() => setSection(i)}
+              aria-label={`Show ${name}`}
+              aria-current={i === section}
+              className={`h-2 rounded-full transition-all ${i === section ? "w-6 bg-cacao" : "w-2 bg-line/30 hover:bg-cacao/40"}`}
+            />
+          ))}
+        </div>
       </div>
 
-      {section === 1 && <MaterialsPanel group="ingredient" />}
-      {section === 2 && <MaterialsPanel group="supply" />}
-
       {section === 0 && (
+        <div className="mb-3 text-xs font-bold uppercase tracking-wide text-muted-foreground">Products</div>
+      )}
+      {(section === 0 || section === 1) && (
       <div className="grid grid-cols-1 gap-[18px] min-[600px]:grid-cols-2 min-[1000px]:grid-cols-3 min-[1300px]:grid-cols-4">
         {products.map((p, i) => {
           const cost = productCostPerJar(p, costCtx);
@@ -189,6 +205,23 @@ export default function ProductsPage() {
           + Add product
         </button>
       </div>
+      )}
+
+      {(section === 0 || section === 2) && (
+        <div className={section === 0 ? "mt-8" : ""}>
+          {section === 0 && (
+            <div className="mb-3 text-xs font-bold uppercase tracking-wide text-muted-foreground">Raw materials</div>
+          )}
+          <MaterialsPanel group="ingredient" />
+        </div>
+      )}
+      {(section === 0 || section === 3) && (
+        <div className={section === 0 ? "mt-8" : ""}>
+          {section === 0 && (
+            <div className="mb-3 text-xs font-bold uppercase tracking-wide text-muted-foreground">Supplies</div>
+          )}
+          <MaterialsPanel group="supply" />
+        </div>
       )}
 
       {adding && <AddProductDialog products={products} onClose={() => setAdding(false)} />}

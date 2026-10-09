@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, Sparkles } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Filter, Sparkles } from "lucide-react";
 import { AGGREGATE_ID, aggregateForecast, type ProductForecast } from "@/lib/summary/forecast";
 import { seasonStrength } from "@/lib/summary/seasonality";
 import { ConfidenceDonut } from "@/components/inventory/confidence-donut";
@@ -142,6 +142,102 @@ function MonthByProduct({
   );
 }
 
+/**
+ * Which products the table covers.
+ *
+ * A chip per product spread across the header and pushed the heading around as products were
+ * added; with six or eight of them it would have been a wall. One button that says what is
+ * currently showing, opening a list of checks, stays the same size whatever the shop sells.
+ */
+function ProductFilter({
+  all,
+  excluded,
+  onChange,
+}: {
+  all: ProductForecast[];
+  excluded: Set<string>;
+  onChange: (next: Set<string>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const included = all.filter((f) => !excluded.has(f.productId));
+  const label =
+    excluded.size === 0
+      ? "All products"
+      : included.length === 1
+        ? included[0].productName
+        : `${included.length} of ${all.length} products`;
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex h-9 items-center gap-2 rounded-md border border-input bg-transparent px-3 text-sm"
+      >
+        <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+        <span className="max-w-[16rem] truncate">{label}</span>
+        <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <>
+          {/* Clicking anywhere else closes it, which is what a menu is expected to do. */}
+          <button type="button" aria-label="Close" className="fixed inset-0 z-10 cursor-default" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-20 mt-1 w-[17rem] rounded-xl border border-line/15 bg-white p-1.5 shadow-lg">
+            <button
+              type="button"
+              onClick={() => onChange(new Set())}
+              className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-[13px] font-semibold hover:bg-secondary"
+            >
+              All products
+              {excluded.size === 0 && <Check className="h-3.5 w-3.5 text-cacao" />}
+            </button>
+            <div className="my-1 border-t border-line/10" />
+            {all.map((f) => {
+              const on = !excluded.has(f.productId);
+              return (
+                <div key={f.productId} className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const others = all.map((x) => x.productId).filter((id) => id !== f.productId);
+                      // Never leave the table empty: unticking the last one keeps it on.
+                      if (on && included.length === 1) return;
+                      const next = new Set(excluded);
+                      if (on) next.add(f.productId);
+                      else next.delete(f.productId);
+                      onChange(next.size === all.length ? new Set(others) : next);
+                    }}
+                    className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] hover:bg-secondary"
+                  >
+                    <span
+                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                        on ? "border-cacao bg-cacao text-ivory" : "border-line/30"
+                      }`}
+                    >
+                      {on && <Check className="h-3 w-3" />}
+                    </span>
+                    <span className="truncate">{f.productName}</span>
+                  </button>
+                  {/* The reason this filter exists is reading one product down twelve months,
+                      so that is one tap rather than unticking everything else. */}
+                  <button
+                    type="button"
+                    onClick={() => onChange(new Set(all.map((x) => x.productId).filter((id) => id !== f.productId)))}
+                    className="shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:bg-secondary hover:text-cacao"
+                  >
+                    only
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function SeasonalBreakdown({ forecasts }: { forecasts: ProductForecast[] }) {
   const { businessSettings, products, entries } = useStore();
   // Every product is listed, including ones with no sales yet. Leaving them out made the
@@ -242,53 +338,7 @@ export function SeasonalBreakdown({ forecasts }: { forecasts: ProductForecast[] 
           </div>
           <p className="mt-0.5 text-xs text-muted-foreground">{chosen.reliability.reason}</p>
         </div>
-        {forecastable.length > 1 && (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => setExcluded(new Set())}
-              className={`rounded-full border px-3 py-1 text-[12px] font-semibold transition ${
-                excluded.size === 0
-                  ? "border-cacao bg-cacao/10 text-cacao"
-                  : "border-line/20 text-muted-foreground hover:border-cacao/40"
-              }`}
-            >
-              All products
-            </button>
-            {forecastable.map((f) => {
-              const on = !excluded.has(f.productId);
-              return (
-                <button
-                  key={f.productId}
-                  type="button"
-                  title={excluded.size === 0 ? `Show only ${f.productName}` : `Show or hide ${f.productName}`}
-                  onClick={() =>
-                    setExcluded((prev) => {
-                      const others = forecastable.map((x) => x.productId).filter((id) => id !== f.productId);
-                      // From "everything", one tap isolates — comparing a single product down
-                      // twelve months is the thing this filter exists for, and making it cost
-                      // one click per other product would have buried it.
-                      if (prev.size === 0) return new Set(others);
-                      // Never leave the table with nothing in it.
-                      if (on && included.length === 1) return new Set(others);
-                      const next = new Set(prev);
-                      if (on) next.add(f.productId);
-                      else next.delete(f.productId);
-                      return next;
-                    })
-                  }
-                  className={`rounded-full border px-3 py-1 text-[12px] font-medium transition ${
-                    on
-                      ? "border-cacao/40 bg-cacao/[0.06] text-foreground"
-                      : "border-line/20 text-muted-foreground line-through hover:border-cacao/40"
-                  }`}
-                >
-                  {f.productName}
-                </button>
-              );
-            })}
-          </div>
-        )}
+        {forecastable.length > 1 && <ProductFilter all={forecastable} excluded={excluded} onChange={setExcluded} />}
       </div>
 
       {/* What the app worked out about this product's year, in her words, not a settings link. */}

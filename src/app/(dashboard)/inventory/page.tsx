@@ -437,7 +437,7 @@ export default function InventoryPage() {
                 {plan.batchesExpiring > 0 && (
                   <div className="mt-0.5 text-[11px] font-semibold text-[#9A6B12]">
                     {pluralize(plan.batchesExpiring, "batch", "batches")} would be made too early to still be good —
-                    try Min expiry
+                    try Latest
                   </div>
                 )}
               </div>

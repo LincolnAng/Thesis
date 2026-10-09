@@ -64,12 +64,12 @@ export function PeopleTable({ columns, rows, empty }: { columns: PeopleColumn[];
 /** The few headline numbers above a table, centered under their labels. */
 export function PeopleSummary({ items, right }: { items: { label: string; value: string }[]; right?: ReactNode }) {
   return (
-    <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
-      <div className="flex flex-wrap gap-8">
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+      <div className="grid flex-1 grid-cols-1 gap-3 min-[600px]:grid-cols-3">
         {items.map((i) => (
-          <div key={i.label} className="text-center">
+          <div key={i.label} className="rounded-2xl border border-line/15 bg-white px-5 py-4">
             <div className="text-xs font-semibold text-muted-foreground">{i.label}</div>
-            <div className="font-display text-[22px] font-semibold">{i.value}</div>
+            <div className="mt-0.5 truncate font-display text-[26px] font-semibold">{i.value}</div>
           </div>
         ))}
       </div>

@@ -122,7 +122,7 @@ export function planContingencies(input: ContingencyInput): PlanFix[] {
     fixes.push({
       id: "expiring",
       problem: `${input.batchesExpiring === 1 ? "1 batch" : `${input.batchesExpiring} batches`} would be made so early they'd be past their best before you sell them.`,
-      fix: "Switch the schedule to Min expiry so they're made closer to when they're needed.",
+      fix: "Switch the schedule to Latest so they're made closer to when they're needed.",
       severity: "warning",
     });
   }

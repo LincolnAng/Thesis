@@ -17,7 +17,7 @@ export type ScheduleStrategy = "fastest" | "balanced" | "min_expiry";
 export const STRATEGY_LABELS: Record<ScheduleStrategy, string> = {
   fastest: "Fastest",
   balanced: "Balanced",
-  min_expiry: "Min expiry",
+  min_expiry: "Latest",
 };
 
 export const STRATEGY_HINTS: Record<ScheduleStrategy, string> = {

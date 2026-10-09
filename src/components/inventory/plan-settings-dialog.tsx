@@ -36,7 +36,7 @@ export function PlanSettingsDialog({
 
           <section className="space-y-2 rounded-2xl border border-border bg-card p-4">
             <h2 className="text-sm font-semibold text-foreground">Shelf life</h2>
-            <p className="text-xs text-muted-foreground">Days a jar stays good. Used by the Min expiry schedule.</p>
+            <p className="text-xs text-muted-foreground">Days a jar stays good. Used by the Latest schedule.</p>
             <ul className="divide-y divide-border">
               {products.map((p) => (
                 <li key={p.id} className="flex items-center gap-3 py-2 text-sm">
