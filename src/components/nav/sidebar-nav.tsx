@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useViewMode } from "@/lib/summary/view-mode";
 import { NAV_ITEMS, SETTINGS_ITEM, type NavItem } from "@/lib/nav-items";
+import { useCurrentUser, signOut } from "@/lib/auth/current-user";
+import { useIsHelper } from "@/lib/auth/permissions";
 
 function isActive(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -36,6 +38,8 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
  */
 export function SidebarNav() {
   const pathname = usePathname();
+  const helper = useIsHelper();
+  const me = useCurrentUser();
 
   return (
     <aside
@@ -56,13 +60,35 @@ export function SidebarNav() {
       </div>
 
       <nav className="flex w-full flex-col gap-1">
-        {NAV_ITEMS.map((item) => (
+        {NAV_ITEMS.filter((item) => !(item.ownerOnly && helper)).map((item) => (
           <NavLink key={item.href} item={item} active={isActive(pathname, item.href)} />
         ))}
       </nav>
 
-      <div className="mt-auto w-full">
-        <NavLink item={SETTINGS_ITEM} active={isActive(pathname, SETTINGS_ITEM.href)} />
+      <div className="mt-auto w-full space-y-1">
+        {!(SETTINGS_ITEM.ownerOnly && helper) && (
+          <NavLink item={SETTINGS_ITEM} active={isActive(pathname, SETTINGS_ITEM.href)} />
+        )}
+        {/* Whoever is holding the tablet, and one tap to hand it over. Switching used to be
+            buried in Settings, which a helper cannot even open. */}
+        {me && (
+          <button
+            type="button"
+            onClick={signOut}
+            title={`Signed in as ${me.name} — tap to switch`}
+            className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left transition hover:bg-secondary"
+          >
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-cacao text-[11px] font-bold text-ivory">
+              {me.name.trim().slice(0, 2).toUpperCase()}
+            </span>
+            <span className="hidden min-w-0 min-[1024px]:block">
+              <span className="block truncate text-[13px] font-semibold leading-tight">{me.name}</span>
+              <span className="block text-[11px] leading-tight text-muted-foreground">
+                {me.role === "owner" ? "Owner · switch" : "Helper · switch"}
+              </span>
+            </span>
+          </button>
+        )}
       </div>
     </aside>
   );

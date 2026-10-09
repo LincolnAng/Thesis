@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useStore } from "@/lib/store/use-store";
 import { hashPin, signIn, useCurrentUser } from "@/lib/auth/current-user";
+import { addUser } from "@/lib/store/store";
 import { CARD_GRADIENTS } from "@/lib/summary/item-icons";
 import type { AppUser } from "@/lib/store/types";
 
@@ -27,8 +28,20 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
   const [picked, setPicked] = useState<AppUser | null>(null);
   const [pin, setPin] = useState("");
   const [wrong, setWrong] = useState(false);
+  const [addingName, setAddingName] = useState<string | null>(null);
 
-  if (users.length === 0 || user) return <>{children}</>;
+  function addHelper() {
+    const trimmed = (addingName ?? "").trim();
+    if (!trimmed) return;
+    addUser(trimmed, "", "helper");
+    setAddingName(null);
+  }
+
+  if (user) return <>{children}</>;
+  // Nobody set up yet. The gate used to wave everyone straight through here, which is why a
+  // sign-in screen existed that nobody had ever seen: the only way to create the first person
+  // was a Settings page you had to already know about.
+  if (users.length === 0) return <FirstRun />;
 
   async function submit(person: AppUser, digits: string) {
     const hash = await hashPin(person.id, digits);
@@ -129,8 +142,98 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
                 </button>
               ))}
             </div>
+            <div className="mt-6 text-center">
+              <button
+                type="button"
+                onClick={() => setAddingName("")}
+                className="text-[13px] font-semibold text-cacao hover:underline"
+              >
+                Someone else works here
+              </button>
+            </div>
+            {addingName !== null && (
+              <div className="mx-auto mt-4 flex max-w-[360px] flex-col gap-2 rounded-2xl border border-line/15 bg-card p-4">
+                <label className="text-xs text-muted-foreground">Their name</label>
+                <input
+                  autoFocus
+                  value={addingName}
+                  onChange={(e) => setAddingName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && addHelper()}
+                  placeholder="e.g. Jun"
+                  className="h-10 rounded-lg border border-input bg-transparent px-3 text-[15px] outline-none focus:border-cacao"
+                />
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  They&apos;ll be able to log sales, purchases, batches and spoilage. Money and prices stay with the
+                  owner. The owner can give them a PIN later under Settings.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={addHelper}
+                    disabled={!addingName.trim()}
+                    className="flex-1 rounded-[10px] bg-cacao px-4 py-2 text-[14px] font-semibold text-ivory disabled:opacity-40"
+                  >
+                    Add them
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAddingName(null)}
+                    className="rounded-[10px] border border-line/20 px-4 py-2 text-[14px] font-semibold"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The very first run: one name, and that person is the owner.
+ *
+ * Deliberately not a form. Everything else — PINs, helpers, roles — can be set later by
+ * someone who now has somewhere to set it from.
+ */
+function FirstRun() {
+  const [name, setName] = useState("");
+
+  function start() {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const created = addUser(trimmed, "", "owner");
+    signIn({ id: created.id, name: created.name, role: "owner" });
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-ivory px-4">
+      <div className="w-full max-w-[420px] rounded-2xl border border-line/15 bg-card p-7 text-center">
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-cacao font-display text-xl font-bold text-ivory">
+          M
+        </div>
+        <h1 className="font-display text-[26px] font-semibold">What&apos;s your name?</h1>
+        <p className="mt-1 text-[14px] leading-relaxed text-muted-foreground">
+          Everything you save gets your name on it. You can add the people who help you afterwards.
+        </p>
+        <input
+          autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && start()}
+          placeholder="e.g. Auntie Sandy"
+          className="mt-5 h-11 w-full rounded-xl border border-input bg-transparent px-4 text-center text-[16px] outline-none focus:border-cacao"
+        />
+        <button
+          type="button"
+          onClick={start}
+          disabled={!name.trim()}
+          className="mt-3 w-full rounded-[10px] bg-cacao px-4 py-2.5 text-[15px] font-semibold text-ivory disabled:opacity-40"
+        >
+          Start
+        </button>
       </div>
     </div>
   );

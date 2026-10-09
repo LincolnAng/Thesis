@@ -1,5 +1,6 @@
 "use client";
 
+import { OwnerOnly } from "@/components/auth/owner-only";
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -320,10 +321,20 @@ function TransactionsPageInner() {
   );
 }
 
-export default function TransactionsPage() {
+function TransactionsPageSuspended() {
   return (
     <Suspense fallback={null}>
       <TransactionsPageInner />
     </Suspense>
+  );
+}
+
+
+/** A helper who types the URL lands here instead of on the owner's screens. */
+export default function TransactionsPageGuarded() {
+  return (
+    <OwnerOnly what="Money">
+      <TransactionsPageSuspended />
+    </OwnerOnly>
   );
 }
