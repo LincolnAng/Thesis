@@ -14,6 +14,8 @@ import { addProduct, deleteProduct, renameProduct, updateProduct } from "@/lib/s
 import { blankProduct } from "@/lib/store/blank-product";
 import { formatPeso, PRICING_MODE_LABELS } from "@/lib/format";
 import { useCostContext } from "@/lib/summary/use-cost-context";
+import { useStore } from "@/lib/store/use-store";
+import { bulkUnitFor } from "@/lib/summary/business-config";
 import { effectiveProductPrice, productCostPerJar } from "@/lib/summary/recipe-cost";
 import type { Product } from "@/lib/store/types";
 
@@ -50,6 +52,11 @@ export function EditProductDialog({
   );
   const priceField = useNumericDraft(product.standardPrice, (n) => updateProduct(product.id, { standardPrice: n }));
   const unit = productUnit(product);
+  const { businessSettings } = useStore();
+  // A size is only reachable through this dialog, so this is the only place a 100g jar can be
+  // told it leaves in trays of 12 while the 220g leaves in cases of 25. Blank means the shop
+  // default, which is what most products want.
+  const bulk = bulkUnitFor(businessSettings, product);
   const costCtx = useCostContext();
   const effectivePrice = effectiveProductPrice(product, productCostPerJar(product, costCtx));
   const duplicate = nameTaken(name, products, product.id);
@@ -85,6 +92,36 @@ export function EditProductDialog({
             />
             <p className="text-xs text-muted-foreground">
               Filled in for you every time you enter a quantity of this product.
+            </p>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Sold in bulk as</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                inputMode="numeric"
+                className="w-20 text-center tabular-nums"
+                defaultValue={product.bulkSize ?? ""}
+                placeholder={String(bulk.size)}
+                aria-label={`How many ${unit} per bulk unit of ${product.name}`}
+                onBlur={(e) => {
+                  const raw = e.target.value.trim();
+                  const n = Number(raw);
+                  updateProduct(product.id, {
+                    bulkSize: raw === "" ? null : Number.isFinite(n) && n > 1 ? Math.floor(n) : null,
+                  });
+                }}
+              />
+              <span className="shrink-0 text-xs text-muted-foreground">{singular(unit)}s per</span>
+              <Input
+                className="w-28"
+                defaultValue={product.bulkWord ?? ""}
+                placeholder={bulk.word}
+                aria-label={`What a bulk unit of ${product.name} is called`}
+                onBlur={(e) => updateProduct(product.id, { bulkWord: e.target.value.trim() || null })}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {`Entering sales, one ${bulk.word} counts as ${bulk.size} ${unit}. Leave blank to follow the shop default.`}
             </p>
           </div>
           <div className="space-y-1">

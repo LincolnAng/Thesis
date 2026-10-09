@@ -17,6 +17,7 @@ import { useStore } from "@/lib/store/use-store";
 import { EXPENSE_CATEGORY_LABELS, ENTRY_TYPE_LABELS, PRICE_TYPE_LABELS, formatPeso } from "@/lib/format";
 import { spoiledValue } from "@/lib/summary/spoilage";
 import { productUnit } from "@/lib/units";
+import { bulkUnitFor } from "@/lib/summary/business-config";
 import { useCostContext } from "@/lib/summary/use-cost-context";
 import { effectiveProductPrice, productCostPerJar } from "@/lib/summary/recipe-cost";
 import { allExpenseCategories } from "@/lib/summary/expenses-summary";
@@ -71,7 +72,7 @@ export function QuickEditForm({
    * place, where a tall stacked form would push the rest of the table off the screen. */
   wide?: boolean;
 }) {
-  const { products, rawMaterials, categoryBudgets, events, suppliers } = useStore();
+  const { products, rawMaterials, categoryBudgets, events, suppliers, businessSettings } = useStore();
   const costCtx = useCostContext();
   // A form opened with a product and a quantity already on it (Home's "Something sold")
   // should show the money straight away, not wait for something to be touched.
@@ -199,6 +200,34 @@ export function QuickEditForm({
   }
 
   const itemUnit = unitOfItem(draft.sku);
+  /**
+   * Counting this line in boxes instead of single jars.
+   *
+   * She almost never sells one jar at a time, but the shelf is counted in jars, so the box is
+   * a way of typing — not a second kind of quantity. The saved number is always jars. Each
+   * product brings its own box size and its own word for it, because a tray of one spread is
+   * not a case of another.
+   */
+  const [bulk, setBulk] = useState(false);
+  /**
+   * Switching the unit rounds the draft to whole ones of it.
+   *
+   * Flipping "1 jar" to boxes otherwise reads "0.04 cases", and she has to clear the field
+   * before she can type. Nobody sells a twenty-fifth of a case, so the switch is taken as a
+   * statement of how this sale is being counted — and the number visibly changes, so nothing
+   * is decided behind her back.
+   */
+  function switchBulk(on: boolean) {
+    setBulk(on);
+    const product = products.find((p) => p.name === draft.sku);
+    if (!product || draft.quantity == null) return;
+    const { size } = bulkUnitFor(businessSettings, product);
+    const whole = on ? Math.max(1, Math.round(draft.quantity / size)) * size : Math.round(draft.quantity);
+    if (whole !== draft.quantity) change({ quantity: whole });
+  }
+  const bulkProduct = products.find((p) => p.name === draft.sku);
+  const bulkUnit = bulkUnitFor(businessSettings, bulkProduct);
+  const inBulk = bulk && bulkProduct != null;
   // Shown above the amount once there's more than one of something: a ₱1,800 line for 10
   // jars is only checkable against ₱180 a jar, which is the number the owner actually knows.
   const perPiece =
@@ -265,11 +294,47 @@ export function QuickEditForm({
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">How many</Label>
-            <QuantityStepper value={draft.quantity} onChange={(quantity) => change({ quantity })} />
+            <QuantityStepper
+              value={
+                draft.quantity == null
+                  ? null
+                  : inBulk
+                    ? Math.round((draft.quantity / bulkUnit.size) * 100) / 100
+                    : draft.quantity
+              }
+              onChange={(typed) =>
+                change({ quantity: typed == null ? null : inBulk ? typed * bulkUnit.size : typed })
+              }
+            />
           </div>
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Measured in</Label>
-            {itemUnit ? (
+            {bulkProduct ? (
+              /* Two taps, not a dropdown: there are only ever two answers for a product, and
+                 the box one says its size so nobody has to remember it. */
+              <div className="flex h-9 items-stretch overflow-hidden rounded-md border border-input text-xs">
+                {[
+                  { on: false, label: itemUnit ?? "each", hint: "" },
+                  { on: true, label: `${bulkUnit.word}s`, hint: `of ${bulkUnit.size}` },
+                ].map((choice) => (
+                  <button
+                    key={String(choice.on)}
+                    type="button"
+                    onClick={() => switchBulk(choice.on)}
+                    className={cn(
+                      "flex min-w-0 flex-1 items-center justify-center gap-1 px-1 transition-colors",
+                      choice.on && "border-l border-input",
+                      inBulk === choice.on
+                        ? "bg-cacao/10 font-semibold text-cacao"
+                        : "text-muted-foreground hover:bg-secondary",
+                    )}
+                  >
+                    <span className="truncate">{choice.label}</span>
+                    {choice.hint && <span className="shrink-0 text-[10px] opacity-70">{choice.hint}</span>}
+                  </button>
+                ))}
+              </div>
+            ) : itemUnit ? (
               <div className="flex h-9 items-center justify-between gap-2 rounded-md border border-input bg-secondary/50 px-2.5">
                 <span className="truncate text-sm font-semibold text-foreground">{itemUnit}</span>
                 <span className="shrink-0 text-[10px] text-muted-foreground">from Settings</span>

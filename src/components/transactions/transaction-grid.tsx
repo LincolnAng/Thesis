@@ -116,12 +116,32 @@ export function TransactionGrid({
 }) {
   const { entries, products, rawMaterials, suppliers, categoryBudgets, businessSettings } = useStore();
   const costCtx = useCostContext();
-  // Jars are what the shelf holds; cases are what leaves the door. The toggle converts at the
-  // point of entry so everything downstream keeps counting jars and nothing else changes.
-  const [inCases, setInCases] = useState(false);
+  /**
+   * Which rows are being counted in bulk, by entry id ("new" for the draft).
+   *
+   * Jars are what the shelf holds; cases are what leaves the door, so the toggle converts at
+   * the point of entry and everything downstream keeps counting jars. It is per row, not per
+   * grid: products are sold in different things, so one morning can be three cases of one
+   * spread and nine loose jars of another, and a single switch would have to be flipped
+   * between every line. The unit belongs to the product, not to the table.
+   */
+  const [bulkRows, setBulkRows] = useState<Set<string>>(new Set());
+  const isBulk = (key: string) => bulkRows.has(key);
+  const toggleBulk = (key: string) =>
+    setBulkRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   /** The bulk unit for whatever product a row is about — see bulkUnitFor. */
   const bulkFor = (sku: string | null | undefined) =>
     bulkUnitFor(businessSettings, products.find((p) => p.name === sku));
+  /**
+   * Only a product has a box. Cocoa beans are bought by the kilo, and offering to count them
+   * in cases of 25 would be offering nonsense, so those rows just state their unit.
+   */
+  const sellsInBulk = (sku: string | null | undefined) => products.some((p) => p.name === sku);
   const [newRow, setNewRow] = useState<EntryDraft>(() => blankEntryDraft(defaultType, "Added in the table"));
 
   const itemNames = [...products.map((p) => p.name), ...rawMaterials.map((m) => m.name)];
@@ -299,25 +319,31 @@ export function TransactionGrid({
                 value={
                   newRow.quantity == null
                     ? ""
-                    : String(inCases ? newRow.quantity / bulkFor(newRow.sku).size : newRow.quantity)
+                    : String(isBulk("new") ? newRow.quantity / bulkFor(newRow.sku).size : newRow.quantity)
                 }
                 onCommit={(v) => {
                   const typed = num(v);
-                  changeNew({ quantity: typed == null ? null : inCases ? typed * bulkFor(newRow.sku).size : typed });
+                  changeNew({
+                    quantity: typed == null ? null : isBulk("new") ? typed * bulkFor(newRow.sku).size : typed,
+                  });
                 }}
               />
-              <button
-                type="button"
-                onClick={() => setInCases((v) => !v)}
-                title={
-                  inCases
-                    ? `Counting in ${bulkFor(newRow.sku).word}s of ${bulkFor(newRow.sku).size} — tap for single units`
-                    : `Counting singly — tap for ${bulkFor(newRow.sku).word}s of ${bulkFor(newRow.sku).size}`
-                }
-                className="shrink-0 rounded px-1 text-[11px] text-muted-foreground underline decoration-dotted hover:text-cacao"
-              >
-                {inCases ? `${bulkFor(newRow.sku).word}s` : (unitOf(newRow.sku) ?? "jars")}
-              </button>
+              {sellsInBulk(newRow.sku) ? (
+                <button
+                  type="button"
+                  onClick={() => toggleBulk("new")}
+                  title={
+                    isBulk("new")
+                      ? `Counting in ${bulkFor(newRow.sku).word}s of ${bulkFor(newRow.sku).size} — tap for single units`
+                      : `Counting singly — tap for ${bulkFor(newRow.sku).word}s of ${bulkFor(newRow.sku).size}`
+                  }
+                  className="shrink-0 rounded px-1 text-[11px] text-muted-foreground underline decoration-dotted hover:text-cacao"
+                >
+                  {isBulk("new") ? `${bulkFor(newRow.sku).word}s` : (unitOf(newRow.sku) ?? "each")}
+                </button>
+              ) : (
+                <span className="shrink-0 text-[11px] text-muted-foreground">{unitOf(newRow.sku) ?? "each"}</span>
+              )}
             </div>
             <CommitCell
               value={newRow.counterparty ?? ""}
@@ -399,15 +425,28 @@ export function TransactionGrid({
               <CommitCell
                 type="number"
                 align="right"
-                value={e.quantity == null ? "" : String(inCases ? e.quantity / bulkFor(e.sku).size : e.quantity)}
+                value={e.quantity == null ? "" : String(isBulk(e.id) ? e.quantity / bulkFor(e.sku).size : e.quantity)}
                 onCommit={(v) => {
                   const typed = num(v);
-                  patch(e, { quantity: typed == null ? null : inCases ? typed * bulkFor(e.sku).size : typed });
+                  patch(e, { quantity: typed == null ? null : isBulk(e.id) ? typed * bulkFor(e.sku).size : typed });
                 }}
               />
-              <span className="shrink-0 text-[11px] text-muted-foreground">
-                {inCases ? `${bulkFor(e.sku).word}s` : (e.unit ?? unitOf(e.sku) ?? "")}
-              </span>
+              {sellsInBulk(e.sku) ? (
+                <button
+                  type="button"
+                  onClick={() => toggleBulk(e.id)}
+                  title={
+                    isBulk(e.id)
+                      ? `Counting in ${bulkFor(e.sku).word}s of ${bulkFor(e.sku).size} — tap for single units`
+                      : `Counting singly — tap for ${bulkFor(e.sku).word}s of ${bulkFor(e.sku).size}`
+                  }
+                  className="shrink-0 rounded px-1 text-[11px] text-muted-foreground underline decoration-dotted hover:text-cacao"
+                >
+                  {isBulk(e.id) ? `${bulkFor(e.sku).word}s` : (e.unit ?? unitOf(e.sku) ?? "each")}
+                </button>
+              ) : (
+                <span className="shrink-0 text-[11px] text-muted-foreground">{e.unit ?? unitOf(e.sku) ?? "each"}</span>
+              )}
             </div>
             <CommitCell
               value={e.counterparty ?? ""}
