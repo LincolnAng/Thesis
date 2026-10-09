@@ -45,11 +45,7 @@ export function ProductExpiryStrip({ product }: { product: Product }) {
         <span className="text-muted-foreground">days</span>
       </div>
 
-      {!expiry.tracksAnything ? (
-        <span className="text-muted-foreground">
-          No batches logged yet, so nothing here has a date. Log one and this fills in.
-        </span>
-      ) : (
+      {expiry.tracksAnything && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           {expiry.expired > 0 && (
             <span className="font-semibold text-danger">{`${pluralize(expiry.expired, "jar")} past the date`}</span>

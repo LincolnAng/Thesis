@@ -64,15 +64,14 @@ function MonthByProduct({
   label: string;
 }) {
   const rows = forecasts
-    .map((f) => ({ forecast: f, month: f.monthly[monthIdx] }))
-    .filter((r) => r.month)
-    .sort((a, b) => b.month.units - a.month.units);
+    .map((f) => ({ forecast: f, month: f.monthly[monthIdx] as ProductForecast["monthly"][number] | undefined }))
+    .sort((a, b) => (b.month?.units ?? -1) - (a.month?.units ?? -1));
 
   if (rows.length === 0) {
-    return <div className="px-3 py-2 text-[12px] text-muted-foreground">No product has a forecast for this month.</div>;
+    return <div className="px-3 py-2 text-[12px] text-muted-foreground">No products to break down.</div>;
   }
 
-  const total = rows.reduce((sum, r) => sum + Math.round(r.month.units), 0);
+  const total = rows.reduce((sum, r) => sum + (r.month ? Math.round(r.month.units) : 0), 0);
 
   return (
     <div className="border-t border-line/10 bg-secondary/30 px-3 py-2">
@@ -80,6 +79,19 @@ function MonthByProduct({
         {`${label} — by product`}
       </div>
       {rows.map(({ forecast, month }) => {
+        if (!month) {
+          return (
+            <div
+              key={forecast.productId}
+              className="grid grid-cols-[minmax(0,1fr)_56px_170px_90px] items-center gap-3 py-1 text-[12px]"
+            >
+              <span className="truncate pl-4 text-muted-foreground">{forecast.productName}</span>
+              <span className="text-right text-muted-foreground">—</span>
+              <span className="text-[11px] text-muted-foreground">no sales yet to forecast from</span>
+              <span />
+            </div>
+          );
+        }
         const { score, word } = seasonStrength(month.seasonIndex);
         const colour = seasonColor(score);
         return (
@@ -132,19 +144,38 @@ function MonthByProduct({
 
 export function SeasonalBreakdown({ forecasts }: { forecasts: ProductForecast[] }) {
   const { businessSettings, products, entries } = useStore();
-  const perProduct = forecasts.filter((f) => f.monthly.length > 0);
-  // The combined row goes FIRST and is what opens. Asking "how many jars of Classic in
-  // December?" is a useful question, but it was the only one this screen could answer — and
-  // "how many jars altogether?" is the one that decides whether a week has enough days in it.
-  const combined = aggregateForecast(perProduct);
-  const withMonths = combined ? [combined, ...perProduct] : perProduct;
-  const [productId, setProductId] = useState<string>(withMonths[0]?.productId ?? "");
+  // Every product is listed, including ones with no sales yet. Leaving them out made the
+  // filter quietly disagree with the Products page about how many products exist, and "this
+  // one has no forecast" is itself worth seeing.
+  const forecastable = forecasts;
+
+  /**
+   * Which products the table is about.
+   *
+   * It used to be a dropdown of one: all products, or a single one. That answered "how many
+   * jars of Classic in December?" and "how many altogether?" and nothing in between — and the
+   * in-between is the comparison she actually wants, the same two lines read down twelve
+   * months beside each other. Everything below works off this set: the table sums it, and
+   * opening a month breaks it apart again.
+   */
+  const [excluded, setExcluded] = useState<Set<string>>(new Set());
+  const included = forecastable.filter((f) => !excluded.has(f.productId));
+  const shown = included.length > 0 ? included : forecastable;
+  // The table itself can only be drawn from products that HAVE a forecast; the rest still
+  // appear in the filter and in a month's breakdown, where "nothing yet" is a real answer.
+  const usable = shown.filter((f) => f.monthly.length > 0);
+
+  // With one product chosen there is nothing to combine, and a one-item total would strip its
+  // own name off the heading — so that product's forecast IS the table.
+  const combined = aggregateForecast(usable);
+  const chosen = combined ?? usable[0];
+  const withMonths = usable;
+
   const [learning, setLearning] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [openMonth, setOpenMonth] = useState<string | null>(null);
   const running = useRef(false);
 
-  const chosen = withMonths.find((f) => f.productId === productId) ?? withMonths[0];
   const chosenId = chosen?.productId ?? "";
   const stored = chosenId && chosenId !== AGGREGATE_ID ? productPattern(businessSettings, chosenId) : null;
   // A pattern carried over from the old dropdown is not an answer, it is a leftover. Treat it
@@ -211,18 +242,52 @@ export function SeasonalBreakdown({ forecasts }: { forecasts: ProductForecast[] 
           </div>
           <p className="mt-0.5 text-xs text-muted-foreground">{chosen.reliability.reason}</p>
         </div>
-        {withMonths.length > 1 && (
-          <select
-            className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
-            value={chosen.productId}
-            onChange={(e) => setProductId(e.target.value)}
-          >
-            {withMonths.map((f) => (
-              <option key={f.productId} value={f.productId}>
-                {f.productName}
-              </option>
-            ))}
-          </select>
+        {forecastable.length > 1 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setExcluded(new Set())}
+              className={`rounded-full border px-3 py-1 text-[12px] font-semibold transition ${
+                excluded.size === 0
+                  ? "border-cacao bg-cacao/10 text-cacao"
+                  : "border-line/20 text-muted-foreground hover:border-cacao/40"
+              }`}
+            >
+              All products
+            </button>
+            {forecastable.map((f) => {
+              const on = !excluded.has(f.productId);
+              return (
+                <button
+                  key={f.productId}
+                  type="button"
+                  title={excluded.size === 0 ? `Show only ${f.productName}` : `Show or hide ${f.productName}`}
+                  onClick={() =>
+                    setExcluded((prev) => {
+                      const others = forecastable.map((x) => x.productId).filter((id) => id !== f.productId);
+                      // From "everything", one tap isolates — comparing a single product down
+                      // twelve months is the thing this filter exists for, and making it cost
+                      // one click per other product would have buried it.
+                      if (prev.size === 0) return new Set(others);
+                      // Never leave the table with nothing in it.
+                      if (on && included.length === 1) return new Set(others);
+                      const next = new Set(prev);
+                      if (on) next.add(f.productId);
+                      else next.delete(f.productId);
+                      return next;
+                    })
+                  }
+                  className={`rounded-full border px-3 py-1 text-[12px] font-medium transition ${
+                    on
+                      ? "border-cacao/40 bg-cacao/[0.06] text-foreground"
+                      : "border-line/20 text-muted-foreground line-through hover:border-cacao/40"
+                  }`}
+                >
+                  {f.productName}
+                </button>
+              );
+            })}
+          </div>
         )}
       </div>
 
@@ -319,7 +384,7 @@ export function SeasonalBreakdown({ forecasts }: { forecasts: ProductForecast[] 
               </span>
             </button>
 
-            {open && <MonthByProduct forecasts={perProduct} monthIdx={monthIdx} label={m.label} />}
+            {open && <MonthByProduct forecasts={shown} monthIdx={monthIdx} label={m.label} />}
           </div>
         );
       })}
