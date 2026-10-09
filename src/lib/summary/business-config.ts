@@ -106,6 +106,11 @@ export function toggleUnavailableDay(s: Settings, isoDate: string) {
  * goes off. But nothing leaves the shop one jar at a time, so asking her to multiply by 25
  * at the point of sale is asking her to do arithmetic the app is for. The size and the word
  * are both hers: a case is 25 here and may be a dozen, a tray or a bilao elsewhere.
+ *
+ * These two are only the fallback now. Bulk is set per product, on the product, because one
+ * shop sells spreads by the case and mix-ins by the tray — so there is no shop-wide answer
+ * worth asking for, and the setting that used to ask for it is gone. Anything still written
+ * under these keys by an older version is honoured; nothing writes them any more.
  */
 export const DEFAULT_CASE_SIZE = 25;
 export const DEFAULT_CASE_WORD = "case";
@@ -115,16 +120,8 @@ export function caseSize(s: Settings): number {
   return Number.isFinite(n) && n > 1 ? Math.floor(n) : DEFAULT_CASE_SIZE;
 }
 
-export function setCaseSize(jars: number) {
-  setBusinessSetting(KEYS.caseSize, String(Math.max(2, Math.floor(jars))));
-}
-
 export function caseWord(s: Settings): string {
   return (s[KEYS.caseWord] ?? "").trim() || DEFAULT_CASE_WORD;
-}
-
-export function setCaseWord(word: string) {
-  setBusinessSetting(KEYS.caseWord, word.trim());
 }
 
 /**
