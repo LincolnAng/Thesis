@@ -77,6 +77,16 @@ export interface Product {
   marginPercent: number; // markup % (cost_percent) or margin % (margin)
   /** Retired with the market-based pricing mode. Kept so the sheet column still round-trips. */
   marketPrice: number;
+  /**
+   * What distinguishes this from its siblings — "100g", "250g", "gift box".
+   *
+   * A size is a full product underneath: its own recipe, cost, price and stock. Only the
+   * family name is shared, so Inventory can show "Classic Cacao Spread" once with its sizes
+   * beneath it rather than three unrelated rows that happen to start with the same words.
+   */
+  sizeLabel?: string | null;
+  /** The product this is a size OF. Null on a product that is not a size of anything. */
+  sizeOfId?: string | null;
   friendPrice: number;
   wholesalePrice: number;
   stockQty: number;

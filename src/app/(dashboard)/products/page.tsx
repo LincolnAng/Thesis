@@ -3,6 +3,8 @@
 import { useRef, useState } from "react";
 import { MaterialsPanel } from "@/components/products/materials-panel";
 import { ProductExpiryStrip } from "@/components/products/product-expiry-strip";
+import { SizeStrip } from "@/components/products/size-strip";
+import { familiesOf } from "@/lib/summary/product-sizes";
 import { SimpleInventory } from "@/components/simple/simple-inventory";
 import { CarouselNav } from "@/components/ui/carousel-nav";
 import { Package } from "lucide-react";
@@ -95,6 +97,7 @@ export default function ProductsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const editing = products.find((p) => p.id === editingId) ?? null;
   const [section, setSection] = useState(0);
+  const families = familiesOf(products);
   // Everything production runs on, on one page and in the order it is used: what she sells,
   // what goes in it, what it is packed in. Stock answers "how much is left"; this answers
   // "what is it made of". Three tabs made that one question into three errands.
@@ -152,7 +155,7 @@ export default function ProductsPage() {
       )}
       {(section === 0 || section === 1) && (
       <div className="grid grid-cols-1 gap-[18px] min-[600px]:grid-cols-2 min-[1000px]:grid-cols-3 min-[1300px]:grid-cols-4">
-        {products.map((p, i) => {
+        {families.map(({ head: p, sizes }, i) => {
           const cost = productCostPerJar(p, costCtx);
           const price = effectiveProductPrice(p, cost);
           const marginPct = price > 0 ? ((price - cost.costPerJar) / price) * 100 : 0;
@@ -207,6 +210,7 @@ export default function ProductsPage() {
                 )}
               </button>
               <ProductExpiryStrip product={p} />
+              <SizeStrip head={p} sizes={sizes} onOpen={setEditingId} />
             </div>
           );
         })}

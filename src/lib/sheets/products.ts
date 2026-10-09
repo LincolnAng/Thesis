@@ -26,6 +26,9 @@ const PRODUCT_HEADER = [
   "minutesPerBatch",
   "laborCostOverride",
   "unit",
+  // Appended after unit, for the same reason as every other addition here.
+  "sizeLabel",
+  "sizeOfId",
 ];
 
 function productToRow(p: ProductRow): string[] {
@@ -45,6 +48,8 @@ function productToRow(p: ProductRow): string[] {
     p.minutesPerBatch == null ? "" : String(p.minutesPerBatch),
     p.laborCostOverride == null ? "" : String(p.laborCostOverride),
     p.unit ?? "",
+    p.sizeLabel ?? "",
+    p.sizeOfId ?? "",
   ];
 }
 
@@ -65,6 +70,8 @@ function productFromRow(row: string[]): ProductRow | null {
     minutesPerBatch,
     laborCostOverride,
     unit,
+    sizeLabel,
+    sizeOfId,
   ] = row;
   if (!id) return null;
   return {
@@ -88,6 +95,8 @@ function productFromRow(row: string[]): ProductRow | null {
     // answer (a product that costs no labor) and must survive a round trip.
     laborCostOverride: laborCostOverride === "" || laborCostOverride === undefined ? null : Number(laborCostOverride),
     unit: unit || undefined,
+    sizeLabel: sizeLabel || null,
+    sizeOfId: sizeOfId || null,
   };
 }
 
