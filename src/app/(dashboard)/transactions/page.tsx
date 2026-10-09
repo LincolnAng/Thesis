@@ -39,7 +39,13 @@ function monthLabel(key: string, style: "long" | "short" = "long") {
 function totals(list: Entry[]) {
   const totalIn = list.filter((e) => e.type === "SALE").reduce((s, e) => s + (e.amount ?? 0), 0);
   const totalOut = list.filter((e) => e.type === "EXPENSE").reduce((s, e) => s + (e.amount ?? 0), 0);
-  return { totalIn, totalOut, earned: totalIn - totalOut };
+  // Jars thrown away are kept apart from money OUT, which is what she actually paid out. No
+  // peso left the account when a jar spoiled — the loss is real, but it is a different kind
+  // of number, and adding it to purchases would overstate what she spent.
+  const spoiled = list
+    .filter((e) => e.type === "WASTE")
+    .reduce((s, e) => s + (e.amount ?? 0), 0);
+  return { totalIn, totalOut, spoiled, earned: totalIn - totalOut - spoiled };
 }
 
 function StatCard({
@@ -210,7 +216,13 @@ function TransactionsPageInner() {
             value={periodTotals.earned}
             tone={periodTotals.earned >= 0 ? "good" : "bad"}
             filled
-            sub={periodTotals.earned >= 0 ? "money in − money out" : "you spent more than you made"}
+            sub={
+              periodTotals.spoiled > 0
+                ? `money in − money out − ${formatPeso(periodTotals.spoiled)} spoiled`
+                : periodTotals.earned >= 0
+                  ? "money in − money out"
+                  : "you spent more than you made"
+            }
             icon={<ArrowRight className="h-5 w-5 text-white" strokeWidth={2} />}
           />
         </div>

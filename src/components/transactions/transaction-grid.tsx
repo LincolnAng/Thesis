@@ -13,6 +13,7 @@ import { effectiveProductPrice, productCostPerJar } from "@/lib/summary/recipe-c
 import { useCostContext } from "@/lib/summary/use-cost-context";
 import { productUnit } from "@/lib/units";
 import { EXPENSE_CATEGORY_LABELS, PRICE_TYPE_LABELS, formatPeso } from "@/lib/format";
+import { spoiledValue } from "@/lib/summary/spoilage";
 import type { Entry, ExpenseCategory, PriceType } from "@/lib/store/types";
 
 /**
@@ -144,10 +145,13 @@ export function TransactionGrid({
     // Nothing was bought or sold, so the money fields are cleared rather than hidden — see
     // changeNew for why leaving them set would be worse than showing them.
     if (next.type === "WASTE") {
-      next.amount = null;
       next.category = null;
       next.priceType = null;
       next.counterparty = null;
+      // A spoiled JAR is written off in pesos at what it cost to make; a spoiled INGREDIENT is
+      // not, because its cost is written off by re-averaging what is left on the shelf. See
+      // summary/spoilage.ts.
+      next.amount = spoiledValue(next.sku, next.quantity, products, costCtx);
     }
     replaceEntry(entry.id, next);
   }
@@ -158,10 +162,13 @@ export function TransactionGrid({
     // Switching to spoilage clears the money fields rather than just hiding them, so a figure
     // typed as a sale cannot ride along invisibly on a row that is no longer about money.
     if (next.type === "WASTE") {
-      next.amount = null;
       next.category = null;
       next.priceType = null;
       next.counterparty = null;
+      // A spoiled JAR is written off in pesos at what it cost to make; a spoiled INGREDIENT is
+      // not, because its cost is written off by re-averaging what is left on the shelf. See
+      // summary/spoilage.ts.
+      next.amount = spoiledValue(next.sku, next.quantity, products, costCtx);
     }
     // A new sale prices itself from the product, the way the Home buttons do.
     if (next.type === "SALE" && next.amount == null && next.quantity) {
@@ -300,7 +307,9 @@ export function TransactionGrid({
               (priceType) => changeNew({ priceType }),
             )}
             {newRow.type === "WASTE" ? (
-              <span className="px-2 text-right text-[11px] text-muted-foreground">—</span>
+              <span className="px-2 text-right text-[12px] font-semibold tabular-nums text-danger">
+                {newRow.amount ? `−${formatPeso(newRow.amount)}` : "—"}
+              </span>
             ) : (
               <CommitCell
                 type="number"
@@ -380,7 +389,9 @@ export function TransactionGrid({
               (priceType) => patch(e, { priceType }),
             )}
             {e.type === "WASTE" ? (
-              <span className="px-2 text-right text-[11px] text-muted-foreground">—</span>
+              <span className="px-2 text-right text-[12px] font-semibold tabular-nums text-danger">
+                {e.amount ? `−${formatPeso(e.amount)}` : "—"}
+              </span>
             ) : (
               <CommitCell
                 type="number"
