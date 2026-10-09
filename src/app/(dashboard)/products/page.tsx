@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { MaterialsPanel } from "@/components/products/materials-panel";
 import { ProductExpiryStrip } from "@/components/products/product-expiry-strip";
+import { SimpleInventory } from "@/components/simple/simple-inventory";
 import { CarouselNav } from "@/components/ui/carousel-nav";
 import { Package } from "lucide-react";
 import { Page } from "@/components/layout/page";
@@ -104,6 +105,18 @@ export default function ProductsPage() {
   // the whole picture — rotating is for narrowing down, not the only way to see things.
   const SECTIONS = ["Everything", "Products", "Raw materials", "Supplies"] as const;
   const rotate = (step: number) => setSection((n) => (n + step + SECTIONS.length) % SECTIONS.length);
+
+  if (simple) {
+    return (
+      <Page title="Inventory">
+        <SimpleInventory onAddProduct={() => setAdding(true)} onEditProduct={setEditingId} />
+        {adding && <AddProductDialog products={products} onClose={() => setAdding(false)} />}
+        {editing && (
+          <EditProductDialog key={editing.id} product={editing} products={products} onClose={() => setEditingId(null)} />
+        )}
+      </Page>
+    );
+  }
 
   return (
     <Page title="Inventory">
