@@ -87,6 +87,15 @@ export interface Product {
   sizeLabel?: string | null;
   /** The product this is a size OF. Null on a product that is not a size of anything. */
   sizeOfId?: string | null;
+  /**
+   * How this one is sold in bulk, when it differs from the shop's default.
+   *
+   * Null means "use the default in Settings". Products do not share a bulk method: a spread
+   * may go out in cases of 25 while a crunch goes in trays of 12, and one global number
+   * would quietly convert one of them wrongly.
+   */
+  bulkSize?: number | null;
+  bulkWord?: string | null;
   friendPrice: number;
   wholesalePrice: number;
   stockQty: number;
@@ -238,8 +247,6 @@ export interface AppUser {
   pinHash: string;
   /** The four digits, as typed in the Users sheet. See sheets/users.ts on why it is plain. */
   pin?: string;
-  /** Kept so old rows round-trip. Nothing reads it — everyone who signs in can do everything. */
-  role: "owner" | "helper";
   createdAt: string;
 }
 

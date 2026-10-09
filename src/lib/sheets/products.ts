@@ -29,6 +29,8 @@ const PRODUCT_HEADER = [
   // Appended after unit, for the same reason as every other addition here.
   "sizeLabel",
   "sizeOfId",
+  "bulkSize",
+  "bulkWord",
 ];
 
 function productToRow(p: ProductRow): string[] {
@@ -50,6 +52,8 @@ function productToRow(p: ProductRow): string[] {
     p.unit ?? "",
     p.sizeLabel ?? "",
     p.sizeOfId ?? "",
+    p.bulkSize == null ? "" : String(p.bulkSize),
+    p.bulkWord ?? "",
   ];
 }
 
@@ -72,6 +76,8 @@ function productFromRow(row: string[]): ProductRow | null {
     unit,
     sizeLabel,
     sizeOfId,
+    bulkSize,
+    bulkWord,
   ] = row;
   if (!id) return null;
   return {
@@ -97,6 +103,8 @@ function productFromRow(row: string[]): ProductRow | null {
     unit: unit || undefined,
     sizeLabel: sizeLabel || null,
     sizeOfId: sizeOfId || null,
+    bulkSize: bulkSize ? Number(bulkSize) || null : null,
+    bulkWord: bulkWord || null,
   };
 }
 

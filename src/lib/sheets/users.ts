@@ -23,11 +23,13 @@ function idFromName(name: string): string {
 }
 
 function userToRow(u: AppUser): string[] {
-  return [u.id, u.name, u.pinHash, u.role, u.createdAt, "", u.pin ?? ""];
+  // The role column is kept and written blank: dropping it would shift every cell after
+  // it on rows that already exist.
+  return [u.id, u.name, u.pinHash, "", u.createdAt, "", u.pin ?? ""];
 }
 
 function userFromRow(row: string[]): AppUser | null {
-  const [id, name, pinHash, role, createdAt, , pin] = row;
+  const [id, name, pinHash, , createdAt, , pin] = row;
   const trimmedName = (name ?? "").trim();
   // A row needs a name, not an id — the id is what the app wants and the name is what a
   // person types. Rows with neither are blank spreadsheet lines and are skipped.
@@ -37,9 +39,6 @@ function userFromRow(row: string[]): AppUser | null {
     name: trimmedName,
     pinHash: pinHash ?? "",
     pin: (pin ?? "").trim(),
-    // Roles are gone: everyone who signs in can do everything. The column stays so old rows
-    // round-trip, and so does the field, but nothing reads it to decide anything.
-    role: role === "owner" ? "owner" : "helper",
     createdAt: createdAt || new Date().toISOString(),
   };
 }

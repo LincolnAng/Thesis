@@ -106,9 +106,9 @@ function NewProfile({ onDone, autoSignIn = false }: { onDone: () => void; autoSi
 
   function create() {
     if (!ready) return;
-    const made = addUser(name.trim(), "", "owner");
+    const made = addUser(name.trim(), "");
     updateUser(made.id, { pin });
-    if (autoSignIn) signIn({ id: made.id, name: made.name, role: made.role });
+    if (autoSignIn) signIn({ id: made.id, name: made.name });
     setName("");
     setPin("");
     onDone();
@@ -199,7 +199,7 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
       setPin("");
       return;
     }
-    signIn({ id: person.id, name: person.name, role: person.role });
+    signIn({ id: person.id, name: person.name });
   }
 
   async function handlePhoto(person: AppUser, file: File | undefined) {
@@ -270,7 +270,7 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
                     setWrong(false);
                     setPin("");
                     if (!person.pin && !person.pinHash) {
-                      signIn({ id: person.id, name: person.name, role: person.role });
+                      signIn({ id: person.id, name: person.name });
                       return;
                     }
                     setPicked(person);

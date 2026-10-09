@@ -66,7 +66,7 @@ export function SidebarNav() {
       <div className="mt-auto w-full space-y-1">
         <NavLink item={SETTINGS_ITEM} active={isActive(pathname, SETTINGS_ITEM.href)} />
         {/* Whoever is holding the tablet, and one tap to hand it over. Switching used to be
-            buried in Settings, which a helper cannot even open. */}
+            buried in Settings. */}
         {me && (
           <button
             type="button"
@@ -79,9 +79,7 @@ export function SidebarNav() {
             </span>
             <span className="hidden min-w-0 min-[1024px]:block">
               <span className="block truncate text-[13px] font-semibold leading-tight">{me.name}</span>
-              <span className="block text-[11px] leading-tight text-muted-foreground">
-                {me.role === "owner" ? "Owner · switch" : "Helper · switch"}
-              </span>
+              <span className="block text-[11px] leading-tight text-muted-foreground">Tap to switch</span>
             </span>
           </button>
         )}

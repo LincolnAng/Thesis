@@ -397,8 +397,8 @@ function safeParse<T>(raw: string | undefined): T | null {
   }
 }
 
-export function addUser(name: string, pinHash: string, role: AppUser["role"] = "helper"): AppUser {
-  const user: AppUser = { id: genId("user"), name: name.trim(), pinHash, role, createdAt: new Date().toISOString() };
+export function addUser(name: string, pinHash: string): AppUser {
+  const user: AppUser = { id: genId("user"), name: name.trim(), pinHash, createdAt: new Date().toISOString() };
   setState((prev) => ({ ...prev, users: [...prev.users, user] }));
   void mirrorOp("users", "append", { item: user });
   return user;

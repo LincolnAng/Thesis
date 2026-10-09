@@ -35,7 +35,6 @@ export function PeopleCard() {
   const me = useCurrentUser();
   const [name, setName] = useState("");
   const [pin, setPin] = useState("");
-  const [role, setRole] = useState<AppUser["role"]>("helper");
   const [resetting, setResetting] = useState<string | null>(null);
   const [newPin, setNewPin] = useState("");
 
@@ -44,11 +43,10 @@ export function PeopleCard() {
     if (!trimmed) return;
     // Plain digits, matching what somebody would type straight into the sheet — see
     // sheets/users.ts for why the hash was the wrong fit once the sheet became the way in.
-    const user = addUser(trimmed, "", role);
+    const user = addUser(trimmed, "");
     updateUser(user.id, { pin: pin.replace(/\D/g, "").slice(0, 4) });
     setName("");
     setPin("");
-    setRole("helper");
   }
 
   function savePin(user: AppUser) {
@@ -142,17 +140,6 @@ export function PeopleCard() {
                 value={pin}
                 onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
               />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Can they</Label>
-              <select
-                className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
-                value={role}
-                onChange={(e) => setRole(e.target.value as AppUser["role"])}
-              >
-                <option value="helper">Help out</option>
-                <option value="owner">Run the business</option>
-              </select>
             </div>
             <Button size="sm" disabled={!name.trim()} onClick={() => void add()}>
               Add person

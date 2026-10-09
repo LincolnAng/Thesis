@@ -14,7 +14,6 @@ import { useSyncExternalStore } from "react";
 export interface SignedInUser {
   id: string;
   name: string;
-  role: "owner" | "helper";
 }
 
 const STORAGE_KEY = "mang-kikos-cocoa-current-user-v1";

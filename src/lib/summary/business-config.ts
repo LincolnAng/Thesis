@@ -127,6 +127,22 @@ export function setCaseWord(word: string) {
   setBusinessSetting(KEYS.caseWord, word.trim());
 }
 
+/**
+ * How ONE product is sold in bulk: its own answer if it has one, the shop's default if not.
+ *
+ * Every screen that converts between jars and boxes asks this, rather than reaching for the
+ * global setting directly — otherwise a product with its own tray size would be converted
+ * correctly in one place and wrongly in the next.
+ */
+export function bulkUnitFor(
+  s: Settings,
+  product: { bulkSize?: number | null; bulkWord?: string | null } | undefined,
+): { size: number; word: string } {
+  const size = product?.bulkSize && product.bulkSize > 1 ? Math.floor(product.bulkSize) : caseSize(s);
+  const word = product?.bulkWord?.trim() || caseWord(s);
+  return { size, word };
+}
+
 export const DEFAULT_EXPIRING_WITHIN_DAYS = 7;
 
 export function expiringWithinDays(s: Settings): number {

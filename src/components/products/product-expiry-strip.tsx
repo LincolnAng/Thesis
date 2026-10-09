@@ -1,7 +1,8 @@
 "use client";
 
 import { useStore } from "@/lib/store/use-store";
-import { expiringWithinDays, setShelfLifeDays, shelfLifeDays } from "@/lib/summary/business-config";
+import { bulkUnitFor, caseSize, caseWord, expiringWithinDays, setShelfLifeDays, shelfLifeDays } from "@/lib/summary/business-config";
+import { updateProduct } from "@/lib/store/store";
 import { productExpiry } from "@/lib/summary/product-lots";
 import { pluralize } from "@/lib/format";
 import type { Product } from "@/lib/store/types";
@@ -22,6 +23,9 @@ export function ProductExpiryStrip({ product }: { product: Product }) {
   const life = shelfLifeDays(businessSettings, product.id);
   const window = expiringWithinDays(businessSettings);
   const expiry = productExpiry(entries, product, life, window);
+  const bulk = bulkUnitFor(businessSettings, product);
+  const shopSize = caseSize(businessSettings);
+  const shopWord = caseWord(businessSettings);
 
   const soonest = expiry.lots[0];
 
@@ -43,6 +47,37 @@ export function ProductExpiryStrip({ product }: { product: Product }) {
           aria-label={`How many days ${product.name} keeps`}
         />
         <span className="text-muted-foreground">days</span>
+      </div>
+
+      {/* How this one leaves the shop. Blank means the shop default, because most products
+          share it and only some do not. */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="font-semibold text-muted-foreground">Sold in</span>
+        <input
+          type="text"
+          inputMode="numeric"
+          defaultValue={product.bulkSize ?? ""}
+          placeholder={String(shopSize)}
+          onClick={(e) => e.stopPropagation()}
+          onBlur={(e) => {
+            const raw = e.target.value.trim();
+            const n = Number(raw);
+            updateProduct(product.id, { bulkSize: raw === "" ? null : Number.isFinite(n) && n > 1 ? Math.floor(n) : null });
+          }}
+          className="h-6 w-12 rounded-md border border-input bg-transparent px-1 text-center text-[11px] tabular-nums"
+          aria-label={`How many per bulk unit of ${product.name}`}
+        />
+        <span className="text-muted-foreground">per</span>
+        <input
+          type="text"
+          defaultValue={product.bulkWord ?? ""}
+          placeholder={shopWord}
+          onClick={(e) => e.stopPropagation()}
+          onBlur={(e) => updateProduct(product.id, { bulkWord: e.target.value.trim() || null })}
+          className="h-6 w-20 rounded-md border border-input bg-transparent px-1.5 text-center text-[11px]"
+          aria-label={`What a bulk unit of ${product.name} is called`}
+        />
+        <span className="text-muted-foreground">{`(now ${bulk.size} per ${bulk.word})`}</span>
       </div>
 
       {expiry.tracksAnything && (
