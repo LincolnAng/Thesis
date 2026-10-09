@@ -20,6 +20,8 @@ const KEYS = {
   ownerName: "ownerName",
   cacaoUtilization: "cacaoUtilizationPct",
   expiringWithin: "expiringWithinDays",
+  caseSize: "wholesaleCaseSize",
+  caseWord: "wholesaleCaseWord",
   unavailableDays: "unavailableDays",
   shelfLife: (productId: string) => `shelfLifeDays:${productId}`,
   eventPlan: (eventId: string) => `eventPlan:${eventId}`,
@@ -97,6 +99,34 @@ export function toggleUnavailableDay(s: Settings, isoDate: string) {
  * Zero is a real answer, not an empty one: it means "warn me on the day itself and not
  * before", which is the right setting for something she sells the same week she makes it.
  */
+/**
+ * How she sells in bulk.
+ *
+ * Production is counted in jars and always will be — that is what a batch makes and what
+ * goes off. But nothing leaves the shop one jar at a time, so asking her to multiply by 25
+ * at the point of sale is asking her to do arithmetic the app is for. The size and the word
+ * are both hers: a case is 25 here and may be a dozen, a tray or a bilao elsewhere.
+ */
+export const DEFAULT_CASE_SIZE = 25;
+export const DEFAULT_CASE_WORD = "case";
+
+export function caseSize(s: Settings): number {
+  const n = Number(s[KEYS.caseSize]);
+  return Number.isFinite(n) && n > 1 ? Math.floor(n) : DEFAULT_CASE_SIZE;
+}
+
+export function setCaseSize(jars: number) {
+  setBusinessSetting(KEYS.caseSize, String(Math.max(2, Math.floor(jars))));
+}
+
+export function caseWord(s: Settings): string {
+  return (s[KEYS.caseWord] ?? "").trim() || DEFAULT_CASE_WORD;
+}
+
+export function setCaseWord(word: string) {
+  setBusinessSetting(KEYS.caseWord, word.trim());
+}
+
 export const DEFAULT_EXPIRING_WITHIN_DAYS = 7;
 
 export function expiringWithinDays(s: Settings): number {

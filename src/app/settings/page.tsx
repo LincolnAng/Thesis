@@ -2,9 +2,9 @@
 
 import { useEffect, useState, type ChangeEvent } from "react";
 import { useTheme } from "next-themes";
-import { CalendarClock, ChevronDown, ChevronUp, Database, Download, KeyRound, Languages, Minus, Moon, Plus, Sheet, Trash2, Type, Upload } from "lucide-react";
+import { Boxes, CalendarClock, ChevronDown, ChevronUp, Database, Download, KeyRound, Languages, Minus, Moon, Plus, Sheet, Trash2, Type, Upload } from "lucide-react";
 import { TEXT_SIZE_LABELS, useTextSize } from "@/lib/summary/text-size";
-import { expiringWithinDays, setExpiringWithinDays } from "@/lib/summary/business-config";
+import { caseSize, caseWord, expiringWithinDays, setCaseSize, setCaseWord, setExpiringWithinDays } from "@/lib/summary/business-config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -65,6 +65,53 @@ interface SettingsState {
  * sells: a week of notice is useless to someone who clears a batch in three days, and far too
  * little for someone who consigns to a shop. Zero means the day itself and nothing earlier.
  */
+/**
+ * What a bulk sale is measured in.
+ *
+ * Both the number and the word, because "case of 25" is this shop and the next one counts
+ * trays of 12. Production stays in jars either way — this only changes what she types when
+ * a whole box goes out the door.
+ */
+function WholesaleUnitCard() {
+  const { businessSettings } = useStore();
+  const size = caseSize(businessSettings);
+  const word = caseWord(businessSettings);
+  return (
+    <Card>
+      <CardContent className="flex flex-wrap items-center justify-between gap-3">
+        <span className="min-w-0">
+          <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <Boxes className="h-4 w-4" /> How you sell in bulk
+          </span>
+          <span className="mt-0.5 block text-xs text-muted-foreground">
+            {`One ${word} is ${size} jars. Logging 3 ${word}s takes ${size * 3} jars off your shelf.`}
+          </span>
+        </span>
+        <div className="flex items-center gap-2">
+          <Input
+            type="number"
+            defaultValue={size}
+            onBlur={(e) => {
+              const n = Number(e.target.value);
+              if (Number.isFinite(n) && n > 1) setCaseSize(n);
+              else e.target.value = String(size);
+            }}
+            className="h-9 w-20 text-center"
+            aria-label="Jars in one case"
+          />
+          <span className="text-sm text-muted-foreground">jars per</span>
+          <Input
+            defaultValue={word}
+            onBlur={(e) => setCaseWord(e.target.value || word)}
+            className="h-9 w-28"
+            aria-label="What you call a case"
+          />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function ExpiryWarningCard() {
   const { businessSettings } = useStore();
   const days = expiringWithinDays(businessSettings);
@@ -372,6 +419,8 @@ export default function SettingsPageInner() {
           </div>
         </CardContent>
       </Card>
+
+      <WholesaleUnitCard />
 
       <ExpiryWarningCard />
 

@@ -14,6 +14,7 @@ import { useCostContext } from "@/lib/summary/use-cost-context";
 import { productUnit } from "@/lib/units";
 import { EXPENSE_CATEGORY_LABELS, PRICE_TYPE_LABELS, formatPeso } from "@/lib/format";
 import { spoiledValue } from "@/lib/summary/spoilage";
+import { caseSize, caseWord } from "@/lib/summary/business-config";
 import type { Entry, ExpenseCategory, PriceType } from "@/lib/store/types";
 
 /**
@@ -113,8 +114,13 @@ export function TransactionGrid({
   onDoneAdding: () => void;
   defaultType: "SALE" | "EXPENSE" | "RND" | "WASTE";
 }) {
-  const { entries, products, rawMaterials, suppliers, categoryBudgets } = useStore();
+  const { entries, products, rawMaterials, suppliers, categoryBudgets, businessSettings } = useStore();
   const costCtx = useCostContext();
+  // Jars are what the shelf holds; cases are what leaves the door. The toggle converts at the
+  // point of entry so everything downstream keeps counting jars and nothing else changes.
+  const jarsPerCase = caseSize(businessSettings);
+  const caseName = caseWord(businessSettings);
+  const [inCases, setInCases] = useState(false);
   const [newRow, setNewRow] = useState<EntryDraft>(() => blankEntryDraft(defaultType, "Added in the table"));
 
   const itemNames = [...products.map((p) => p.name), ...rawMaterials.map((m) => m.name)];
@@ -289,10 +295,24 @@ export function TransactionGrid({
               <CommitCell
                 type="number"
                 align="right"
-                value={newRow.quantity == null ? "" : String(newRow.quantity)}
-                onCommit={(v) => changeNew({ quantity: num(v) })}
+                value={newRow.quantity == null ? "" : String(inCases ? newRow.quantity / jarsPerCase : newRow.quantity)}
+                onCommit={(v) => {
+                  const typed = num(v);
+                  changeNew({ quantity: typed == null ? null : inCases ? typed * jarsPerCase : typed });
+                }}
               />
-              <span className="shrink-0 text-[11px] text-muted-foreground">{unitOf(newRow.sku) ?? ""}</span>
+              <button
+                type="button"
+                onClick={() => setInCases((v) => !v)}
+                title={
+                  inCases
+                    ? `Counting in ${caseName}s of ${jarsPerCase} — tap for jars`
+                    : `Counting in jars — tap for ${caseName}s of ${jarsPerCase}`
+                }
+                className="shrink-0 rounded px-1 text-[11px] text-muted-foreground underline decoration-dotted hover:text-cacao"
+              >
+                {inCases ? `${caseName}s` : (unitOf(newRow.sku) ?? "jars")}
+              </button>
             </div>
             <CommitCell
               value={newRow.counterparty ?? ""}
@@ -374,10 +394,15 @@ export function TransactionGrid({
               <CommitCell
                 type="number"
                 align="right"
-                value={e.quantity == null ? "" : String(e.quantity)}
-                onCommit={(v) => patch(e, { quantity: num(v) })}
+                value={e.quantity == null ? "" : String(inCases ? e.quantity / jarsPerCase : e.quantity)}
+                onCommit={(v) => {
+                  const typed = num(v);
+                  patch(e, { quantity: typed == null ? null : inCases ? typed * jarsPerCase : typed });
+                }}
               />
-              <span className="shrink-0 text-[11px] text-muted-foreground">{e.unit ?? unitOf(e.sku) ?? ""}</span>
+              <span className="shrink-0 text-[11px] text-muted-foreground">
+                {inCases ? `${caseName}s` : (e.unit ?? unitOf(e.sku) ?? "")}
+              </span>
             </div>
             <CommitCell
               value={e.counterparty ?? ""}

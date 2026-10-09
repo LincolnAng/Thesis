@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import Image from "next/image";
 import { Camera } from "lucide-react";
 import { useStore } from "@/lib/store/use-store";
+import { addUser, updateUser } from "@/lib/store/store";
 import { hashPin, signIn, useCurrentUser } from "@/lib/auth/current-user";
 import { setProfilePhoto, useProfilePhotos } from "@/lib/auth/profile-photos";
 import { shrinkImage } from "@/lib/products/photos";
@@ -14,10 +15,9 @@ import type { AppUser } from "@/lib/store/types";
  * "Who's using this?" — shown over the app until somebody says who they are, so every save
  * can be stamped with a name.
  *
- * Profiles are created in the Users sheet, not here: a name and four digits in two cells, and
- * the person appears on this screen at the next sync. That keeps the one list of people in
- * the one place the owner already edits everything else, and means this screen never has to
- * be an admin panel.
+ * Profiles are made here. Creating one used to mean typing a row into the Users sheet, which
+ * is a detour through a spreadsheet to answer a question the screen is already asking — so
+ * the screen asks it: a name and four digits, and you are in.
  *
  * The PIN is required and is not security. It stops two people sharing a tablet from saving
  * as each other; anyone who can open the spreadsheet can read every PIN in it. Saying so
@@ -95,6 +95,67 @@ function Tile({
   );
 }
 
+/**
+ * Name and four digits. No roles to choose and nothing optional, because every extra field
+ * here is a question asked before anybody has seen the app.
+ */
+function NewProfile({ onDone, autoSignIn = false }: { onDone: () => void; autoSignIn?: boolean }) {
+  const [name, setName] = useState("");
+  const [pin, setPin] = useState("");
+  const ready = name.trim().length > 0 && pin.length === 4;
+
+  function create() {
+    if (!ready) return;
+    const made = addUser(name.trim(), "", "owner");
+    updateUser(made.id, { pin });
+    if (autoSignIn) signIn({ id: made.id, name: made.name, role: made.role });
+    setName("");
+    setPin("");
+    onDone();
+  }
+
+  return (
+    <div className="mx-auto flex w-full max-w-[360px] flex-col gap-2 rounded-2xl border border-line/15 bg-card p-4">
+      <label className="text-xs text-muted-foreground">Name</label>
+      <input
+        autoFocus
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="e.g. Auntie Sandy"
+        className="h-10 rounded-lg border border-input bg-transparent px-3 text-[15px] outline-none focus:border-cacao"
+      />
+      <label className="mt-1 text-xs text-muted-foreground">Pick a 4-digit PIN</label>
+      <input
+        type="password"
+        inputMode="numeric"
+        maxLength={4}
+        value={pin}
+        onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+        onKeyDown={(e) => e.key === "Enter" && create()}
+        placeholder="••••"
+        className="h-10 rounded-lg border border-input bg-transparent px-3 text-center font-display text-[20px] tracking-[0.4em] outline-none focus:border-cacao"
+      />
+      <p className="text-[11px] leading-relaxed text-muted-foreground">
+        The PIN keeps two people on one tablet from saving as each other. It is not a password — anyone who can open
+        your Google Sheet can read it.
+      </p>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={create}
+          disabled={!ready}
+          className="flex-1 rounded-[10px] bg-cacao px-4 py-2 text-[14px] font-semibold text-ivory disabled:opacity-40"
+        >
+          Create
+        </button>
+        <button type="button" onClick={onDone} className="rounded-[10px] border border-line/20 px-4 py-2 text-[14px] font-semibold">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function SignInGate({ children }: { children: React.ReactNode }) {
   const { users } = useStore();
   const user = useCurrentUser();
@@ -102,10 +163,31 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
   const [picked, setPicked] = useState<AppUser | null>(null);
   const [pin, setPin] = useState("");
   const [wrong, setWrong] = useState(false);
+  const [creating, setCreating] = useState(false);
 
-  // Nobody in the sheet yet. A shop that has not set anyone up is not locked out of its own
+  // Nobody set up yet. A shop that has not set anyone up is not locked out of its own
   // app — it just has no name to stamp on things.
-  if (users.length === 0 || user) return <>{children}</>;
+  if (user) return <>{children}</>;
+  // A shop that has never added anyone is not locked out of its own app; it just has no name
+  // to stamp on things until somebody makes a profile.
+  if (users.length === 0 && !creating) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-ivory px-4">
+        <div className="w-full max-w-[420px] rounded-2xl border border-line/15 bg-card p-7 text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-cacao font-display text-xl font-bold text-ivory">
+            M
+          </div>
+          <h1 className="font-display text-[26px] font-semibold">Make your profile</h1>
+          <p className="mt-1 text-[14px] leading-relaxed text-muted-foreground">
+            Everything you save gets your name on it. You can add the people who help you afterwards.
+          </p>
+          <div className="mt-5 text-left">
+            <NewProfile onDone={() => setCreating(false)} autoSignIn />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   async function submit(person: AppUser, digits: string) {
     const entered = digits.trim();
@@ -197,10 +279,19 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
                 />
               ))}
             </div>
-            <p className="mt-7 text-center text-[12px] leading-relaxed text-muted-foreground">
-              To add someone, put their name and a 4-digit PIN in the <span className="font-semibold">Users</span> tab
-              of your Google Sheet. They show up here on the next sync.
-            </p>
+            <div className="mt-7 flex flex-col items-center gap-3">
+              {creating ? (
+                <NewProfile onDone={() => setCreating(false)} />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setCreating(true)}
+                  className="text-[13px] font-semibold text-cacao hover:underline"
+                >
+                  + Create a profile
+                </button>
+              )}
+            </div>
           </>
         )}
       </div>
