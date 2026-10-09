@@ -111,7 +111,7 @@ export function TransactionGrid({
   adding: boolean;
   onStartAdding: () => void;
   onDoneAdding: () => void;
-  defaultType: "SALE" | "EXPENSE" | "WASTE";
+  defaultType: "SALE" | "EXPENSE" | "RND" | "WASTE";
 }) {
   const { entries, products, rawMaterials, suppliers, categoryBudgets } = useStore();
   const costCtx = useCostContext();
@@ -222,7 +222,7 @@ export function TransactionGrid({
   ) {
     // Spoilage is neither a purchase nor a sale, so neither of these questions applies to it.
     if (type === "WASTE") return <span className="px-2 text-[11px] text-muted-foreground">—</span>;
-    return type === "EXPENSE" ? (
+    return type === "EXPENSE" || type === "RND" ? (
       <select className={CELL} value={category ?? "misc"} onChange={(e) => onCategory(e.target.value)}>
         {expenseCategories.map((c) => (
           <option key={c} value={c}>
@@ -256,7 +256,7 @@ export function TransactionGrid({
 
       <div className="min-w-[860px]">
         <div className={`grid ${COLUMNS} gap-1 border-b border-line/15 bg-secondary px-2`}>
-          {["Date", "Type", "Item", "Qty", "Customer / Supplier", "Category", "Amount", ""].map((h) => (
+          {["Date", "Type", "Item", "Qty", "Customer / Supplier", "Category", "Amount", "Logged by"].map((h) => (
             <div
               key={h}
               className={`px-1 py-2.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground ${h === "Qty" || h === "Amount" ? "text-right" : ""}`}
@@ -277,10 +277,11 @@ export function TransactionGrid({
             <select
               className={CELL}
               value={newRow.type}
-              onChange={(e) => changeNew({ type: e.target.value as "SALE" | "EXPENSE" | "WASTE" })}
+              onChange={(e) => changeNew({ type: e.target.value as "SALE" | "EXPENSE" | "RND" | "WASTE" })}
             >
               <option value="SALE">Sale</option>
               <option value="EXPENSE">Expense</option>
+              <option value="RND">R&amp;D</option>
               <option value="WASTE">Spoilage</option>
             </select>
             {itemCell(newRow.sku, (sku) => changeNew({ sku }))}
@@ -295,8 +296,8 @@ export function TransactionGrid({
             </div>
             <CommitCell
               value={newRow.counterparty ?? ""}
-              list={newRow.type === "EXPENSE" ? "grid-suppliers" : "grid-customers"}
-              placeholder={newRow.type === "EXPENSE" ? "Paid to" : "Buyer"}
+              list={newRow.type === "EXPENSE" || newRow.type === "RND" ? "grid-suppliers" : "grid-customers"}
+              placeholder={newRow.type === "EXPENSE" || newRow.type === "RND" ? "Paid to" : "Buyer"}
               onCommit={(v) => changeNew({ counterparty: v.trim() || null })}
             />
             {categoryCell(
@@ -360,10 +361,11 @@ export function TransactionGrid({
             <select
               className={`${CELL} font-semibold ${e.type === "SALE" ? "text-success" : "text-danger"}`}
               value={e.type}
-              onChange={(ev) => patch(e, { type: ev.target.value as "SALE" | "EXPENSE" | "WASTE" })}
+              onChange={(ev) => patch(e, { type: ev.target.value as "SALE" | "EXPENSE" | "RND" | "WASTE" })}
             >
               <option value="SALE">Sale</option>
               <option value="EXPENSE">Expense</option>
+              <option value="RND">R&amp;D</option>
               <option value="WASTE">Spoilage</option>
             </select>
             {itemCell(e.sku, (sku) => patch(e, { sku }))}
@@ -378,7 +380,7 @@ export function TransactionGrid({
             </div>
             <CommitCell
               value={e.counterparty ?? ""}
-              list={e.type === "EXPENSE" ? "grid-suppliers" : "grid-customers"}
+              list={e.type === "EXPENSE" || e.type === "RND" ? "grid-suppliers" : "grid-customers"}
               onCommit={(v) => commitWho(e, v)}
             />
             {categoryCell(
@@ -400,7 +402,17 @@ export function TransactionGrid({
                 onCommit={(v) => patch(e, { amount: num(v) })}
               />
             )}
-            <ConfirmDelete onConfirm={() => deleteEntry(e.id)} />
+            <span className="flex items-center gap-1">
+              {e.loggedByName && (
+                <span
+                  title={`Logged by ${e.loggedByName}`}
+                  className="hidden max-w-[5.5rem] truncate text-[10px] text-muted-foreground min-[1100px]:inline"
+                >
+                  {e.loggedByName}
+                </span>
+              )}
+              <ConfirmDelete onConfirm={() => deleteEntry(e.id)} />
+            </span>
           </div>
         ))}
 

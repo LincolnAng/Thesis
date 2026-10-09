@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Box, Receipt, Trash2, TruckIcon, Wallet, type LucideIcon } from "lucide-react";
+import { Box, FlaskConical, Receipt, Trash2, TruckIcon, Wallet, type LucideIcon } from "lucide-react";
 import { QuickEditDialog } from "@/components/home/quick-edit-dialog";
 import { useStore } from "@/lib/store/use-store";
 import { addEntry } from "@/lib/store/store";
@@ -71,6 +71,14 @@ export function QuickLog() {
       label: "Paid for something",
       short: "Paid",
       today: count("EXPENSE") ? `${formatPeso(sum("EXPENSE"))} today` : "Nothing yet today",
+      tone: "bad",
+    },
+    {
+      type: "RND",
+      icon: FlaskConical,
+      label: "Tried something new",
+      short: "R&D",
+      today: count("RND") ? `${formatPeso(sum("RND"))} today` : "Nothing yet today",
       tone: "bad",
     },
     {

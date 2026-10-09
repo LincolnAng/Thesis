@@ -19,7 +19,7 @@ import { salesTarget, setSalesTarget } from "@/lib/summary/business-config";
 import { formatPeso } from "@/lib/format";
 import type { Entry } from "@/lib/store/types";
 
-type Kind = "all" | "SALE" | "EXPENSE" | "WASTE";
+type Kind = "all" | "SALE" | "EXPENSE" | "RND" | "WASTE";
 
 function describe(e: Entry): string {
   return e.sku ?? e.rawText ?? (e.type === "SALE" ? "Sale" : "Expense");
@@ -38,7 +38,11 @@ function monthLabel(key: string, style: "long" | "short" = "long") {
 
 function totals(list: Entry[]) {
   const totalIn = list.filter((e) => e.type === "SALE").reduce((s, e) => s + (e.amount ?? 0), 0);
-  const totalOut = list.filter((e) => e.type === "EXPENSE").reduce((s, e) => s + (e.amount ?? 0), 0);
+  // R&D is money that genuinely left the account, so it belongs in money OUT — it is split
+  // out only so the cost of experimenting can be seen rather than buried in ingredients.
+  const totalOut = list
+    .filter((e) => e.type === "EXPENSE" || e.type === "RND")
+    .reduce((s, e) => s + (e.amount ?? 0), 0);
   // Jars thrown away are kept apart from money OUT, which is what she actually paid out. No
   // peso left the account when a jar spoiled — the loss is real, but it is a different kind
   // of number, and adding it to purchases would overstate what she spent.
@@ -96,7 +100,10 @@ function TransactionsPageInner() {
   // Spoilage belongs here even though no money moves: it is a loss she needs to see beside
   // the sales it eats into, and the grid is where she corrects a mis-logged one.
   const money = useMemo(
-    () => entries.filter((e) => e.type === "SALE" || e.type === "EXPENSE" || e.type === "WASTE"),
+    () =>
+      entries.filter(
+        (e) => e.type === "SALE" || e.type === "EXPENSE" || e.type === "RND" || e.type === "WASTE",
+      ),
     [entries],
   );
   // Every month with at least one transaction, newest first — always including this one.
@@ -259,6 +266,7 @@ function TransactionsPageInner() {
                     ["all", "All"],
                     ["SALE", "Sales"],
                     ["EXPENSE", "Expenses"],
+                    ["RND", "R&D"],
                     ["WASTE", "Spoilage"],
                   ] as const
                 ).map(([k, label]) => (

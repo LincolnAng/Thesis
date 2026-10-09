@@ -68,6 +68,7 @@ export const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
 export const ENTRY_TYPE_LABELS: Record<string, string> = {
   SALE: "Sale",
   EXPENSE: "Expense",
+  RND: "R&D",
   INVENTORY_IN: "Batch made",
   INVENTORY_OUT: "Stock out",
   WASTE: "Waste",
@@ -80,6 +81,7 @@ export const ENTRY_TYPE_LABELS: Record<string, string> = {
 export const ENTRY_TYPE_COLORS: Record<string, string> = {
   SALE: "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/40 dark:text-green-300 dark:border-green-900",
   EXPENSE: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900",
+  RND: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900",
   INVENTORY_IN: "bg-muted text-muted-foreground border-border",
   INVENTORY_OUT: "bg-muted text-muted-foreground border-border",
   WASTE: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900",

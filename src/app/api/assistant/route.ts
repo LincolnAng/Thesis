@@ -5,7 +5,7 @@ import { getAiSettings } from "@/lib/sheets/settings";
 import { normalizeUnit } from "@/lib/units";
 import type { Entry } from "@/lib/store/types";
 
-const VALID_TYPES = ["SALE", "EXPENSE", "INVENTORY_IN", "INVENTORY_OUT", "WASTE", "SUPPLIER", "NOTE"];
+const VALID_TYPES = ["SALE", "EXPENSE", "RND", "INVENTORY_IN", "INVENTORY_OUT", "WASTE", "SUPPLIER", "NOTE"];
 const VALID_PRICE_TYPES = ["standard", "friend", "wholesale"];
 const STATED_FIELDS = ["amount", "quantity", "unit", "sku", "counterparty", "category", "priceType", "notes"];
 

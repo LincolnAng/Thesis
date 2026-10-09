@@ -1,6 +1,10 @@
 export type EntryType =
   | "SALE"
   | "EXPENSE"
+  /** Money spent trying something that is not yet a product — recipe trials, samples,
+   *  packaging mock-ups. Money out like any expense, but kept apart so the cost of
+   *  experimenting can be seen rather than buried in the ingredients line. */
+  | "RND"
   | "INVENTORY_IN"
   | "INVENTORY_OUT"
   | "WASTE"
@@ -43,6 +47,9 @@ export interface Entry {
    * it was sent out, so an event-tagged entry draws down that event's holdings instead of
    * deducting from main stock a second time — see applyEntrySideEffects in store.ts. */
   eventId?: string | null;
+  /** Who was signed in when this was saved. Empty on rows written before people existed. */
+  loggedByName?: string | null;
+  loggedById?: string | null;
 }
 
 export interface RecipeIngredientRow {

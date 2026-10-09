@@ -29,7 +29,7 @@ export function computeMonthlyProfitTrend(
   for (let i = months - 1; i >= 0; i--) {
     const monthEntries = entriesInMonth(entries, i, now);
     const sales = monthEntries.filter((e) => e.type === "SALE");
-    const expenseEntries = monthEntries.filter((e) => e.type === "EXPENSE");
+    const expenseEntries = monthEntries.filter((e) => e.type === "EXPENSE" || e.type === "RND");
 
     const revenue = sum(sales, (e) => e.amount ?? 0);
     let cogs = 0;

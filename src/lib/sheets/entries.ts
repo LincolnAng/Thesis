@@ -20,6 +20,10 @@ const HEADER = [
   // Appended strictly after deletedAt — inserting a column mid-header would shift every
   // existing row's positional read (see the note in products.ts).
   "eventId",
+  // Same rule again: appended after eventId so rows written before this still parse, their
+  // empty cells meaning "we were not recording who" rather than "nobody".
+  "loggedById",
+  "loggedByName",
 ];
 
 function toRow(e: Entry): string[] {
@@ -40,12 +44,14 @@ function toRow(e: Entry): string[] {
     e.notes ?? "",
     "", // deletedAt — append/update always write the live (non-deleted) state
     e.eventId ?? "",
+    e.loggedById ?? "",
+    e.loggedByName ?? "",
   ];
 }
 
 function fromRow(row: string[]): Entry | null {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [id, timestamp, type, amount, quantity, unit, sku, counterparty, location, priceType, category, rawText, confidence, notes, _deletedAt, eventId] =
+  const [id, timestamp, type, amount, quantity, unit, sku, counterparty, location, priceType, category, rawText, confidence, notes, _deletedAt, eventId, loggedById, loggedByName] =
     row;
   if (!id) return null;
   return {
@@ -64,6 +70,8 @@ function fromRow(row: string[]): Entry | null {
     confidence: confidence ? Number(confidence) : 0,
     notes: notes || null,
     eventId: eventId || null,
+    loggedById: loggedById || null,
+    loggedByName: loggedByName || null,
   };
 }
 

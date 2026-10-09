@@ -768,7 +768,15 @@ function mirrorStockRows(productIds: string[], materialIds: string[]) {
 }
 
 export function addEntry(input: Omit<Entry, "id"> & { id?: string }): Entry {
-  const entry: Entry = { ...input, id: input.id ?? genId("entry") };
+  // Stamped here rather than at each call site: there are half a dozen ways to log something
+  // and a screen that forgot would leave a row nobody can account for.
+  const who = currentUser();
+  const entry: Entry = {
+    ...input,
+    id: input.id ?? genId("entry"),
+    loggedById: input.loggedById ?? who?.id ?? null,
+    loggedByName: input.loggedByName ?? who?.name ?? null,
+  };
   pendingLocalEntryIds.add(entry.id);
   let touchedProductIds: string[] = [];
   let touchedMaterialIds: string[] = [];

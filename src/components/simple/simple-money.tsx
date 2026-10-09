@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowDownCircle, ArrowUpCircle, Trash2 } from "lucide-react";
+import { ArrowDownCircle, ArrowUpCircle, FlaskConical, Trash2 } from "lucide-react";
 import { QuickEditDialog } from "@/components/home/quick-edit-dialog";
 import { SettingNumberInput } from "@/components/ui/setting-number-input";
 import { useStore } from "@/lib/store/use-store";
@@ -34,7 +34,7 @@ const SHOW_FIRST = 8;
 export function SimpleMoney() {
   const { entries, categoryBudgets, businessSettings } = useStore();
   const [offset, setOffset] = useState<0 | -1>(0);
-  const [adding, setAdding] = useState<"SALE" | "EXPENSE" | "WASTE" | null>(null);
+  const [adding, setAdding] = useState<"SALE" | "EXPENSE" | "RND" | "WASTE" | null>(null);
   const [editing, setEditing] = useState<Entry | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [editingGoal, setEditingGoal] = useState(false);
@@ -42,11 +42,15 @@ export function SimpleMoney() {
   const month = monthKey(offset);
   const rows = entries
     .filter(
-      (e) => (e.type === "SALE" || e.type === "EXPENSE" || e.type === "WASTE") && monthKeyOf(e.timestamp) === month,
+      (e) =>
+        (e.type === "SALE" || e.type === "EXPENSE" || e.type === "RND" || e.type === "WASTE") &&
+        monthKeyOf(e.timestamp) === month,
     )
     .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
   const moneyIn = rows.filter((e) => e.type === "SALE").reduce((s, e) => s + (e.amount ?? 0), 0);
-  const moneyOut = rows.filter((e) => e.type === "EXPENSE").reduce((s, e) => s + (e.amount ?? 0), 0);
+  const moneyOut = rows
+    .filter((e) => e.type === "EXPENSE" || e.type === "RND")
+    .reduce((s, e) => s + (e.amount ?? 0), 0);
   // Spoiled jars are a loss but not a payment — no peso left her hands — so they come off what
   // she KEPT rather than being added to what she spent. Same rule as Advanced.
   const spoiled = rows.filter((e) => e.type === "WASTE").reduce((s, e) => s + (e.amount ?? 0), 0);
@@ -143,6 +147,7 @@ export function SimpleMoney() {
       <div className="flex flex-col gap-3 min-[640px]:flex-row">
         <BigButton icon={ArrowUpCircle} label="I sold something" hint="Money coming in" onClick={() => setAdding("SALE")} />
         <BigButton icon={ArrowDownCircle} label="I paid for something" hint="Money going out" onClick={() => setAdding("EXPENSE")} />
+        <BigButton icon={FlaskConical} label="I tried something new" hint="Testing a recipe or packaging" onClick={() => setAdding("RND")} />
         <BigButton icon={Trash2} label="Something spoiled" hint="Jars you had to throw away" onClick={() => setAdding("WASTE")} />
       </div>
 
@@ -181,7 +186,15 @@ export function SimpleMoney() {
         <QuickEditDialog
           open
           onOpenChange={(o) => !o && setAdding(null)}
-          title={adding === "SALE" ? "I sold something" : adding === "WASTE" ? "Something spoiled" : "I paid for something"}
+          title={
+            adding === "SALE"
+              ? "I sold something"
+              : adding === "WASTE"
+                ? "Something spoiled"
+                : adding === "RND"
+                  ? "I tried something new"
+                  : "I paid for something"
+          }
           initial={blankEntryDraft(adding)}
           lockType
           onSave={(draft) => addEntry(draft)}

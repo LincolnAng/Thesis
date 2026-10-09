@@ -137,7 +137,7 @@ export function QuickEditForm({
    * buys beans, and beans go bad. An existing sku is always kept so editing an old entry can't
    * silently drop what it was about.
    */
-  const materialsApply = draft.type === "EXPENSE" || draft.type === "WASTE";
+  const materialsApply = draft.type === "EXPENSE" || draft.type === "RND" || draft.type === "WASTE";
   const skuOptions = Array.from(
     new Set([
       ...(draft.sku ? [draft.sku] : []),
@@ -153,7 +153,7 @@ export function QuickEditForm({
   // is worked out rather than typed, so it is shown as a figure instead of an empty box.
   const movesMoney = draft.type !== "WASTE" && draft.type !== "INVENTORY_OUT";
   const spoilageLossValue = draft.type === "WASTE" ? draft.amount : null;
-  const hasCounterparty = draft.type === "SALE" || draft.type === "EXPENSE";
+  const hasCounterparty = draft.type === "SALE" || draft.type === "EXPENSE" || draft.type === "RND";
 
   /** The unit the catalog already knows for an item, so it's never asked for per transaction. */
   function unitOfItem(name: string | null): string | null {
@@ -360,7 +360,7 @@ export function QuickEditForm({
       )}
 
       {hasCounterparty &&
-        (draft.type === "EXPENSE" ? (
+        (draft.type === "EXPENSE" || draft.type === "RND" ? (
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Paid to</Label>
             <SupplierNameInput value={draft.counterparty ?? null} onChange={(name) => set("counterparty", name)} />
