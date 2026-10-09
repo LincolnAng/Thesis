@@ -36,7 +36,7 @@ import type { Product } from "@/lib/store/types";
 
 const SOURCE_LABEL: Record<ProductPattern["source"], string> = {
   measured: "From your sales",
-  suggested: "Worked out by Jamal",
+  suggested: "Worked out by BAi",
   manual: "You set this",
   legacy: "Old setting",
   none: "Not set",
@@ -234,7 +234,7 @@ export function SeasonalityCard() {
       <CardContent className="space-y-4">
         <p className="text-xs leading-relaxed text-muted-foreground">
           You don&apos;t have to know this — the app works it out. Once a product has a year of sales, the pattern comes
-          straight from your own figures. Before that, Jamal works out a likely one and tells you why. Change anything
+          straight from your own figures. Before that, BAi works out a likely one and tells you why. Change anything
           you disagree with.
         </p>
 

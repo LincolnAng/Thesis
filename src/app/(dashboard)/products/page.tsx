@@ -111,7 +111,8 @@ export default function ProductsPage() {
           onPrev={() => rotate(-1)}
           onNext={() => rotate(1)}
           wrap
-          labelWidth="min-w-[150px]"
+          size="large"
+          labelWidth="min-w-[170px]"
           prevLabel="Previous section"
           nextLabel="Next section"
         />

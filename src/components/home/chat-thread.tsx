@@ -81,7 +81,7 @@ export function ChatThread({
   onGateRefine: (messageId: string, extra: string) => void;
   refiningGateId: string | null;
   isLookingUp?: boolean;
-  /** Shows a floating "Jamal is typing" bubble while a response is in flight. */
+  /** Shows a floating "BAi is typing" bubble while a response is in flight. */
   isTyping?: boolean;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);

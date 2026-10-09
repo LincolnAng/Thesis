@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Sparkles } from "lucide-react";
+import { ChevronRight, Sparkles } from "lucide-react";
 import { AGGREGATE_ID, aggregateForecast, type ProductForecast } from "@/lib/summary/forecast";
 import { seasonStrength } from "@/lib/summary/seasonality";
 import { ConfidenceDonut } from "@/components/inventory/confidence-donut";
@@ -43,7 +43,92 @@ function Bar({ value, max }: { value: number; max: number }) {
 // The jars figure sits at the end of its own bar rather than in a column of its own: a bar and
 // the number it stands for are one fact, and putting them at opposite ends of a wide row makes
 // the eye travel to join them back up.
-const COLS = "grid grid-cols-[52px_minmax(0,1fr)_170px_72px] items-center gap-3";
+const COLS = "grid grid-cols-[52px_minmax(0,1fr)_56px_170px_90px] items-center gap-3";
+
+/**
+ * One month, split by product.
+ *
+ * The combined row answers "how many jars altogether in December?" and hides which product
+ * is driving it — a strong December for one line and a flat one for another average into a
+ * number that describes neither. This is the same arithmetic read one product at a time: the
+ * aggregate was built by summing exactly these, so the parts always add up to the total above
+ * them.
+ */
+function MonthByProduct({
+  forecasts,
+  monthIdx,
+  label,
+}: {
+  forecasts: ProductForecast[];
+  monthIdx: number;
+  label: string;
+}) {
+  const rows = forecasts
+    .map((f) => ({ forecast: f, month: f.monthly[monthIdx] }))
+    .filter((r) => r.month)
+    .sort((a, b) => b.month.units - a.month.units);
+
+  if (rows.length === 0) {
+    return <div className="px-3 py-2 text-[12px] text-muted-foreground">No product has a forecast for this month.</div>;
+  }
+
+  const total = rows.reduce((sum, r) => sum + Math.round(r.month.units), 0);
+
+  return (
+    <div className="border-t border-line/10 bg-secondary/30 px-3 py-2">
+      <div className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+        {`${label} — by product`}
+      </div>
+      {rows.map(({ forecast, month }) => {
+        const { score, word } = seasonStrength(month.seasonIndex);
+        const colour = seasonColor(score);
+        return (
+          <div
+            key={forecast.productId}
+            className="grid grid-cols-[minmax(0,1fr)_56px_170px_90px] items-center gap-3 py-1 text-[12px]"
+          >
+            <span className="truncate pl-4">{forecast.productName}</span>
+            <span className="text-right font-semibold tabular-nums">{Math.round(month.units)}</span>
+            <span className="flex items-center gap-2" title={`${month.seasonIndex.toFixed(2)}x an ordinary month`}>
+              <span
+                className="w-[116px] shrink-0 whitespace-nowrap rounded-md px-1.5 py-[2px] text-center text-[9px] font-bold tracking-wide text-white"
+                style={{ background: colour }}
+              >
+                {word}
+              </span>
+              <span className="flex items-center gap-[2px]" aria-hidden>
+                {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+                  <span
+                    key={i}
+                    className="h-2 w-[3px] rounded-[1px]"
+                    style={{ background: i <= score ? colour : EMPTY }}
+                  />
+                ))}
+              </span>
+            </span>
+            <span className="flex justify-center">
+              <ConfidenceDonut
+                reliability={forecast.reliability}
+                size={15}
+                override={{
+                  bars: month.bars,
+                  range: month.range,
+                  note:
+                    month.observed === 0
+                      ? `No ${label.replace(/\s+\d+$/, "")} on record for ${forecast.productName} yet.`
+                      : `${month.observed} ${month.observed === 1 ? "year" : "years"} of this month logged for ${forecast.productName}.`,
+                }}
+              />
+            </span>
+          </div>
+        );
+      })}
+      <div className="mt-1 border-t border-line/10 pt-1 pl-4 text-[11px] text-muted-foreground">
+        {`Adds up to ${total} — the figure on the row above.`}
+      </div>
+    </div>
+  );
+}
 
 export function SeasonalBreakdown({ forecasts }: { forecasts: ProductForecast[] }) {
   const { businessSettings, products, entries } = useStore();
@@ -56,6 +141,7 @@ export function SeasonalBreakdown({ forecasts }: { forecasts: ProductForecast[] 
   const [productId, setProductId] = useState<string>(withMonths[0]?.productId ?? "");
   const [learning, setLearning] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
+  const [openMonth, setOpenMonth] = useState<string | null>(null);
   const running = useRef(false);
 
   const chosen = withMonths.find((f) => f.productId === productId) ?? withMonths[0];
@@ -153,7 +239,7 @@ export function SeasonalBreakdown({ forecasts }: { forecasts: ProductForecast[] 
               ? "From your own sales: "
               : pattern.source === "manual"
                 ? "You set this: "
-                : "Jamal worked this out: "}
+                : "BAi worked this out: "}
           </span>
           {pattern.reason}
         </p>
@@ -166,64 +252,74 @@ export function SeasonalBreakdown({ forecasts }: { forecasts: ProductForecast[] 
       >
         <span>Month</span>
         <span>Expected demand</span>
+        <span className="text-right">Count</span>
         {/* Sat over the whole column, "Season" floated left of the thing it names. Boxed to the
             badge's own width so the heading sits centred on the badges below it. */}
         <span className="w-[116px] text-center">Season</span>
-        <span className="text-center">Sure?</span>
+        <span className="text-center">Confidence Level</span>
       </div>
 
-      {chosen.monthly.map((m) => {
+      {chosen.monthly.map((m, monthIdx) => {
         const { score, word } = seasonStrength(m.seasonIndex);
         const colour = seasonColor(score);
         const jars = Math.round(m.units);
+        const open = openMonth === m.month;
         return (
-          <div key={m.month} className={`${COLS} border-b border-line/10 py-1.5 text-[13px] last:border-0`}>
-            <span className="text-muted-foreground">{m.label}</span>
+          <div key={m.month} className="border-b border-line/10 last:border-0">
+            <button
+              type="button"
+              onClick={() => setOpenMonth(open ? null : m.month)}
+              title={`${m.label} — tap for the breakdown by product`}
+              className={`${COLS} w-full py-1.5 text-left text-[13px] transition hover:bg-secondary/50 ${open ? "bg-secondary/40" : ""}`}
+            >
+              <span className="flex items-center gap-1 text-muted-foreground">
+                <ChevronRight className={`h-3 w-3 shrink-0 transition-transform ${open ? "rotate-90" : ""}`} />
+                {m.label}
+              </span>
 
-            <span className="flex items-center gap-2">
-              <span className="min-w-0 flex-1">
+              <span className="min-w-0">
                 <Bar value={jars} max={max} />
               </span>
-              <span className="w-[62px] shrink-0 pr-2 text-right tabular-nums">
-                <span className="font-semibold">{jars}</span>
-                <span className="text-[11px] text-muted-foreground">{jars === 1 ? " jar" : " jars"}</span>
-              </span>
-            </span>
 
-            {/* The label is a filled block rather than coloured text: at 10px, SLIGHTLY LEAN in
-                pale red was legible but not actually readable, and the colour is the point. A
-                fixed width keeps the dashes beside it in a straight column down the table. */}
-            <span className="flex items-center gap-2" title={`${m.seasonIndex.toFixed(2)}x an ordinary month`}>
-              <span
-                className="w-[116px] shrink-0 whitespace-nowrap rounded-md px-1.5 py-[3px] text-center text-[10px] font-bold tracking-wide text-white"
-                style={{ background: colour }}
-              >
-                {word}
-              </span>
-              <span className="flex items-center gap-[2px]" aria-hidden>
-                {[1, 2, 3, 4, 5, 6, 7].map((i) => (
-                  <span
-                    key={i}
-                    className="h-2.5 w-[3px] rounded-[1px]"
-                    style={{ background: i <= score ? colour : EMPTY }}
-                  />
-                ))}
-              </span>
-            </span>
+              <span className="text-right font-semibold tabular-nums">{jars}</span>
 
-            <span className="flex justify-center">
-              <ConfidenceDonut
-                reliability={chosen.reliability}
-                override={{
-                  bars: m.bars,
-                  range: m.range,
-                  note:
-                    m.observed === 0
-                      ? `You have never logged a ${m.label.replace(/\s+\d+$/, "")} for this product yet, so this month leans on the pattern rather than your own figures.`
-                      : `You have ${m.observed} ${m.observed === 1 ? "year" : "years"} of this calendar month logged.`,
-                }}
-              />
-            </span>
+              {/* The label is a filled block rather than coloured text: at 10px, SLIGHTLY LEAN in
+                  pale red was legible but not actually readable, and the colour is the point. A
+                  fixed width keeps the dashes beside it in a straight column down the table. */}
+              <span className="flex items-center gap-2" title={`${m.seasonIndex.toFixed(2)}x an ordinary month`}>
+                <span
+                  className="w-[116px] shrink-0 whitespace-nowrap rounded-md px-1.5 py-[3px] text-center text-[10px] font-bold tracking-wide text-white"
+                  style={{ background: colour }}
+                >
+                  {word}
+                </span>
+                <span className="flex items-center gap-[2px]" aria-hidden>
+                  {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+                    <span
+                      key={i}
+                      className="h-2.5 w-[3px] rounded-[1px]"
+                      style={{ background: i <= score ? colour : EMPTY }}
+                    />
+                  ))}
+                </span>
+              </span>
+
+              <span className="flex justify-center">
+                <ConfidenceDonut
+                  reliability={chosen.reliability}
+                  override={{
+                    bars: m.bars,
+                    range: m.range,
+                    note:
+                      m.observed === 0
+                        ? `You have never logged a ${m.label.replace(/\s+\d+$/, "")} for this product yet, so this month leans on the pattern rather than your own figures.`
+                        : `You have ${m.observed} ${m.observed === 1 ? "year" : "years"} of this calendar month logged.`,
+                  }}
+                />
+              </span>
+            </button>
+
+            {open && <MonthByProduct forecasts={perProduct} monthIdx={monthIdx} label={m.label} />}
           </div>
         );
       })}

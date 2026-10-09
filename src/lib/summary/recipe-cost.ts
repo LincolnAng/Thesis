@@ -74,7 +74,6 @@ export function effectiveProductPrice(product: Product, cost: ProductCostBreakdo
   const costKnown = cost.unpriced.length === 0;
   if (product.pricingMode === "cost_percent" && costKnown) return priceFromMarkup(cost.costPerJar, product.marginPercent);
   if (product.pricingMode === "margin" && costKnown) return priceFromMargin(cost.costPerJar, product.marginPercent);
-  if (product.pricingMode === "competitive") return product.marketPrice;
   return product.standardPrice;
 }
 

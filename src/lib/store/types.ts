@@ -58,9 +58,9 @@ export interface RecipeExtraRow {
 }
 
 // manual = self pricing; cost_percent = cost + markup %; margin = profit as a % of the
-// selling price; competitive = market price. marginPercent holds the % for both
+// selling price. marginPercent holds the % for both
 // cost_percent (as markup) and margin (as margin) — see lib/summary/pricing-methods.ts.
-export type PricingMode = "manual" | "cost_percent" | "margin" | "competitive";
+export type PricingMode = "manual" | "cost_percent" | "margin";
 
 export interface Product {
   id: string;
@@ -68,7 +68,8 @@ export interface Product {
   standardPrice: number;
   pricingMode: PricingMode; // how the price is set; only "manual" uses standardPrice directly
   marginPercent: number; // markup % (cost_percent) or margin % (margin)
-  marketPrice: number; // used only when pricingMode === "competitive" — what similar products sell for
+  /** Retired with the market-based pricing mode. Kept so the sheet column still round-trips. */
+  marketPrice: number;
   friendPrice: number;
   wholesalePrice: number;
   stockQty: number;

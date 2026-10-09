@@ -152,7 +152,7 @@ export async function POST(req: NextRequest) {
     { type: "text" as const, text: assistantSystemPromptDynamic(body.dataSummary ?? "No data available.") },
   ];
 
-  // Real alternating turns instead of one flattened "Owner: ... / Jamal: ..." blob.
+  // Real alternating turns instead of one flattened "Owner: ... / BAi: ..." blob.
   const historyMessages: AnthropicMessage[] = (body.history ?? [])
     .slice(-6)
     .map((m) => ({ role: m.role, content: m.content }));

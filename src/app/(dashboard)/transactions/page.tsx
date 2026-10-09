@@ -19,7 +19,7 @@ import { salesTarget, setSalesTarget } from "@/lib/summary/business-config";
 import { formatPeso } from "@/lib/format";
 import type { Entry } from "@/lib/store/types";
 
-type Kind = "all" | "SALE" | "EXPENSE";
+type Kind = "all" | "SALE" | "EXPENSE" | "WASTE";
 
 function describe(e: Entry): string {
   return e.sku ?? e.rawText ?? (e.type === "SALE" ? "Sale" : "Expense");
@@ -87,7 +87,12 @@ function TransactionsPageInner() {
   const [showBudget, setShowBudget] = useState(false);
   const [editBudgets, setEditBudgets] = useState(false);
 
-  const money = useMemo(() => entries.filter((e) => e.type === "SALE" || e.type === "EXPENSE"), [entries]);
+  // Spoilage belongs here even though no money moves: it is a loss she needs to see beside
+  // the sales it eats into, and the grid is where she corrects a mis-logged one.
+  const money = useMemo(
+    () => entries.filter((e) => e.type === "SALE" || e.type === "EXPENSE" || e.type === "WASTE"),
+    [entries],
+  );
   // Every month with at least one transaction, newest first — always including this one.
   const months = useMemo(() => {
     const now = new Date();
@@ -242,6 +247,7 @@ function TransactionsPageInner() {
                     ["all", "All"],
                     ["SALE", "Sales"],
                     ["EXPENSE", "Expenses"],
+                    ["WASTE", "Spoilage"],
                   ] as const
                 ).map(([k, label]) => (
                   <button

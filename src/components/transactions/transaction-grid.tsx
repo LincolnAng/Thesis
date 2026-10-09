@@ -110,7 +110,7 @@ export function TransactionGrid({
   adding: boolean;
   onStartAdding: () => void;
   onDoneAdding: () => void;
-  defaultType: "SALE" | "EXPENSE";
+  defaultType: "SALE" | "EXPENSE" | "WASTE";
 }) {
   const { entries, products, rawMaterials, suppliers, categoryBudgets } = useStore();
   const costCtx = useCostContext();
@@ -141,12 +141,28 @@ export function TransactionGrid({
     const next = { ...entryToDraft(entry), ...change };
     // Keep the unit honest: it belongs to the item, so it follows a change of item.
     if ("sku" in change) next.unit = unitOf(next.sku) ?? next.unit;
+    // Nothing was bought or sold, so the money fields are cleared rather than hidden — see
+    // changeNew for why leaving them set would be worse than showing them.
+    if (next.type === "WASTE") {
+      next.amount = null;
+      next.category = null;
+      next.priceType = null;
+      next.counterparty = null;
+    }
     replaceEntry(entry.id, next);
   }
 
   function changeNew(change: Partial<EntryDraft>) {
     const next = { ...newRow, ...change };
     if ("sku" in change) next.unit = unitOf(next.sku) ?? next.unit;
+    // Switching to spoilage clears the money fields rather than just hiding them, so a figure
+    // typed as a sale cannot ride along invisibly on a row that is no longer about money.
+    if (next.type === "WASTE") {
+      next.amount = null;
+      next.category = null;
+      next.priceType = null;
+      next.counterparty = null;
+    }
     // A new sale prices itself from the product, the way the Home buttons do.
     if (next.type === "SALE" && next.amount == null && next.quantity) {
       const price = unitPrice(next.sku, next.priceType);
@@ -197,6 +213,8 @@ export function TransactionGrid({
     onCategory: (c: ExpenseCategory) => void,
     onPriceType: (p: PriceType) => void,
   ) {
+    // Spoilage is neither a purchase nor a sale, so neither of these questions applies to it.
+    if (type === "WASTE") return <span className="px-2 text-[11px] text-muted-foreground">—</span>;
     return type === "EXPENSE" ? (
       <select className={CELL} value={category ?? "misc"} onChange={(e) => onCategory(e.target.value)}>
         {expenseCategories.map((c) => (
@@ -231,7 +249,7 @@ export function TransactionGrid({
 
       <div className="min-w-[860px]">
         <div className={`grid ${COLUMNS} gap-1 border-b border-line/15 bg-secondary px-2`}>
-          {["Date", "Type", "Item", "Qty", "Customer / Supplier", "Category / price", "Amount", ""].map((h) => (
+          {["Date", "Type", "Item", "Qty", "Customer / Supplier", "Category", "Amount", ""].map((h) => (
             <div
               key={h}
               className={`px-1 py-2.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground ${h === "Qty" || h === "Amount" ? "text-right" : ""}`}
@@ -252,10 +270,11 @@ export function TransactionGrid({
             <select
               className={CELL}
               value={newRow.type}
-              onChange={(e) => changeNew({ type: e.target.value as "SALE" | "EXPENSE" })}
+              onChange={(e) => changeNew({ type: e.target.value as "SALE" | "EXPENSE" | "WASTE" })}
             >
               <option value="SALE">Sale</option>
               <option value="EXPENSE">Expense</option>
+              <option value="WASTE">Spoilage</option>
             </select>
             {itemCell(newRow.sku, (sku) => changeNew({ sku }))}
             <div className="flex items-center gap-1 pr-1">
@@ -280,12 +299,16 @@ export function TransactionGrid({
               (category) => changeNew({ category }),
               (priceType) => changeNew({ priceType }),
             )}
-            <CommitCell
-              type="number"
-              align="right"
-              value={newRow.amount == null ? "" : String(newRow.amount)}
-              onCommit={(v) => changeNew({ amount: num(v) })}
-            />
+            {newRow.type === "WASTE" ? (
+              <span className="px-2 text-right text-[11px] text-muted-foreground">—</span>
+            ) : (
+              <CommitCell
+                type="number"
+                align="right"
+                value={newRow.amount == null ? "" : String(newRow.amount)}
+                onCommit={(v) => changeNew({ amount: num(v) })}
+              />
+            )}
             <div className="flex items-center gap-1">
               <button
                 type="button"
@@ -328,10 +351,11 @@ export function TransactionGrid({
             <select
               className={`${CELL} font-semibold ${e.type === "SALE" ? "text-success" : "text-danger"}`}
               value={e.type}
-              onChange={(ev) => patch(e, { type: ev.target.value as "SALE" | "EXPENSE" })}
+              onChange={(ev) => patch(e, { type: ev.target.value as "SALE" | "EXPENSE" | "WASTE" })}
             >
               <option value="SALE">Sale</option>
               <option value="EXPENSE">Expense</option>
+              <option value="WASTE">Spoilage</option>
             </select>
             {itemCell(e.sku, (sku) => patch(e, { sku }))}
             <div className="flex items-center gap-1 pr-1">
@@ -355,12 +379,16 @@ export function TransactionGrid({
               (category) => patch(e, { category }),
               (priceType) => patch(e, { priceType }),
             )}
-            <CommitCell
-              type="number"
-              align="right"
-              value={e.amount == null ? "" : String(e.amount)}
-              onCommit={(v) => patch(e, { amount: num(v) })}
-            />
+            {e.type === "WASTE" ? (
+              <span className="px-2 text-right text-[11px] text-muted-foreground">—</span>
+            ) : (
+              <CommitCell
+                type="number"
+                align="right"
+                value={e.amount == null ? "" : String(e.amount)}
+                onCommit={(v) => patch(e, { amount: num(v) })}
+              />
+            )}
             <ConfirmDelete onConfirm={() => deleteEntry(e.id)} />
           </div>
         ))}

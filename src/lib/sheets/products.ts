@@ -3,7 +3,8 @@ import type { ProductRow, RecipeRow } from "@/lib/store/sheet-shapes";
 
 export type { ProductRow, RecipeRow };
 
-const PRICING_MODES = ["manual", "cost_percent", "margin", "competitive"];
+// "competitive" is deliberately absent: a row still saying it is read as self pricing.
+const PRICING_MODES = ["manual", "cost_percent", "margin"];
 
 // marketPrice is appended strictly after deletedAt (not just after the other
 // price fields) so every column already written for existing rows — including
@@ -69,8 +70,11 @@ function productFromRow(row: string[]): ProductRow | null {
   return {
     id,
     name,
-    standardPrice: Number(standardPrice) || 0,
-    // Anything unrecognized (e.g. the retired "suggested") falls back to self pricing.
+    standardPrice:
+      pricingMode === "competitive" ? Number(marketPrice) || Number(standardPrice) || 0 : Number(standardPrice) || 0,
+    // Anything unrecognized (e.g. the retired "suggested") falls back to self pricing, and so
+    // does "competitive" — the market-based mode is gone, and a product priced that way keeps
+    // charging exactly what it charged, now as a typed price (see standardPrice below).
     pricingMode: (PRICING_MODES as string[]).includes(pricingMode) ? (pricingMode as ProductRow["pricingMode"]) : "manual",
     marginPercent: Number(marginPercent) || 0,
     friendPrice: Number(friendPrice) || 0,

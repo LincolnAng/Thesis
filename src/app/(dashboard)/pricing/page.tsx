@@ -23,7 +23,6 @@ const METHOD_PROMPTS: Record<PricingMode, string> = {
   manual: "Type the price you want to charge:",
   cost_percent: "Add a markup on top of the cost:",
   margin: "Choose how much of the price is profit:",
-  competitive: "What similar products sell for:",
 };
 
 /** A number that saves when you leave the field or press Enter — not on every keystroke,
@@ -214,9 +213,6 @@ function PricingDetail({ product, cost, actual }: { product: Product; cost: Prod
                   suffix="% margin"
                   width="w-14"
                 />
-              )}
-              {product.pricingMode === "competitive" && (
-                <CommitNumber value={product.marketPrice} onCommit={(n) => updateProduct(product.id, { marketPrice: n })} prefix="₱" />
               )}
               {product.pricingMode === "manual" && (
                 <CommitNumber value={product.standardPrice} onCommit={(n) => updateProduct(product.id, { standardPrice: n })} prefix="₱" />

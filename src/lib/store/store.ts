@@ -309,7 +309,10 @@ function recordActivity(
   const noun = COLLECTION_NOUNS[collection];
   if (!verb || !noun) return;
   const who = currentUser();
-  const detail = describeItem(collection, payload.item);
+  // A delete carries no new row — the thing is gone. Describing what was there is the only
+  // way the log can say WHICH transaction was removed; "deleted a transaction" on its own is
+  // a line she has to guess at.
+  const detail = describeItem(collection, payload.item ?? payload.before);
   const item = payload.item as { id?: string } | undefined;
   const event: ActivityEvent = {
     id: genId("act"),

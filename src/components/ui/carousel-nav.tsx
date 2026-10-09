@@ -22,6 +22,7 @@ export function CarouselNav({
   atEnd = false,
   wrap = false,
   labelWidth = "min-w-[140px]",
+  size = "default",
   prevLabel = "Previous",
   nextLabel = "Next",
 }: {
@@ -32,9 +33,15 @@ export function CarouselNav({
   atEnd?: boolean;
   wrap?: boolean;
   labelWidth?: string;
+  /** "large" for a control that steps a whole page, where the arrows are the main target. */
+  size?: "default" | "large";
   prevLabel?: string;
   nextLabel?: string;
 }) {
+  const big = size === "large";
+  const box = big ? "h-12 w-12" : "h-9 w-9";
+  const glyph = big ? "h-6 w-6" : "h-4 w-4";
+
   return (
     <div className="flex w-fit items-center rounded-full border border-line/15 bg-white">
       <button
@@ -42,19 +49,21 @@ export function CarouselNav({
         aria-label={prevLabel}
         disabled={!wrap && atStart}
         onClick={onPrev}
-        className="flex h-9 w-9 items-center justify-center rounded-l-full text-muted-foreground transition-colors hover:bg-secondary disabled:opacity-30"
+        className={`flex ${box} items-center justify-center rounded-l-full text-muted-foreground transition-colors hover:bg-secondary disabled:opacity-30`}
       >
-        <ChevronLeft className="h-4 w-4" />
+        <ChevronLeft className={glyph} />
       </button>
-      <span className={`${labelWidth} px-1 text-center text-[13px] font-semibold`}>{label}</span>
+      <span className={`${labelWidth} px-1 text-center font-semibold ${big ? "text-[15px]" : "text-[13px]"}`}>
+        {label}
+      </span>
       <button
         type="button"
         aria-label={nextLabel}
         disabled={!wrap && atEnd}
         onClick={onNext}
-        className="flex h-9 w-9 items-center justify-center rounded-r-full text-muted-foreground transition-colors hover:bg-secondary disabled:opacity-30"
+        className={`flex ${box} items-center justify-center rounded-r-full text-muted-foreground transition-colors hover:bg-secondary disabled:opacity-30`}
       >
-        <ChevronRight className="h-4 w-4" />
+        <ChevronRight className={glyph} />
       </button>
     </div>
   );

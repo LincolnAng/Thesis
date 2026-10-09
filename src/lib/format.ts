@@ -97,7 +97,6 @@ export const PRICING_MODE_LABELS: Record<string, string> = {
   manual: "Self pricing",
   cost_percent: "Cost-based",
   margin: "Margin-based",
-  competitive: "Market-based",
 };
 
 /**

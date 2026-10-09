@@ -35,6 +35,8 @@ export interface CostLayer {
 export type CostSource = "transactions" | "supplier" | "stored" | "none";
 
 export interface MaterialValuation {
+  /** Units thrown away. Gone from the shelf; their cost stays on what is left. */
+  spoiled: number;
   /** Weighted average cost of what is still on hand. Null when nothing was ever bought. */
   unitCost: number | null;
   purchased: number;
@@ -111,6 +113,27 @@ export function consumedQty(
   return used;
 }
 
+/**
+ * How much of a material was thrown away.
+ *
+ * Spoilage is not consumption. Nothing was produced, so the money spent on those units is not
+ * recoverable and does not belong to anything — it stays with the stock that survived. That is
+ * why this is counted apart from production and never drawn off the cost layers.
+ */
+export function spoiledQty(entries: Entry[], material: RawMaterialStock): number {
+  const name = normalise(material.name);
+  if (!name) return 0;
+  let total = 0;
+  for (const entry of entries) {
+    if (entry.type !== "WASTE" || !entry.quantity || entry.quantity <= 0) continue;
+    if (normalise(entry.sku) !== name) continue;
+    const qty = convertQuantity(entry.quantity, entry.unit ?? material.unit, material.unit);
+    if (qty === null || qty <= 0) continue;
+    total += qty;
+  }
+  return total;
+}
+
 /** Draw `amount` off the front of the layers, oldest first. Returns what is left. */
 function drawDown(layers: CostLayer[], amount: number): CostLayer[] {
   let left = amount;
@@ -139,23 +162,32 @@ export function valueMaterial(
   const { layers, skipped } = purchaseLayers(entries, material);
   const purchased = layers.reduce((sum, l) => sum + l.qty, 0);
   const consumed = consumedQty(entries, products, material, cacaoUtilization);
-  const left = drawDown(layers, consumed);
-  const remaining = left.reduce((sum, l) => sum + l.qty, 0);
+  const spoiled = spoiledQty(entries, material);
 
-  // Everything bought has been used. The shelf is empty on paper, so the honest price for the
-  // NEXT jar is what the last sack cost, not an average of sacks that no longer exist.
+  // Production draws down the layers WITH their value, because that money went into jars she
+  // can sell. Spoilage only takes the quantity: the pesos spent on a sack that rotted are
+  // still spent, and they have nowhere to go but onto the sacks that survived. So the same
+  // value divided by fewer units — the average cost of what is left goes UP, which is the
+  // true cost of the next jar.
+  const left = drawDown(layers, consumed);
+  const beforeSpoilage = left.reduce((sum, l) => sum + l.qty, 0);
+  const value = left.reduce((sum, l) => sum + l.qty * l.unitCost, 0);
+  const remaining = Math.max(0, beforeSpoilage - spoiled);
+
+  // Nothing left to value. The honest price for the next batch is what the last sack cost,
+  // not an average of sacks that no longer exist.
   if (remaining <= 0) {
     const last = layers[layers.length - 1];
     return {
       unitCost: last ? last.unitCost : null,
       purchased,
       consumed,
+      spoiled,
       remaining: 0,
       layers: [],
       skipped,
     };
   }
 
-  const value = left.reduce((sum, l) => sum + l.qty * l.unitCost, 0);
-  return { unitCost: value / remaining, purchased, consumed, remaining, layers: left, skipped };
+  return { unitCost: value / remaining, purchased, consumed, spoiled, remaining, layers: left, skipped };
 }

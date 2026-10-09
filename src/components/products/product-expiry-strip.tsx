@@ -28,7 +28,7 @@ export function ProductExpiryStrip({ product }: { product: Product }) {
   return (
     <div className="flex flex-col gap-1.5 border-t border-line/10 px-4 py-2.5 text-[11px]">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <span className="text-muted-foreground">Keeps</span>
+        <span className="font-semibold text-muted-foreground">Shelf life</span>
         <input
           type="number"
           min={1}
@@ -42,7 +42,7 @@ export function ProductExpiryStrip({ product }: { product: Product }) {
           className="h-6 w-14 rounded-md border border-input bg-transparent px-1.5 text-center text-[11px] tabular-nums"
           aria-label={`How many days ${product.name} keeps`}
         />
-        <span className="text-muted-foreground">days after making</span>
+        <span className="text-muted-foreground">days</span>
       </div>
 
       {!expiry.tracksAnything ? (

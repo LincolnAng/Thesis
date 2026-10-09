@@ -52,7 +52,6 @@ function MethodInput({
 }) {
   const pct = useNumericDraft(product.marginPercent, (n) => updateProduct(product.id, { marginPercent: n }));
   const selfPrice = useNumericDraft(product.standardPrice, (n) => updateProduct(product.id, { standardPrice: n }));
-  const marketPrice = useNumericDraft(product.marketPrice, (n) => updateProduct(product.id, { marketPrice: n }));
   const profit = effectivePrice - costPerJar;
 
   if (product.pricingMode === "cost_percent" || product.pricingMode === "margin") {
@@ -81,7 +80,7 @@ function MethodInput({
     );
   }
 
-  const field = product.pricingMode === "competitive" ? marketPrice : selfPrice;
+  const field = selfPrice;
   return (
     <div className="space-y-1">
       <div className="flex max-w-xs items-center gap-2">
@@ -94,7 +93,7 @@ function MethodInput({
         />
       </div>
       <p className="text-xs text-muted-foreground">
-        {product.pricingMode === "competitive" ? "What similar products sell for · " : ""}
+
         {costPerJar > 0 && `${(effectivePrice > 0 ? (profit / effectivePrice) * 100 : 0).toFixed(0)}% margin at ${formatPeso(costPerJar)} cost`}
       </p>
     </div>

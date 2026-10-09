@@ -40,6 +40,8 @@ export interface MaterialStanding {
   purchased: number;
   /** Eaten by every batch logged, with roasting loss applied to cacao. */
   consumed: number;
+  /** Thrown away. Off the shelf, but its cost stays on what survived. */
+  spoiled: number;
   /** purchased − consumed. This is the on-hand figure the app runs on. */
   onHand: number;
   /** Weighted average of what is still on the shelf, oldest sack drawn down first. */
@@ -66,6 +68,7 @@ export function materialStanding(
     group: groupOf(material),
     purchased: v.purchased,
     consumed: v.consumed,
+    spoiled: v.spoiled,
     // Nothing bought means nothing to say. Falling back to the stored number would quietly
     // reintroduce the figure this is meant to replace.
     onHand: tracked ? v.remaining : material.qty,
