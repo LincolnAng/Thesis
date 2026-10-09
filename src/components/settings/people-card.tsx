@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Users, History } from "lucide-react";
+import { Users, History, Undo2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { ConfirmDeleteButton } from "@/components/data-table/confirm-delete-button";
 import { useStore } from "@/lib/store/use-store";
-import { addUser, deleteUser, updateUser } from "@/lib/store/store";
+import { addUser, deleteUser, updateUser, canUndo, undoActivity } from "@/lib/store/store";
 import { hashPin, signOut, useCurrentUser } from "@/lib/auth/current-user";
 import type { AppUser } from "@/lib/store/types";
 
@@ -197,16 +197,37 @@ export function PeopleCard() {
           ) : (
             <>
               <ul className="divide-y divide-border text-sm">
-                {rows.map((row) => (
-                  <li key={row.id} className="flex items-baseline justify-between gap-3 py-1.5">
-                    <span className="min-w-0">
-                      <span className="font-medium text-foreground">{row.userName}</span>{" "}
-                      <span className="text-muted-foreground">{row.action}</span>
-                    </span>
-                    <span className="shrink-0 text-xs text-muted-foreground">{when(row.at)}</span>
-                  </li>
-                ))}
+                {rows.map((row) => {
+                  const undoable = canUndo(row);
+                  return (
+                    <li key={row.id} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 py-2">
+                      <span className="min-w-0 flex-1">
+                        <span className="font-medium text-foreground">{row.userName}</span>{" "}
+                        <span className={row.undoneAt ? "text-muted-foreground line-through" : "text-muted-foreground"}>
+                          {row.action}
+                        </span>
+                        {row.undoneAt && <span className="ml-2 text-xs font-semibold text-[#9A6B12]">undone</span>}
+                      </span>
+                      <span className="flex shrink-0 items-center gap-3">
+                        {undoable && (
+                          <button
+                            type="button"
+                            onClick={() => undoActivity(row.id)}
+                            className="flex items-center gap-1 rounded-md border border-cacao/30 px-2 py-0.5 text-xs font-semibold text-cacao hover:bg-cacao/[0.06]"
+                          >
+                            <Undo2 className="h-3 w-3" /> Undo
+                          </button>
+                        )}
+                        <span className="text-xs text-muted-foreground">{when(row.at)}</span>
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
+              <p className="pt-1 text-[11px] leading-relaxed text-muted-foreground">
+                Undo puts a transaction back exactly as it was, stock and ingredients included. It is offered only for
+                transactions, and only for changes recorded since the log started keeping the previous version.
+              </p>
               {activity.length > SHOW_FIRST && (
                 <Button size="sm" variant="ghost" onClick={() => setShowAll((v) => !v)}>
                   {showAll ? "Show less" : `Show all ${activity.length}`}

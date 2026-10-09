@@ -230,4 +230,16 @@ export interface ActivityEvent {
   userName: string;
   /** Already written as a sentence fragment: "added a transaction — Sale · Classic". */
   action: string;
+  /** Which collection changed, so an edit can be found again. Empty on rows logged before
+   *  the log started recording it. */
+  collection?: string;
+  op?: "append" | "update" | "delete";
+  entityId?: string;
+  /**
+   * The row as it stood BEFORE this change, as JSON — the only thing that makes an undo
+   * possible. An append has nothing before it; a delete has everything.
+   */
+  before?: string;
+  /** Set once this change has been undone, so the log shows the reversal rather than hiding it. */
+  undoneAt?: string;
 }

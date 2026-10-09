@@ -215,7 +215,7 @@ const SAVE_RETRY_DELAYS_MS = [3_000, 10_000, 30_000];
 async function mirrorOp(
   collection: string,
   op: "append" | "update" | "delete" | "migrate",
-  payload: { id?: string; item?: unknown; items?: unknown[] },
+  payload: { id?: string; item?: unknown; items?: unknown[]; before?: unknown },
   /** Set for writes that are a consequence of another write (stock moving because a sale
    * was logged), so the log shows the thing the person did and not its bookkeeping. */
   silent = false,
@@ -276,17 +276,33 @@ function describeItem(collection: string, item: unknown): string {
   if (!item || typeof item !== "object") return "";
   const row = item as Record<string, unknown>;
   if (collection === "entries") {
+    // "Sale · Classic" told her a sale happened and nothing she could check it against, so a
+    // row in the log could match half a dozen real transactions. Quantity, who, and when make
+    // it a specific event she can recognise.
     const type = typeof row.type === "string" ? ENTRY_TYPE_LABELS[row.type] ?? row.type : "";
-    const what = [row.sku, row.counterparty].find((v) => typeof v === "string" && v) as string | undefined;
-    const amount = typeof row.amount === "number" ? formatPeso(row.amount) : "";
-    return [type, what, amount].filter(Boolean).join(" · ");
+    const qty = typeof row.quantity === "number" && row.quantity ? `${row.quantity}${row.unit ? ` ${row.unit}` : ""}` : "";
+    const sku = typeof row.sku === "string" && row.sku ? row.sku : "";
+    const thing = [qty, sku].filter(Boolean).join(" ");
+    const who = typeof row.counterparty === "string" && row.counterparty ? row.counterparty : "";
+    const amount = typeof row.amount === "number" && row.amount ? formatPeso(row.amount) : "";
+    const when =
+      typeof row.timestamp === "string" && row.timestamp
+        ? new Date(row.timestamp).toLocaleDateString("en-PH", { month: "short", day: "numeric" })
+        : "";
+    return [type, thing, who && `${row.type === "EXPENSE" ? "to" : "for"} ${who}`, amount, when]
+      .filter(Boolean)
+      .join(" · ");
   }
   if (collection === "businessSettings") return typeof row.key === "string" ? row.key : "";
   const named = [row.name, row.label, row.key].find((v) => typeof v === "string" && v);
   return typeof named === "string" ? named : "";
 }
 
-function recordActivity(collection: string, op: string, payload: { id?: string; item?: unknown }) {
+function recordActivity(
+  collection: string,
+  op: string,
+  payload: { id?: string; item?: unknown; before?: unknown },
+) {
   // The log's own rows, and the one-off import of existing data, aren't anybody's edit.
   if (collection === "activity" || op === "migrate") return;
   const verb = OP_VERBS[op];
@@ -294,15 +310,88 @@ function recordActivity(collection: string, op: string, payload: { id?: string; 
   if (!verb || !noun) return;
   const who = currentUser();
   const detail = describeItem(collection, payload.item);
+  const item = payload.item as { id?: string } | undefined;
   const event: ActivityEvent = {
     id: genId("act"),
     at: new Date().toISOString(),
     userId: who?.id ?? "",
     userName: who?.name ?? "Someone",
-    action: `${verb} a ${noun}${detail ? ` — ${detail}` : ""}`,
+    action: `${verb} ${/^[aeiou]/i.test(noun) ? "an" : "a"} ${noun}${detail ? ` — ${detail}` : ""}`,
+    collection,
+    op: op === "append" || op === "update" || op === "delete" ? op : undefined,
+    entityId: payload.id ?? item?.id,
+    // Only what is needed to put it back. An append has nothing before it.
+    before: payload.before === undefined ? undefined : JSON.stringify(payload.before),
   };
   setState((prev) => ({ ...prev, activity: [event, ...prev.activity] }));
   void mirrorOp("activity", "append", { item: event }, true);
+}
+
+/**
+ * Can this change be put back?
+ *
+ * Only transactions, and only ones logged since the log started keeping the previous row.
+ * Undoing a product or a setting is a different question — those have no stock movements
+ * hanging off them and no obvious "back", so pretending the button works everywhere would be
+ * worse than it only working here.
+ */
+export function canUndo(event: ActivityEvent): boolean {
+  if (event.undoneAt) return false;
+  if (event.collection !== "entries" || !event.entityId || !event.op) return false;
+  if (event.op === "append") return state.entries.some((e) => e.id === event.entityId);
+  return Boolean(event.before);
+}
+
+/**
+ * Put a change back.
+ *
+ * Routed through the ordinary add/replace/delete functions rather than writing state
+ * directly, so an undo moves stock and spends ingredients exactly the way the original did,
+ * in reverse. An undo that quietly skipped the side effects would leave the shelf wrong in a
+ * way nothing on screen could explain.
+ */
+export function undoActivity(eventId: string): boolean {
+  const event = state.activity.find((a) => a.id === eventId);
+  if (!event || !canUndo(event)) return false;
+  const id = event.entityId as string;
+
+  if (event.op === "append") {
+    deleteEntry(id);
+  } else if (event.op === "update") {
+    const before = safeParse<Entry>(event.before);
+    if (!before) return false;
+    const { id: _ignored, ...rest } = before;
+    void _ignored;
+    replaceEntry(id, rest);
+  } else if (event.op === "delete") {
+    const before = safeParse<Entry>(event.before);
+    if (!before) return false;
+    addEntry(before);
+  }
+
+  const undoneAt = new Date().toISOString();
+  let marked: ActivityEvent | undefined;
+  setState((prev) => ({
+    ...prev,
+    activity: prev.activity.map((a) => {
+      if (a.id !== eventId) return a;
+      marked = { ...a, undoneAt };
+      return marked;
+    }),
+  }));
+  // Silent: the reversal is already written on the row it undid, and logging "edited an
+  // activity" beneath it would read as a second, unrelated change.
+  if (marked) void mirrorOp("activity", "update", { id: eventId, item: marked }, true);
+  return true;
+}
+
+function safeParse<T>(raw: string | undefined): T | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
 }
 
 export function addUser(name: string, pinHash: string, role: AppUser["role"] = "helper"): AppUser {
@@ -522,12 +611,12 @@ async function mirrorEntryAppend(entry: Entry) {
   await mirrorOp("entries", "append", { item: entry });
 }
 
-async function mirrorEntryUpdate(id: string, entry: Entry) {
-  await mirrorOp("entries", "update", { id, item: entry });
+async function mirrorEntryUpdate(id: string, entry: Entry, before?: Entry) {
+  await mirrorOp("entries", "update", { id, item: entry, before });
 }
 
-async function mirrorEntryDelete(id: string) {
-  await mirrorOp("entries", "delete", { id });
+async function mirrorEntryDelete(id: string, before?: Entry) {
+  await mirrorOp("entries", "delete", { id, before });
 }
 
 export function subscribe(listener: () => void): () => void {
@@ -693,7 +782,8 @@ export function addEntry(input: Omit<Entry, "id"> & { id?: string }): Entry {
 
 /** Removes an entry and reverses whatever stock/ingredient effects it applied. Used by Undo. */
 export function deleteEntry(id: string) {
-  if (!state.entries.some((e) => e.id === id)) return;
+  const removed = state.entries.find((e) => e.id === id);
+  if (!removed) return;
   pendingLocalEntryIds.delete(id);
   let touchedProductIds: string[] = [];
   let touchedMaterialIds: string[] = [];
@@ -710,12 +800,13 @@ export function deleteEntry(id: string) {
       rawMaterials: result.rawMaterials,
     };
   });
-  void mirrorEntryDelete(id);
+  void mirrorEntryDelete(id, removed);
   mirrorStockRows(touchedProductIds, touchedMaterialIds);
 }
 
 /** Replaces an entry's fields, reversing the old side effects and applying the new ones. Used by Edit. */
 export function replaceEntry(id: string, next: Omit<Entry, "id">) {
+  const previous = state.entries.find((e) => e.id === id);
   let updatedEntry: Entry | null = null;
   let touchedProductIds: string[] = [];
   let touchedMaterialIds: string[] = [];
@@ -734,7 +825,7 @@ export function replaceEntry(id: string, next: Omit<Entry, "id">) {
       rawMaterials: applied.rawMaterials,
     };
   });
-  if (updatedEntry) void mirrorEntryUpdate(id, updatedEntry);
+  if (updatedEntry) void mirrorEntryUpdate(id, updatedEntry, previous);
   mirrorStockRows(touchedProductIds, touchedMaterialIds);
 }
 
