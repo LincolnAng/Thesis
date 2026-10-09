@@ -1,10 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Page } from "@/components/layout/page";
+import { Page, PageTabs } from "@/components/layout/page";
 import { PricingCalculatorCard } from "@/components/finance/pricing-calculator-card";
 import { AddProductDialog } from "@/components/stock/edit-product-dialog";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatPrice, pluralize } from "@/lib/format";
 import { useStore } from "@/lib/store/use-store";
 import { updateProduct } from "@/lib/store/store";
@@ -80,9 +79,12 @@ function Step({ n, children, dark }: { n: number; children: React.ReactNode; dar
 }
 
 function PricingDetail({ product, cost, actual }: { product: Product; cost: ProductCostBreakdown; actual: { price: number | null; sales: number } }) {
-  const [showCosts, setShowCosts] = useState(false);
-  const [editingRecipe, setEditingRecipe] = useState(false);
-  const [showTiers, setShowTiers] = useState(false);
+  /**
+   * Three jobs, three tabs. The recipe used to open in a dialog over the page and the other
+   * rates hid behind a toggle labelled "Edit", so the two things she changes most often were
+   * the two hardest to find — and neither could be looked at while the price was on screen.
+   */
+  const [tab, setTab] = useState<"price" | "recipe" | "rates">("price");
   const price = effectiveProductPrice(product, cost);
   const profit = price - cost.costPerJar;
   const margin = price > 0 ? (profit / price) * 100 : 0;
@@ -93,7 +95,74 @@ function PricingDetail({ product, cost, actual }: { product: Product; cost: Prod
   return (
     <div className="flex flex-1 flex-col gap-4">
       <div className="flex flex-col gap-5 rounded-2xl border border-line/15 bg-white p-[22px]">
-        <div className="font-display text-xl font-semibold">{product.name}</div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="font-display text-xl font-semibold">{product.name}</div>
+          <PageTabs
+            tabs={[
+              ["price", "Price"],
+              ["recipe", "Recipe & costs"],
+              ["rates", "Other rates"],
+            ]}
+            value={tab}
+            onChange={setTab}
+          />
+        </div>
+
+        {tab === "recipe" && (
+          <div className="flex flex-col gap-4">
+            <CostBreakdown product={product} cost={cost} />
+            {cost.unconvertible.length > 0 && (
+              <div className="text-xs text-danger">
+                {`Couldn't price ${cost.unconvertible.join(", ")} — check the units in the recipe.`}
+              </div>
+            )}
+            <PricingCalculatorCard product={product} />
+          </div>
+        )}
+
+        {tab === "rates" && (
+          <div className="flex flex-col gap-4">
+            <p className="text-[13px] text-muted-foreground">
+              What you charge people who aren&apos;t walk-up buyers. Each one is checked against what the jar costs you,
+              so a friendly price stays a discount rather than a loss.
+            </p>
+            <div className="grid grid-cols-1 gap-4 text-[13px] min-[600px]:grid-cols-2">
+              {(
+                [
+                  ["friendPrice", "Friend price", "Family, neighbours, regulars who buy direct."],
+                  ["wholesalePrice", "Wholesale price", "Shops and resellers buying in bulk."],
+                ] as const
+              ).map(([key, label, hint]) => {
+                const tierProfit = product[key] - cost.costPerJar;
+                const below = product[key] < price;
+                return (
+                  <div key={key} className="flex flex-col gap-1.5 rounded-xl border border-line/15 p-4">
+                    <span className="text-sm font-semibold">{label}</span>
+                    <span className="text-xs text-muted-foreground">{hint}</span>
+                    <CommitNumber value={product[key]} onCommit={(n) => updateProduct(product.id, { [key]: n })} prefix="₱" />
+                    {!costable ? (
+                      <span className="text-xs text-muted-foreground">
+                        Can&apos;t say if this covers your costs until the recipe is priced.
+                      </span>
+                    ) : (
+                      <span className={`text-xs font-semibold ${tierProfit >= 0 ? "text-success" : "text-danger"}`}>
+                        {tierProfit >= 0 ? `${peso(tierProfit)} profit a jar` : `Loses ${peso(-tierProfit)} a jar`}
+                      </span>
+                    )}
+                    {costable && product[key] > 0 && (
+                      <span className="text-[11px] text-muted-foreground">
+                        {below ? `${peso(price - product[key])} below your normal price` : "At or above your normal price"}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {tab === "price" && (
+        <>
 
         <Step n={1}>
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -109,16 +178,10 @@ function PricingDetail({ product, cost, actual }: { product: Product; cost: Prod
                 </>
               )}
             </div>
-            <div className="flex gap-3 text-xs font-semibold text-cacao">
-              <button type="button" onClick={() => setShowCosts((v) => !v)}>
-                {showCosts ? "Hide breakdown" : "See breakdown"}
-              </button>
-              <button type="button" onClick={() => setEditingRecipe(true)}>
-                Edit recipe & costs
-              </button>
-            </div>
+            <button type="button" onClick={() => setTab("recipe")} className="text-xs font-semibold text-cacao">
+              See the recipe
+            </button>
           </div>
-          {showCosts && <CostBreakdown product={product} cost={cost} />}
           {cost.unconvertible.length > 0 && (
             <div className="mt-2 text-xs text-danger">Couldn&apos;t price {cost.unconvertible.join(", ")} — check the units in the recipe.</div>
           )}
@@ -194,49 +257,9 @@ function PricingDetail({ product, cost, actual }: { product: Product; cost: Prod
             </div>
           )}
         </Step>
-      </div>
-
-      <div className="rounded-2xl border border-line/15 bg-white px-[22px] py-4">
-        <button type="button" onClick={() => setShowTiers((v) => !v)} className="flex w-full flex-wrap items-center justify-between gap-2 text-sm">
-          <span className="font-semibold">Other prices</span>
-          <span className="text-xs text-muted-foreground">
-            Friend {peso(product.friendPrice)} · Wholesale {peso(product.wholesalePrice)}
-            <span className="ml-3 font-semibold text-cacao">{showTiers ? "Hide" : "Edit"}</span>
-          </span>
-        </button>
-        {showTiers && (
-          <div className="mt-4 grid grid-cols-1 gap-4 text-[13px] min-[600px]:grid-cols-2">
-            {(
-              [
-                ["friendPrice", "Friend price"],
-                ["wholesalePrice", "Wholesale price"],
-              ] as const
-            ).map(([key, label]) => {
-              const tierProfit = product[key] - cost.costPerJar;
-              return (
-                <div key={key} className="flex flex-col gap-1">
-                  <span className="text-muted-foreground">{label}</span>
-                  <CommitNumber value={product[key]} onCommit={(n) => updateProduct(product.id, { [key]: n })} prefix="₱" />
-                  <span className={`text-xs font-semibold ${tierProfit >= 0 ? "text-success" : "text-danger"}`}>
-                    {tierProfit >= 0 ? `${peso(tierProfit)} profit a jar` : "Below cost"}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+        </>
         )}
       </div>
-
-      {editingRecipe && (
-        <Dialog open onOpenChange={(o) => !o && setEditingRecipe(false)}>
-          <DialogContent className="max-h-[88vh] overflow-y-auto rounded-2xl sm:max-w-3xl">
-            <DialogHeader>
-              <DialogTitle>{product.name} — recipe & costs</DialogTitle>
-            </DialogHeader>
-            <PricingCalculatorCard product={product} />
-          </DialogContent>
-        </Dialog>
-      )}
     </div>
   );
 }

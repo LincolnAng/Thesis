@@ -3,7 +3,16 @@
 import { useState } from "react";
 import { useStore } from "@/lib/store/use-store";
 import { hashPin, signIn, useCurrentUser } from "@/lib/auth/current-user";
+import { CARD_GRADIENTS } from "@/lib/summary/item-icons";
 import type { AppUser } from "@/lib/store/types";
+
+/** Up to two letters, so a tile reads as a person rather than a word. */
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
 
 /**
  * "Who's using this?" — shown over the app until somebody on the shared device says who
@@ -43,17 +52,17 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-ivory px-4">
-      <div className="w-full max-w-[420px] rounded-2xl border border-line/15 bg-white p-7">
-        <div className="mb-1 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cacao font-display text-lg font-bold text-ivory">
+    <div className="flex min-h-screen items-center justify-center bg-ivory px-4 py-10">
+      <div className={`w-full ${picked ? "max-w-[420px]" : "max-w-[640px]"}`}>
+        <div className="mb-6 flex flex-col items-center gap-3 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cacao font-display text-xl font-bold text-ivory">
             M
           </div>
-          <h1 className="font-display text-[26px] font-semibold">Who&apos;s using this?</h1>
+          <h1 className="font-display text-[30px] font-semibold">Who&apos;s using this?</h1>
         </div>
 
         {picked ? (
-          <>
+          <div className="rounded-2xl border border-line/15 bg-white p-7">
             <p className="mb-4 text-[14px] text-muted-foreground">
               Enter {picked.name}&apos;s 4-digit PIN.
             </p>
@@ -89,23 +98,33 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
                 Back
               </button>
             </div>
-          </>
+          </div>
         ) : (
           <>
-            <p className="mb-4 text-[14px] text-muted-foreground">
+            <p className="mb-6 text-center text-[14px] text-muted-foreground">
               Tap your name. Everything you save gets your name on it, so the shop knows who did what.
             </p>
-            <div className="flex flex-col gap-2">
-              {users.map((person) => (
+            {/* Tiles rather than a list of rows: this is the first thing anyone sees on a
+                shared tablet, it is tapped with a thumb, and a face-sized target is quicker to
+                hit than a line of text. */}
+            <div className="flex flex-wrap items-start justify-center gap-5">
+              {users.map((person, i) => (
                 <button
                   key={person.id}
                   type="button"
                   onClick={() => choose(person)}
-                  className="flex items-center justify-between gap-3 rounded-xl border border-line/15 px-4 py-3 text-left transition hover:border-cacao/40"
+                  className="group flex w-[128px] flex-col items-center gap-2.5"
                 >
-                  <span className="text-[15px] font-semibold">{person.name}</span>
-                  <span className="text-[12px] text-muted-foreground">
-                    {person.role === "owner" ? "Owner" : "Helper"}
+                  <span
+                    className={`flex h-[128px] w-[128px] items-center justify-center rounded-2xl bg-gradient-to-br ${CARD_GRADIENTS[i % CARD_GRADIENTS.length]} font-display text-[44px] font-bold text-white/95 shadow-sm ring-0 transition group-hover:scale-[1.03] group-hover:ring-2 group-hover:ring-cacao/50 group-focus-visible:ring-2 group-focus-visible:ring-cacao`}
+                  >
+                    {initials(person.name)}
+                  </span>
+                  <span className="flex flex-col items-center">
+                    <span className="text-[15px] font-semibold transition group-hover:text-cacao">{person.name}</span>
+                    <span className="text-[12px] text-muted-foreground">
+                      {person.role === "owner" ? "Owner" : "Helper"}
+                    </span>
                   </span>
                 </button>
               ))}

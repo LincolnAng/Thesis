@@ -184,6 +184,10 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
 
   const effectivePrice = effectiveProductPrice(product, cost);
 
+  // A part-priced recipe has no total. Showing one here while the rest of the page says the
+  // cost is unknown would make the page argue with itself, and the figure that looks most
+  // authoritative — a big number under "Total cost" — would be the wrong one.
+  const costable = cost.unpriced.length === 0;
   const standardProfit = effectivePrice - cost.costPerJar;
   const standardBelowCost = standardProfit < 0;
 
@@ -274,24 +278,36 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="grid gap-4 min-[640px]:grid-cols-[1fr_auto]">
-          <PricingMethodPicker product={product} costPerJar={cost.costPerJar} effectivePrice={effectivePrice} />
+          <PricingMethodPicker product={product} costPerJar={costable ? cost.costPerJar : 0} effectivePrice={effectivePrice} />
           <div className="space-y-1.5 min-[640px]:text-right">
             <Label className="text-xs font-semibold text-muted-foreground">Total cost</Label>
-            <p className="text-lg font-semibold text-foreground">
-              {formatPeso(cost.costPerJar)} <span className="text-xs font-normal text-muted-foreground">/jar</span>
-            </p>
+            {costable ? (
+              <p className="text-lg font-semibold text-foreground">
+                {formatPeso(cost.costPerJar)} <span className="text-xs font-normal text-muted-foreground">/jar</span>
+              </p>
+            ) : (
+              <p className="text-lg font-semibold text-muted-foreground">
+                — <span className="text-xs font-normal">{`nothing bought for ${cost.unpriced.join(", ")}`}</span>
+              </p>
+            )}
           </div>
         </div>
 
         <p
           className={cn(
             "text-sm font-medium",
-            standardBelowCost ? "text-[var(--status-warning)]" : "text-[var(--status-good)]",
+            !costable
+              ? "text-muted-foreground"
+              : standardBelowCost
+                ? "text-[var(--status-warning)]"
+                : "text-[var(--status-good)]",
           )}
         >
-          {standardBelowCost
-            ? `You lose ${formatPeso(Math.abs(standardProfit))} on every jar you sell at the regular price.`
-            : `You make ${formatPeso(standardProfit)} profit on every jar you sell at the regular price.`}
+          {!costable
+            ? `Profit per jar can't be worked out until you log buying ${cost.unpriced.join(", ")}.`
+            : standardBelowCost
+              ? `You lose ${formatPeso(Math.abs(standardProfit))} on every jar you sell at the regular price.`
+              : `You make ${formatPeso(standardProfit)} profit on every jar you sell at the regular price.`}
         </p>
 
         <Button size="sm" variant="ghost" className="w-full gap-1 text-xs text-muted-foreground" onClick={() => setShowMore((v) => !v)}>
@@ -390,9 +406,11 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
                 Needs <span className="font-semibold">{formatPeso(totalForRun)}</span> total · makes{" "}
                 <span className="font-semibold">{jarsForRun}</span> jars
               </p>
-              <p className="text-xs text-muted-foreground">
-                Cost per jar stays {formatPeso(cost.costPerJar)} no matter how many batches you make.
-              </p>
+              {costable && (
+                <p className="text-xs text-muted-foreground">
+                  Cost per jar stays {formatPeso(cost.costPerJar)} no matter how many batches you make.
+                </p>
+              )}
               {shortages.length > 0 && (
                 <div className="space-y-1 rounded-lg border border-[var(--status-warning)] bg-amber-50 p-2 dark:bg-amber-950/30">
                   {shortages.map(({ material, needed, short }) => (

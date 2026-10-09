@@ -107,9 +107,20 @@ export function CostBreakdown({ product, cost }: { product: Product; cost: Produ
         </div>
       </Group>
 
-      <div className="flex items-baseline justify-between gap-3 border-t border-line/20 py-2.5">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t border-line/20 py-2.5">
         <span className="text-[12px] font-bold uppercase tracking-wide">Total</span>
-        <span className="font-display text-[17px] font-semibold">{`${formatPrice(cost.costPerJar)} a jar`}</span>
+        {cost.unpriced.length === 0 ? (
+          <span className="font-display text-[17px] font-semibold">{`${formatPrice(cost.costPerJar)} a jar`}</span>
+        ) : (
+          // A sum that silently omits its unpriced lines is the most authoritative-looking
+          // number on the page and the least true. Say what is missing instead.
+          <span className="text-right">
+            <span className="font-display text-[17px] font-semibold text-[#9A6B12]">Not yet known</span>
+            <span className="block text-[11px] text-muted-foreground">
+              {`${formatPrice(cost.costPerJar)} so far — nothing bought for ${cost.unpriced.join(", ")}`}
+            </span>
+          </span>
+        )}
       </div>
 
       {cost.unconvertible.length > 0 && (
