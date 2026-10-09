@@ -388,8 +388,10 @@ export default function InventoryPage() {
                     <span className="shrink-0 whitespace-nowrap">
                       <span className={`font-semibold ${belowWarning ? "text-danger" : "text-[#9A6B12]"}`}>{pluralize(p.stockQty, "jar")}</span>
                       <span className="text-xs text-muted-foreground">
-                        {" "}
-                        / {need > p.stockQty ? `needs ${need}` : `warn below ${p.lowStockThreshold}`}
+                        {" · "}
+                        {need > p.stockQty
+                          ? `needs ${need}`
+                          : `you set a warning at ${p.lowStockThreshold}`}
                       </span>
                     </span>
                   </div>
@@ -437,7 +439,7 @@ export default function InventoryPage() {
                 {plan.batchesExpiring > 0 && (
                   <div className="mt-0.5 text-[11px] font-semibold text-[#9A6B12]">
                     {pluralize(plan.batchesExpiring, "batch", "batches")} would be made too early to still be good —
-                    try Latest
+                    try Latest Start
                   </div>
                 )}
               </div>

@@ -196,7 +196,7 @@ function ProductFilter({
             {all.map((f) => {
               const on = !excluded.has(f.productId);
               return (
-                <div key={f.productId} className="flex items-center gap-1">
+                <div key={f.productId} className="flex items-center">
                   <button
                     type="button"
                     onClick={() => {
@@ -218,15 +218,6 @@ function ProductFilter({
                       {on && <Check className="h-3 w-3" />}
                     </span>
                     <span className="truncate">{f.productName}</span>
-                  </button>
-                  {/* The reason this filter exists is reading one product down twelve months,
-                      so that is one tap rather than unticking everything else. */}
-                  <button
-                    type="button"
-                    onClick={() => onChange(new Set(all.map((x) => x.productId).filter((id) => id !== f.productId)))}
-                    className="shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:bg-secondary hover:text-cacao"
-                  >
-                    only
                   </button>
                 </div>
               );
