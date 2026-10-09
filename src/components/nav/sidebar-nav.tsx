@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils";
 import { useViewMode } from "@/lib/summary/view-mode";
 import { NAV_ITEMS, SETTINGS_ITEM, type NavItem } from "@/lib/nav-items";
 import { useCurrentUser, signOut } from "@/lib/auth/current-user";
-import { useIsHelper } from "@/lib/auth/permissions";
 
 function isActive(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -38,7 +37,6 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
  */
 export function SidebarNav() {
   const pathname = usePathname();
-  const helper = useIsHelper();
   const me = useCurrentUser();
 
   return (
@@ -60,15 +58,13 @@ export function SidebarNav() {
       </div>
 
       <nav className="flex w-full flex-col gap-1">
-        {NAV_ITEMS.filter((item) => !(item.ownerOnly && helper)).map((item) => (
+        {NAV_ITEMS.map((item) => (
           <NavLink key={item.href} item={item} active={isActive(pathname, item.href)} />
         ))}
       </nav>
 
       <div className="mt-auto w-full space-y-1">
-        {!(SETTINGS_ITEM.ownerOnly && helper) && (
-          <NavLink item={SETTINGS_ITEM} active={isActive(pathname, SETTINGS_ITEM.href)} />
-        )}
+        <NavLink item={SETTINGS_ITEM} active={isActive(pathname, SETTINGS_ITEM.href)} />
         {/* Whoever is holding the tablet, and one tap to hand it over. Switching used to be
             buried in Settings, which a helper cannot even open. */}
         {me && (

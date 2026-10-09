@@ -25,7 +25,7 @@ import type { Entry, ExpenseCategory, PriceType } from "@/lib/store/types";
  * Sheets quota. Dropdowns commit on choice, since there's nothing to finish typing.
  */
 
-const COLUMNS = "grid-cols-[124px_100px_minmax(0,1.1fr)_120px_minmax(0,1fr)_126px_116px_72px]";
+const COLUMNS = "grid-cols-[124px_100px_minmax(0,1.1fr)_120px_minmax(0,1fr)_126px_116px_96px_56px]";
 
 // Every cell carries its own box, empty or not: a grid of invisible inputs gives nothing to
 // aim at, and "is this editable?" shouldn't depend on guessing.
@@ -256,7 +256,7 @@ export function TransactionGrid({
 
       <div className="min-w-[860px]">
         <div className={`grid ${COLUMNS} gap-1 border-b border-line/15 bg-secondary px-2`}>
-          {["Date", "Type", "Item", "Qty", "Customer / Supplier", "Category", "Amount", "Logged by"].map((h) => (
+          {["Date", "Type", "Item", "Qty", "Customer / Supplier", "Category", "Amount", "Logged by", ""].map((h) => (
             <div
               key={h}
               className={`px-1 py-2.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground ${h === "Qty" || h === "Amount" ? "text-right" : ""}`}
@@ -319,6 +319,7 @@ export function TransactionGrid({
                 onCommit={(v) => changeNew({ amount: num(v) })}
               />
             )}
+            <span />
             <div className="flex items-center gap-1">
               <button
                 type="button"
@@ -402,17 +403,10 @@ export function TransactionGrid({
                 onCommit={(v) => patch(e, { amount: num(v) })}
               />
             )}
-            <span className="flex items-center gap-1">
-              {e.loggedByName && (
-                <span
-                  title={`Logged by ${e.loggedByName}`}
-                  className="hidden max-w-[5.5rem] truncate text-[10px] text-muted-foreground min-[1100px]:inline"
-                >
-                  {e.loggedByName}
-                </span>
-              )}
-              <ConfirmDelete onConfirm={() => deleteEntry(e.id)} />
+            <span className="truncate px-1 text-[11px] text-muted-foreground" title={e.loggedByName ?? ""}>
+              {e.loggedByName ?? "—"}
             </span>
+            <ConfirmDelete onConfirm={() => deleteEntry(e.id)} />
           </div>
         ))}
 

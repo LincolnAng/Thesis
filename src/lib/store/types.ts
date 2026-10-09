@@ -233,9 +233,12 @@ export interface SyncStatus {
 export interface AppUser {
   id: string;
   name: string;
-  /** SHA-256 of the user's id + PIN. Empty means "no PIN set" — anyone can pick that name. */
+  /** Legacy hashed PIN from before profiles were created in the spreadsheet. Still accepted
+   *  on sign-in so nobody set up the old way is locked out. */
   pinHash: string;
-  /** Owners can manage people and reset data; helpers can log and edit the day's work. */
+  /** The four digits, as typed in the Users sheet. See sheets/users.ts on why it is plain. */
+  pin?: string;
+  /** Kept so old rows round-trip. Nothing reads it — everyone who signs in can do everything. */
   role: "owner" | "helper";
   createdAt: string;
 }

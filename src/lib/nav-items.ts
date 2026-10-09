@@ -3,8 +3,6 @@ import { ArrowLeftRight, Box, Home, Settings, ShoppingBag, Tag, Users, type Luci
 export interface NavItem {
   href: string;
   label: string;
-  /** Hidden from helpers. See auth/permissions.ts for what that does and does not mean. */
-  ownerOnly?: boolean;
   /** Plain-words name shown in Simple mode, when it differs. */
   simpleLabel?: string;
   icon: LucideIcon;
@@ -21,12 +19,12 @@ export interface NavItem {
  */
 export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Home", icon: Home },
-  { href: "/transactions", label: "Money", icon: ArrowLeftRight, ownerOnly: true },
+  { href: "/transactions", label: "Money", icon: ArrowLeftRight },
   { href: "/products", label: "Inventory", icon: ShoppingBag },
   { href: "/inventory", label: "Stock", icon: Box },
   { href: "/people", label: "People", icon: Users },
-  { href: "/pricing", label: "Prices", icon: Tag, ownerOnly: true },
+  { href: "/pricing", label: "Prices", icon: Tag },
 ];
 
 /** Pinned to the bottom of the sidebar, below the main sections. */
-export const SETTINGS_ITEM: NavItem = { href: "/settings", label: "Settings", icon: Settings, ownerOnly: true };
+export const SETTINGS_ITEM: NavItem = { href: "/settings", label: "Settings", icon: Settings };

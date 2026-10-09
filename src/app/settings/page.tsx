@@ -1,6 +1,5 @@
 "use client";
 
-import { OwnerOnly } from "@/components/auth/owner-only";
 import { useEffect, useState, type ChangeEvent } from "react";
 import { useTheme } from "next-themes";
 import { CalendarClock, ChevronDown, ChevronUp, Database, Download, KeyRound, Languages, Minus, Moon, Plus, Sheet, Trash2, Type, Upload } from "lucide-react";
@@ -109,7 +108,7 @@ function ExpiryWarningCard() {
   );
 }
 
-function SettingsPageInner() {
+export default function SettingsPageInner() {
   const [viewMode] = useViewMode();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -627,12 +626,3 @@ function SettingsPageInner() {
   );
 }
 
-
-/** A helper who types the URL lands here instead of on the owner's screens. */
-export default function SettingsPageGuarded() {
-  return (
-    <OwnerOnly what="Settings">
-      <SettingsPageInner />
-    </OwnerOnly>
-  );
-}

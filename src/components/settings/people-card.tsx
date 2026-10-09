@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDeleteButton } from "@/components/data-table/confirm-delete-button";
 import { useStore } from "@/lib/store/use-store";
 import { addUser, deleteUser, updateUser, canUndo, undoActivity } from "@/lib/store/store";
-import { hashPin, signOut, useCurrentUser } from "@/lib/auth/current-user";
+import { signOut, useCurrentUser } from "@/lib/auth/current-user";
 import type { AppUser } from "@/lib/store/types";
 
 /**
@@ -39,20 +39,21 @@ export function PeopleCard() {
   const [resetting, setResetting] = useState<string | null>(null);
   const [newPin, setNewPin] = useState("");
 
-  async function add() {
+  function add() {
     const trimmed = name.trim();
     if (!trimmed) return;
-    // The id is part of the hash, so it has to exist before the PIN can be hashed — the
-    // row is created first and its PIN set a moment later.
+    // Plain digits, matching what somebody would type straight into the sheet — see
+    // sheets/users.ts for why the hash was the wrong fit once the sheet became the way in.
     const user = addUser(trimmed, "", role);
-    if (pin.trim()) updateUser(user.id, { pinHash: await hashPin(user.id, pin) });
+    updateUser(user.id, { pin: pin.replace(/\D/g, "").slice(0, 4) });
     setName("");
     setPin("");
     setRole("helper");
   }
 
-  async function savePin(user: AppUser) {
-    updateUser(user.id, { pinHash: await hashPin(user.id, newPin) });
+  function savePin(user: AppUser) {
+    // Writing `pin` also clears any old hash, so the two can never disagree about the digits.
+    updateUser(user.id, { pin: newPin.replace(/\D/g, "").slice(0, 4), pinHash: "" });
     setResetting(null);
     setNewPin("");
   }
@@ -67,9 +68,10 @@ export function PeopleCard() {
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Everyone picks their name when they open the app, and everything they save gets their name on it. The
-            4-digit PIN keeps the helpers from saving as each other by accident — it is not a password, and anyone
-            who can open your Google Sheet can change it.
+            Everyone picks their name when they open the app, and everything they save gets their name on it.
+            Add someone by putting their name and a 4-digit PIN in the <span className="font-semibold">Users</span>{" "}
+            tab of your Google Sheet — they appear at the next sync. The PIN keeps two people on one tablet from
+            saving as each other; it is not a password, and anyone who can open the sheet can read or change it.
           </p>
 
           {users.length > 0 && (
@@ -82,7 +84,7 @@ export function PeopleCard() {
                       {me?.id === user.id && <span className="text-muted-foreground"> · you</span>}
                     </span>
                     <span className="block text-xs text-muted-foreground">
-                      {user.role === "owner" ? "Owner" : "Helper"} · {user.pinHash ? "PIN set" : "no PIN"}
+                      {user.pin || user.pinHash ? "PIN set" : "No PIN yet — they can't sign in"}
                     </span>
                   </span>
                   {resetting === user.id ? (
@@ -91,7 +93,7 @@ export function PeopleCard() {
                         autoFocus
                         type="password"
                         inputMode="numeric"
-                        maxLength={8}
+                        maxLength={4}
                         placeholder="New PIN"
                         className="h-9 w-24"
                         value={newPin}
@@ -107,13 +109,6 @@ export function PeopleCard() {
                     </span>
                   ) : (
                     <span className="flex items-center gap-1.5">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => updateUser(user.id, { role: user.role === "owner" ? "helper" : "owner" })}
-                      >
-                        Make {user.role === "owner" ? "helper" : "owner"}
-                      </Button>
                       <Button size="sm" variant="secondary" onClick={() => (setResetting(user.id), setNewPin(""))}>
                         Set PIN
                       </Button>

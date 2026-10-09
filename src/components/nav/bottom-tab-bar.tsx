@@ -5,16 +5,14 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useViewMode } from "@/lib/summary/view-mode";
 import { NAV_ITEMS, SETTINGS_ITEM } from "@/lib/nav-items";
-import { useIsHelper } from "@/lib/auth/permissions";
 
 export function BottomTabBar() {
   const pathname = usePathname();
   const [mode] = useViewMode();
-  const helper = useIsHelper();
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 flex overflow-x-auto border-t border-line/10 bg-card min-[900px]:hidden">
-      {[...NAV_ITEMS, SETTINGS_ITEM].filter((item) => !(item.ownerOnly && helper)).map((item) => {
+      {[...NAV_ITEMS, SETTINGS_ITEM].map((item) => {
         const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
         const Icon = item.icon;
         return (

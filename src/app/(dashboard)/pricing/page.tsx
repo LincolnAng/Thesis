@@ -1,6 +1,5 @@
 "use client";
 
-import { OwnerOnly } from "@/components/auth/owner-only";
 import { useMemo, useState } from "react";
 import { Page, PageTabs } from "@/components/layout/page";
 import { PricingCalculatorCard } from "@/components/finance/pricing-calculator-card";
@@ -261,7 +260,7 @@ function PricingDetail({ product, cost, actual }: { product: Product; cost: Prod
   );
 }
 
-function PricingPageInner() {
+export default function PricingPageInner() {
   const { products, entries } = useStore();
   const costCtx = useCostContext();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -344,12 +343,3 @@ function PricingPageInner() {
   );
 }
 
-
-/** A helper who types the URL lands here instead of on the owner's screens. */
-export default function PricingPageGuarded() {
-  return (
-    <OwnerOnly what="Prices">
-      <PricingPageInner />
-    </OwnerOnly>
-  );
-}
