@@ -30,12 +30,12 @@ export function ProductExpiryStrip({ product }: { product: Product }) {
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <span className="font-semibold text-muted-foreground">Shelf life</span>
         <input
-          type="number"
-          min={1}
+          type="text"
+          inputMode="numeric"
           defaultValue={life}
           onClick={(e) => e.stopPropagation()}
           onBlur={(e) => {
-            const days = Number(e.target.value);
+            const days = Number(e.target.value.trim());
             if (Number.isFinite(days) && days > 0 && days !== life) setShelfLifeDays(product.id, days);
             else e.target.value = String(life);
           }}

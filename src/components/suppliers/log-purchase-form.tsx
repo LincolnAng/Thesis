@@ -58,9 +58,9 @@ export function LogPurchaseForm({ supplier, materials }: { supplier: Supplier; m
             ))}
           </select>
           <span className="text-muted-foreground">paid ₱</span>
-          <input className={`${field} w-24`} type="number" inputMode="decimal" value={paid} onChange={(e) => (setPaid(e.target.value), setSaved(false))} aria-label="Amount paid" />
+          <input className={`${field} w-24`} type="text" inputMode="decimal" value={paid} onChange={(e) => (setPaid(e.target.value), setSaved(false))} aria-label="Amount paid" />
           <span className="text-muted-foreground">for</span>
-          <input className={`${field} w-20`} type="number" inputMode="decimal" value={qty} onChange={(e) => (setQty(e.target.value), setSaved(false))} aria-label="Quantity" />
+          <input className={`${field} w-20`} type="text" inputMode="decimal" value={qty} onChange={(e) => (setQty(e.target.value), setSaved(false))} aria-label="Quantity" />
           <span className="text-muted-foreground">{material?.unit ?? ""}</span>
           <button type="button" onClick={save} disabled={!valid} className="ml-auto rounded-lg bg-cacao px-3.5 py-1.5 text-xs font-semibold text-ivory disabled:opacity-40">
             Save

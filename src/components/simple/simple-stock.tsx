@@ -2,9 +2,10 @@
 
 import { PackagePlus, Plus } from "lucide-react";
 import type { ProductionPlan } from "@/lib/summary/production-schedule";
-import type { Product } from "@/lib/store/types";
+import type { Entry, Product } from "@/lib/store/types";
 import { pluralize } from "@/lib/format";
 import { shelfOutlook, wasteShare } from "@/lib/summary/shelf-life";
+import { productExpiry } from "@/lib/summary/product-lots";
 import { PlanFixes } from "@/components/inventory/plan-fixes";
 import type { PlanFix } from "@/lib/summary/plan-contingency";
 import { AdvancedHint, BigButton, Em, Gauge, Headline, SectionTitle, SentenceList, SentenceRow, type Tone } from "@/components/simple/simple-ui";
@@ -16,7 +17,21 @@ const RANK: Record<Tone, number> = { bad: 0, warn: 1, neutral: 2, good: 3 };
  * which produced "enough for about 104 weeks" for jars that keep for thirteen. Where the
  * surplus will expire first, that is the sentence worth reading.
  */
-function shelfText(stockQty: number, weeks: number | null, jarsAtRisk: number, shelfLifeWeeks: number): string {
+function shelfText(
+  stockQty: number,
+  weeks: number | null,
+  jarsAtRisk: number,
+  shelfLifeWeeks: number,
+  dated: { expired: number; expiring: number; tracksAnything: boolean },
+): string {
+  const jarsWord = pluralize(stockQty, "jar");
+  // What is actually old on the shelf today, where the batches say so.
+  if (dated.tracksAnything && dated.expired > 0) {
+    return `${jarsWord} — ${dated.expired} already past the date`;
+  }
+  if (dated.tracksAnything && dated.expiring > 0) {
+    return `${jarsWord} — sell ${dated.expiring} soon, they're nearly out of time`;
+  }
   const jars = pluralize(stockQty, "jar");
   if (jarsAtRisk >= 1) {
     const window = shelfLifeWeeks >= 1 ? pluralize(Math.round(shelfLifeWeeks), "week") : "a week";
@@ -41,6 +56,8 @@ export function SimpleStock({
   onAddProduct,
   onEditProduct,
   shelfLifeOf,
+  entries,
+  expiringWithin,
   fixes,
 }: {
   products: Product[];
@@ -50,6 +67,9 @@ export function SimpleStock({
   onEditProduct: (id: string) => void;
   /** Days each product keeps for, so the shelf can tell cover apart from surplus. */
   shelfLifeOf: (productId: string) => number;
+  /** Her ledger and warning window, so the shelf can use real batch dates where they exist. */
+  entries: Entry[];
+  expiringWithin: number;
   /** What to change when the plan can't be met. Simple mode needs this most — it has no
    *  calendar to go and read, so "no free day" is otherwise the end of the conversation. */
   fixes: PlanFix[];
@@ -63,6 +83,11 @@ export function SimpleStock({
       const monthly = monthlyOf(p.id);
       const outlook = shelfOutlook(p.stockQty, monthly, shelfLifeOf(p.id));
       const weeks = outlook.realWeeks;
+      // Real batch dates beat a projection. shelfOutlook answers "will she sell this before
+      // it goes off, at the rate she sells?", which is a forecast; productExpiry answers
+      // "how old is what is actually on the shelf?", which is a fact — and a fact about
+      // today outranks a guess about next month.
+      const dated = productExpiry(entries, p, shelfLifeOf(p.id), expiringWithin);
       const belowWarning = p.stockQty <= p.lowStockThreshold;
       // Too much is a problem too, and it used to show as a comfortable green "Enough". If
       // most of a shelf will pass its best-before first, that is not cover — it is a loss that
@@ -75,19 +100,23 @@ export function SimpleStock({
       // Without sales history, fall back to the owner's own warning level: at or below it is
       // low, within twice of it is getting there.
       const tone: Tone =
-        belowWarning || (weeks !== null && weeks < 2)
+        dated.expired > 0 || belowWarning || (weeks !== null && weeks < 2)
           ? "bad"
           : overstocked || (weeks !== null && weeks < 4) || (weeks === null && p.stockQty <= p.lowStockThreshold * 2)
             ? "warn"
             : "good";
-      const status = belowWarning || (weeks !== null && weeks < 2)
+      const status = dated.expired > 0
+        ? "Some past the date"
+        : dated.expiring > 0
+          ? "Use these first"
+          : belowWarning || (weeks !== null && weeks < 2)
         ? "Running low"
         : overstocked
           ? "Too much"
           : tone === "warn"
             ? "Getting low"
             : "Enough";
-      return { p, weeks, tone, status, outlook };
+      return { p, weeks, tone, status, outlook, dated };
     })
     // Most urgent first: running low, then getting low, then enough; fewest weeks left within each.
     .sort((a, b) => RANK[a.tone] - RANK[b.tone] || (a.weeks ?? 99) - (b.weeks ?? 99) || a.p.stockQty - b.p.stockQty);
@@ -149,14 +178,14 @@ export function SimpleStock({
       <div>
         <SectionTitle>On your shelf</SectionTitle>
         <div className="flex flex-col gap-5 rounded-2xl border border-line/15 bg-white p-5">
-          {shelf.map(({ p, weeks, tone, status, outlook }) => (
+          {shelf.map(({ p, weeks, tone, status, outlook, dated }) => (
             <button key={p.id} type="button" onClick={() => onEditProduct(p.id)} className="text-left" title="Tap to change this product">
               <Gauge
                 label={p.name}
                 tone={tone}
                 status={status}
                 pct={weeks !== null ? (weeks / 8) * 100 : (p.stockQty / Math.max(p.stockQty, p.lowStockThreshold * 3, 1)) * 100}
-                text={shelfText(p.stockQty, weeks, outlook.jarsAtRisk, outlook.shelfLifeWeeks)}
+                text={shelfText(p.stockQty, weeks, outlook.jarsAtRisk, outlook.shelfLifeWeeks, dated)}
               />
             </button>
           ))}

@@ -27,6 +27,7 @@ import {
 } from "@/lib/summary/production-schedule";
 import {
   eventPlan,
+  expiringWithinDays,
   shelfLifeDays,
   toggleUnavailableDay,
   unavailableDays,
@@ -230,7 +231,7 @@ function StockVsForecast({
 }
 
 export default function InventoryPage() {
-  const { products, machines, events, businessSettings } = useStore();
+  const { products, entries, machines, events, businessSettings } = useStore();
   const [viewMode] = useViewMode();
   const simple = viewMode === "simple";
   const [strategy, setStrategy] = useState<ScheduleStrategy>("fastest");
@@ -339,6 +340,8 @@ export default function InventoryPage() {
           onAddProduct={() => setAddProductOpen(true)}
           onEditProduct={(id) => setEditingProductId(id)}
           shelfLifeOf={(id) => shelfLifeDays(businessSettings, id)}
+          entries={entries}
+          expiringWithin={expiringWithinDays(businessSettings)}
           fixes={fixes}
         />
       ) : (

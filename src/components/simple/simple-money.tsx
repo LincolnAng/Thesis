@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowDownCircle, ArrowUpCircle } from "lucide-react";
+import { ArrowDownCircle, ArrowUpCircle, Trash2 } from "lucide-react";
 import { QuickEditDialog } from "@/components/home/quick-edit-dialog";
 import { SettingNumberInput } from "@/components/ui/setting-number-input";
 import { useStore } from "@/lib/store/use-store";
@@ -34,18 +34,23 @@ const SHOW_FIRST = 8;
 export function SimpleMoney() {
   const { entries, categoryBudgets, businessSettings } = useStore();
   const [offset, setOffset] = useState<0 | -1>(0);
-  const [adding, setAdding] = useState<"SALE" | "EXPENSE" | null>(null);
+  const [adding, setAdding] = useState<"SALE" | "EXPENSE" | "WASTE" | null>(null);
   const [editing, setEditing] = useState<Entry | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [editingGoal, setEditingGoal] = useState(false);
 
   const month = monthKey(offset);
   const rows = entries
-    .filter((e) => (e.type === "SALE" || e.type === "EXPENSE") && monthKeyOf(e.timestamp) === month)
+    .filter(
+      (e) => (e.type === "SALE" || e.type === "EXPENSE" || e.type === "WASTE") && monthKeyOf(e.timestamp) === month,
+    )
     .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
   const moneyIn = rows.filter((e) => e.type === "SALE").reduce((s, e) => s + (e.amount ?? 0), 0);
   const moneyOut = rows.filter((e) => e.type === "EXPENSE").reduce((s, e) => s + (e.amount ?? 0), 0);
-  const kept = moneyIn - moneyOut;
+  // Spoiled jars are a loss but not a payment — no peso left her hands — so they come off what
+  // she KEPT rather than being added to what she spent. Same rule as Advanced.
+  const spoiled = rows.filter((e) => e.type === "WASTE").reduce((s, e) => s + (e.amount ?? 0), 0);
+  const kept = moneyIn - moneyOut - spoiled;
   const goal = salesTarget(businessSettings);
   const budget = computeExpensesSummary(entries, categoryBudgets).budget;
   const name = monthName(month);
@@ -75,7 +80,13 @@ export function SimpleMoney() {
         <Headline sub="Tap a button below to add your first one.">Nothing recorded for {name} yet.</Headline>
       ) : kept >= 0 ? (
         <Headline tone="good" sub="“Kept” is what’s left from your sales after paying for things.">
-          In {name} you sold <Em>{formatPeso(moneyIn)}</Em> and spent <Em>{formatPeso(moneyOut)}</Em> — you kept <Em tone="good">{formatPeso(kept)}</Em>.
+          In {name} you sold <Em>{formatPeso(moneyIn)}</Em> and spent <Em>{formatPeso(moneyOut)}</Em>
+          {spoiled > 0 && (
+            <>
+              , and threw away <Em tone="bad">{formatPeso(spoiled)}</Em> worth
+            </>
+          )}{" "}
+          — you kept <Em tone="good">{formatPeso(kept)}</Em>.
         </Headline>
       ) : (
         <Headline tone="bad" sub="That can happen in a month you buy a lot of ingredients — it usually evens out when they’re sold.">
@@ -132,6 +143,7 @@ export function SimpleMoney() {
       <div className="flex flex-col gap-3 min-[640px]:flex-row">
         <BigButton icon={ArrowUpCircle} label="I sold something" hint="Money coming in" onClick={() => setAdding("SALE")} />
         <BigButton icon={ArrowDownCircle} label="I paid for something" hint="Money going out" onClick={() => setAdding("EXPENSE")} />
+        <BigButton icon={Trash2} label="Something spoiled" hint="Jars you had to throw away" onClick={() => setAdding("WASTE")} />
       </div>
 
       {rows.length > 0 && (
@@ -143,7 +155,13 @@ export function SimpleMoney() {
                 key={e.id}
                 onClick={() => setEditing(e)}
                 sub={shortDay(e.timestamp)}
-                right={<Em tone={e.type === "SALE" ? "good" : "bad"}>{`${e.type === "SALE" ? "+" : "−"}${formatPeso(e.amount)}`}</Em>}
+                right={
+                  <Em tone={e.type === "SALE" ? "good" : "bad"}>
+                    {e.type === "WASTE" && !e.amount
+                      ? "thrown away"
+                      : `${e.type === "SALE" ? "+" : "−"}${formatPeso(e.amount)}`}
+                  </Em>
+                }
               >
                 {entrySentence(e)}
               </SentenceRow>
@@ -163,7 +181,7 @@ export function SimpleMoney() {
         <QuickEditDialog
           open
           onOpenChange={(o) => !o && setAdding(null)}
-          title={adding === "SALE" ? "I sold something" : "I paid for something"}
+          title={adding === "SALE" ? "I sold something" : adding === "WASTE" ? "Something spoiled" : "I paid for something"}
           initial={blankEntryDraft(adding)}
           lockType
           onSave={(draft) => addEntry(draft)}
@@ -173,7 +191,13 @@ export function SimpleMoney() {
         <QuickEditDialog
           open
           onOpenChange={(o) => !o && setEditing(null)}
-          title={editing.type === "SALE" ? "Edit this sale" : "Edit this payment"}
+          title={
+            editing.type === "SALE"
+              ? "Edit this sale"
+              : editing.type === "WASTE"
+                ? "Edit this spoilage"
+                : "Edit this payment"
+          }
           initial={entryToDraft(editing)}
           lockType
           onSave={(draft) => replaceEntry(editing.id, draft)}

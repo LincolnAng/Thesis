@@ -51,7 +51,7 @@ function CommitNumber({
     <span className="inline-flex items-center gap-1 rounded-lg border border-line/20 bg-white px-2 py-1 focus-within:border-cacao">
       {prefix && <span className="text-[13px] text-muted-foreground">{prefix}</span>}
       <input
-        type="number"
+        type="text"
         inputMode="decimal"
         value={draft ?? String(Math.round(value * 100) / 100)}
         onChange={(e) => setDraft(e.target.value)}

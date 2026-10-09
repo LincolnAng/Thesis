@@ -37,12 +37,17 @@ export function QuantityStepper({
       </button>
       <div className="flex min-w-0 flex-1 items-center justify-center border-x border-input px-1">
         <input
-          type="number"
+          type="text"
           inputMode="decimal"
           aria-label="Quantity"
           className="min-w-0 flex-1 bg-transparent p-0 text-center text-sm leading-none tabular-nums outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           value={value === null ? 0 : value}
-          onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}
+          onChange={(e) => {
+            const raw = e.target.value.trim();
+            if (raw === "") return onChange(null);
+            const n = Number(raw);
+            if (Number.isFinite(n)) onChange(n);
+          }}
           onFocus={(e) => e.currentTarget.select()}
         />
       </div>
