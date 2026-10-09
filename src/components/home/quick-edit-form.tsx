@@ -15,6 +15,7 @@ import { SupplierNameInput } from "@/components/suppliers/supplier-name-input";
 import { ConfirmDeleteButton } from "@/components/data-table/confirm-delete-button";
 import { useStore } from "@/lib/store/use-store";
 import { EXPENSE_CATEGORY_LABELS, ENTRY_TYPE_LABELS, PRICE_TYPE_LABELS, formatPeso } from "@/lib/format";
+import { spoiledValue } from "@/lib/summary/spoilage";
 import { productUnit } from "@/lib/units";
 import { useCostContext } from "@/lib/summary/use-cost-context";
 import { effectiveProductPrice, productCostPerJar } from "@/lib/summary/recipe-cost";
@@ -148,7 +149,10 @@ export function QuickEditForm({
   // Stock that spoiled or went to an event moves QUANTITY, not money, and has no counterparty.
   // Nothing in the app reads an amount off either one, so asking for it was asking her to type
   // a number into a hole. A batch she made has no buyer either.
+  // Stock moved to an event is not money. Spoilage IS, once it is a finished jar — the value
+  // is worked out rather than typed, so it is shown as a figure instead of an empty box.
   const movesMoney = draft.type !== "WASTE" && draft.type !== "INVENTORY_OUT";
+  const spoilageLossValue = draft.type === "WASTE" ? draft.amount : null;
   const hasCounterparty = draft.type === "SALE" || draft.type === "EXPENSE";
 
   /** The unit the catalog already knows for an item, so it's never asked for per transaction. */
@@ -171,9 +175,13 @@ export function QuickEditForm({
     // sale and then switching it to spoilage would otherwise keep the buyer and the peso figure
     // on the entry, invisibly — a record nobody typed and nobody can see to correct.
     if (next.type === "WASTE" || next.type === "INVENTORY_OUT") {
-      next.amount = null;
       next.counterparty = null;
-      setAmountText("");
+      // A spoiled JAR is written off at what it cost to make; stock moved to an event and a
+      // spoiled INGREDIENT are not — see summary/spoilage.ts. Logging the same loss from Home
+      // and from Money has to produce the same record, or where she happened to be standing
+      // decides whether it costs anything.
+      next.amount = next.type === "WASTE" ? spoiledValue(next.sku, next.quantity, products, costCtx) : null;
+      setAmountText(next.amount == null ? "" : String(next.amount));
       setAutoFilledFrom(null);
     } else if (next.type === "INVENTORY_IN") {
       next.counterparty = null;
@@ -271,6 +279,21 @@ export function QuickEditForm({
             )}
           </div>
         </div>
+
+        {draft.type === "WASTE" && (
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Value of what was lost</Label>
+            <div className="flex h-9 items-center rounded-md border border-input bg-secondary/50 px-2.5 text-sm">
+              {spoilageLossValue ? (
+                <span className="font-semibold text-danger">{`−${formatPeso(spoilageLossValue)}`}</span>
+              ) : (
+                <span className="text-xs text-muted-foreground">
+                  Worked out from what the jar costs — ingredients are written off a different way.
+                </span>
+              )}
+            </div>
+          </div>
+        )}
 
         {movesMoney && (
         <div className="space-y-1">

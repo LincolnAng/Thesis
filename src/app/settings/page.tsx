@@ -15,7 +15,7 @@ import { useStore } from "@/lib/store/use-store";
 import type { BotLanguage } from "@/lib/sheets/settings";
 import { LaborRateCard } from "@/components/settings/labor-rate-card";
 import { OwnerNameCard } from "@/components/settings/owner-name-card";
-import { PeopleCard } from "@/components/settings/people-card";
+import { ActivityCard, PeopleCard } from "@/components/settings/people-card";
 import { SpreadsheetButton } from "@/components/settings/spreadsheet-button";
 import { UnitsCard } from "@/components/settings/units-card";
 import { SeasonalityCard } from "@/components/settings/seasonality-card";
@@ -125,7 +125,7 @@ export default function SettingsPage() {
   const [keyTest, setKeyTest] = useState<{ ok: boolean; message: string } | null>(null);
   const [testing, setTesting] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [tab, setTab] = useState<"general" | "seasons" | "people" | "ai" | "sheet">("general");
+  const [tab, setTab] = useState<"general" | "seasons" | "people" | "activity" | "ai" | "sheet">("general");
   const [textSize, setTextSize] = useTextSize();
 
   // next-themes resolves the real theme synchronously on the client's first render
@@ -324,7 +324,8 @@ export default function SettingsPage() {
           tabs={[
             ["general", "General"],
             ["seasons", "Busy months"],
-            ["people", "People & activity"],
+            ["people", "People"],
+            ["activity", "History"],
             ["ai", "AI assistant"],
             ["sheet", "Google Sheet"],
           ]}
@@ -376,6 +377,12 @@ export default function SettingsPage() {
 
       <LaborRateCard />
       <UnitsCard />
+        </div>
+      )}
+
+      {tab === "activity" && (
+        <div className="flex flex-col gap-4">
+          <ActivityCard />
         </div>
       )}
 

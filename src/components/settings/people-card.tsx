@@ -31,19 +31,13 @@ function when(iso: string): string {
 }
 
 export function PeopleCard() {
-  const { users, activity } = useStore();
+  const { users } = useStore();
   const me = useCurrentUser();
   const [name, setName] = useState("");
   const [pin, setPin] = useState("");
   const [role, setRole] = useState<AppUser["role"]>("helper");
   const [resetting, setResetting] = useState<string | null>(null);
   const [newPin, setNewPin] = useState("");
-  const [showAll, setShowAll] = useState(false);
-
-  // Rows arrive from the sheet in the order they were written; newest first is what reads
-  // like a log.
-  const newestFirst = [...activity].sort((a, b) => b.at.localeCompare(a.at));
-  const rows = showAll ? newestFirst : newestFirst.slice(0, SHOW_FIRST);
 
   async function add() {
     const trimmed = name.trim();
@@ -182,7 +176,20 @@ export function PeopleCard() {
           )}
         </CardContent>
       </Card>
+    </>
+  );
+}
 
+/** Everything anyone changed, newest first, with an undo where one is possible. */
+export function ActivityCard() {
+  const { activity } = useStore();
+  const [showAll, setShowAll] = useState(false);
+  // Rows arrive from the sheet in the order they were written; newest first is what reads
+  // like a log.
+  const newestFirst = [...activity].sort((a, b) => b.at.localeCompare(a.at));
+  const rows = showAll ? newestFirst : newestFirst.slice(0, SHOW_FIRST);
+
+  return (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -237,6 +244,5 @@ export function PeopleCard() {
           )}
         </CardContent>
       </Card>
-    </>
   );
 }

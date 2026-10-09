@@ -24,7 +24,11 @@ import type { EntryDraft } from "@/lib/home/describe-entry";
 interface Action {
   type: EntryType;
   icon: LucideIcon;
+  /** The full phrase, used as the dialog's title. */
   label: string;
+  /** What fits on the button. Five across cannot hold "Paid for something" without
+   *  truncating it to "Paid for so…", and a clipped label is worse than a short one. */
+  short: string;
   /** Live figure for today, so the button says something even before it's pressed. */
   today: string;
   tone: "good" | "bad" | "neutral";
@@ -57,6 +61,7 @@ export function QuickLog() {
       type: "SALE",
       icon: Receipt,
       label: "Sold something",
+      short: "Sold",
       today: count("SALE") ? `${formatPeso(sum("SALE"))} today` : "Nothing yet today",
       tone: "good",
     },
@@ -64,6 +69,7 @@ export function QuickLog() {
       type: "EXPENSE",
       icon: Wallet,
       label: "Paid for something",
+      short: "Paid",
       today: count("EXPENSE") ? `${formatPeso(sum("EXPENSE"))} today` : "Nothing yet today",
       tone: "bad",
     },
@@ -71,6 +77,7 @@ export function QuickLog() {
       type: "INVENTORY_IN",
       icon: Box,
       label: "Made a batch",
+      short: "Made",
       today: count("INVENTORY_IN") ? `${pluralize(count("INVENTORY_IN"), "batch")} today` : "None made today",
       tone: "neutral",
     },
@@ -78,6 +85,7 @@ export function QuickLog() {
       type: "WASTE",
       icon: Trash2,
       label: "Something spoiled",
+      short: "Spoiled",
       today: count("WASTE") ? `${pluralize(count("WASTE"), "loss")} today` : "Nothing wasted",
       tone: "neutral",
     },
@@ -88,6 +96,7 @@ export function QuickLog() {
             type: "INVENTORY_OUT" as EntryType,
             icon: TruckIcon,
             label: "Stock went out",
+            short: "Sent out",
             today: count("INVENTORY_OUT") ? `${pluralize(count("INVENTORY_OUT"), "move")} today` : "Took stock somewhere",
             tone: "neutral" as const,
           },
@@ -123,21 +132,19 @@ export function QuickLog() {
 
   return (
     <div className="w-full">
-      {/* One row, equal widths, the label under the icon — the running figure moved to the
-          tooltip so five of these fit a phone without the text shrinking to nothing. */}
-      <div className={`grid w-full gap-2 ${actions.length === 5 ? "grid-cols-5" : "grid-cols-4"}`}>
+      <div className="flex flex-wrap gap-2">
         {actions.map((a) => (
           <button
             key={a.type}
             type="button"
             onClick={() => open(a.type, a.label)}
-            title={a.today}
-            className="flex flex-col items-center justify-start gap-2 rounded-2xl border border-line/15 bg-white px-2 py-3 text-center transition hover:border-cacao/40 hover:shadow-sm"
+            title={`${a.label} — ${a.today}`}
+            className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-xl border border-line/15 bg-white px-3 py-2 transition hover:border-cacao/40 hover:shadow-sm"
           >
-            <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${TONE_ICON[a.tone]}`}>
-              <a.icon className="h-[18px] w-[18px]" strokeWidth={1.8} />
+            <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg ${TONE_ICON[a.tone]}`}>
+              <a.icon className="h-[14px] w-[14px]" strokeWidth={1.9} />
             </span>
-            <span className="text-[12px] font-semibold leading-tight">{a.label}</span>
+            <span className="truncate text-[12px] font-semibold">{a.short}</span>
           </button>
         ))}
       </div>

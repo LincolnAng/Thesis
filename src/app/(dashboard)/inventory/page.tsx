@@ -388,10 +388,7 @@ export default function InventoryPage() {
                     <span className="shrink-0 whitespace-nowrap">
                       <span className={`font-semibold ${belowWarning ? "text-danger" : "text-[#9A6B12]"}`}>{pluralize(p.stockQty, "jar")}</span>
                       <span className="text-xs text-muted-foreground">
-                        {" · "}
-                        {need > p.stockQty
-                          ? `needs ${need}`
-                          : `you set a warning at ${p.lowStockThreshold}`}
+                        {need > p.stockQty ? ` · needs ${need}` : ""}
                       </span>
                     </span>
                   </div>
