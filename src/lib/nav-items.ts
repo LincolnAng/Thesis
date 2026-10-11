@@ -20,7 +20,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Home", icon: Home },
   { href: "/transactions", label: "Transactions", icon: ArrowLeftRight },
-  { href: "/products", label: "Inventory", icon: ShoppingBag },
+  { href: "/products", label: "Products", icon: ShoppingBag },
   { href: "/inventory", label: "Stock", icon: Box },
   { href: "/people", label: "People", icon: Users },
   { href: "/pricing", label: "Prices", icon: Tag },

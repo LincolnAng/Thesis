@@ -111,7 +111,7 @@ export default function ProductsPage() {
 
   if (simple) {
     return (
-      <Page title="Inventory">
+      <Page title="Products">
         <SimpleInventory onAddProduct={() => setAdding(true)} onEditProduct={setEditingId} />
         {adding && <AddProductDialog products={products} onClose={() => setAdding(false)} />}
         {editing && (
@@ -122,7 +122,7 @@ export default function ProductsPage() {
   }
 
   return (
-    <Page title="Inventory">
+    <Page title="Products">
       <div className="mb-4 flex flex-wrap items-center gap-4">
         <CarouselNav
           label={SECTIONS[section]}

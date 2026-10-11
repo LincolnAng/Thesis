@@ -44,7 +44,7 @@ export function ItemIcon({ name, className }: { name: string; className?: string
   return <Icon className={className} />;
 }
 
-/** Card header gradients, shared by every tile on Inventory so the grids read as one page. */
+/** Card header gradients, shared by every tile on Products so the grids read as one page. */
 export const CARD_GRADIENTS = [
   "from-[#7B4B2A] to-[#4A2D19]",
   "from-[#C08552] to-[#8A5A33]",

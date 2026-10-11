@@ -47,7 +47,7 @@ export function LogPurchaseForm({ supplier, materials }: { supplier: Supplier; m
         </span>
       </div>
       {materials.length === 0 ? (
-        <div className="text-[12px] text-muted-foreground">Add raw materials in Inventory first, then log what this supplier charged.</div>
+        <div className="text-[12px] text-muted-foreground">Add raw materials in Products first, then log what this supplier charged.</div>
       ) : (
         <div className="flex flex-wrap items-center gap-2 text-[13px]">
           <select className={field} value={materialId} onChange={(e) => setMaterialId(e.target.value)} aria-label="Ingredient">
