@@ -16,6 +16,7 @@ import { EXPENSE_CATEGORY_LABELS, PRICE_TYPE_LABELS, formatPeso } from "@/lib/fo
 import { spoiledValue } from "@/lib/summary/spoilage";
 import { bulkUnitFor } from "@/lib/summary/business-config";
 import type { Entry, ExpenseCategory, PriceType } from "@/lib/store/types";
+import { cn } from "@/lib/utils";
 
 /**
  * The transactions table as a spreadsheet: every cell is the control that edits it, in the
@@ -26,7 +27,7 @@ import type { Entry, ExpenseCategory, PriceType } from "@/lib/store/types";
  * Sheets quota. Dropdowns commit on choice, since there's nothing to finish typing.
  */
 
-const COLUMNS = "grid-cols-[124px_100px_minmax(0,1.1fr)_120px_minmax(0,1fr)_126px_116px_96px_56px]";
+const COLUMNS = "grid-cols-[124px_100px_minmax(0,1.1fr)_176px_minmax(0,1fr)_126px_116px_96px_56px]";
 
 // Every cell carries its own box, empty or not: a grid of invisible inputs gives nothing to
 // aim at, and "is this editable?" shouldn't depend on guessing.
@@ -96,6 +97,54 @@ function CommitCell({
   );
 }
 
+/**
+ * Two halves, both always showing: [jar | case ×25].
+ *
+ * A single word that flipped when tapped hid the second choice until you'd found the first,
+ * and nothing about a dotted "jar" says "press me for cases". With both halves on screen the
+ * option is visible before anyone needs it, and the filled half says which one is counting.
+ */
+function UnitSwitch({
+  single,
+  bulk,
+  size,
+  inBulk,
+  onChange,
+}: {
+  single: string;
+  bulk: string;
+  size: number;
+  inBulk: boolean;
+  onChange: (inBulk: boolean) => void;
+}) {
+  return (
+    <div className="flex h-8 shrink-0 items-stretch overflow-hidden rounded-md border border-line/15 text-[11px]">
+      {[
+        { on: false, label: single, hint: "", title: `Count single ${single}s` },
+        { on: true, label: bulk, hint: `×${size}`, title: `Count in ${bulk}s of ${size}` },
+      ].map((choice) => (
+        <button
+          key={String(choice.on)}
+          type="button"
+          title={choice.title}
+          aria-pressed={inBulk === choice.on}
+          onClick={() => onChange(choice.on)}
+          className={cn(
+            "flex max-w-[64px] items-center gap-0.5 px-1.5 transition-colors",
+            choice.on && "border-l border-line/15",
+            inBulk === choice.on
+              ? "bg-cacao/10 font-semibold text-cacao"
+              : "text-muted-foreground hover:bg-secondary",
+          )}
+        >
+          <span className="truncate">{choice.label}</span>
+          {choice.hint && <span className="shrink-0 text-[10px] opacity-70">{choice.hint}</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function num(text: string): number | null {
   const n = Number(text);
   return text.trim() === "" || !Number.isFinite(n) ? null : n;
@@ -127,11 +176,11 @@ export function TransactionGrid({
    */
   const [bulkRows, setBulkRows] = useState<Set<string>>(new Set());
   const isBulk = (key: string) => bulkRows.has(key);
-  const toggleBulk = (key: string) =>
+  const setBulk = (key: string, on: boolean) =>
     setBulkRows((prev) => {
       const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
+      if (on) next.add(key);
+      else next.delete(key);
       return next;
     });
   /** The bulk unit for whatever product a row is about — see bulkUnitFor. */
@@ -329,18 +378,13 @@ export function TransactionGrid({
                 }}
               />
               {sellsInBulk(newRow.sku) ? (
-                <button
-                  type="button"
-                  onClick={() => toggleBulk("new")}
-                  title={
-                    isBulk("new")
-                      ? `Counting in ${bulkFor(newRow.sku).word}s of ${bulkFor(newRow.sku).size} — tap for single units`
-                      : `Counting singly — tap for ${bulkFor(newRow.sku).word}s of ${bulkFor(newRow.sku).size}`
-                  }
-                  className="shrink-0 rounded px-1 text-[11px] text-muted-foreground underline decoration-dotted hover:text-cacao"
-                >
-                  {isBulk("new") ? `${bulkFor(newRow.sku).word}s` : (unitOf(newRow.sku) ?? "each")}
-                </button>
+                <UnitSwitch
+                  single={unitOf(newRow.sku) ?? "each"}
+                  bulk={bulkFor(newRow.sku).word}
+                  size={bulkFor(newRow.sku).size}
+                  inBulk={isBulk("new")}
+                  onChange={(on) => setBulk("new", on)}
+                />
               ) : (
                 <span className="shrink-0 text-[11px] text-muted-foreground">{unitOf(newRow.sku) ?? "each"}</span>
               )}
@@ -432,18 +476,13 @@ export function TransactionGrid({
                 }}
               />
               {sellsInBulk(e.sku) ? (
-                <button
-                  type="button"
-                  onClick={() => toggleBulk(e.id)}
-                  title={
-                    isBulk(e.id)
-                      ? `Counting in ${bulkFor(e.sku).word}s of ${bulkFor(e.sku).size} — tap for single units`
-                      : `Counting singly — tap for ${bulkFor(e.sku).word}s of ${bulkFor(e.sku).size}`
-                  }
-                  className="shrink-0 rounded px-1 text-[11px] text-muted-foreground underline decoration-dotted hover:text-cacao"
-                >
-                  {isBulk(e.id) ? `${bulkFor(e.sku).word}s` : (e.unit ?? unitOf(e.sku) ?? "each")}
-                </button>
+                <UnitSwitch
+                  single={e.unit ?? unitOf(e.sku) ?? "each"}
+                  bulk={bulkFor(e.sku).word}
+                  size={bulkFor(e.sku).size}
+                  inBulk={isBulk(e.id)}
+                  onChange={(on) => setBulk(e.id, on)}
+                />
               ) : (
                 <span className="shrink-0 text-[11px] text-muted-foreground">{e.unit ?? unitOf(e.sku) ?? "each"}</span>
               )}
