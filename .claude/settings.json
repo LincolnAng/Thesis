@@ -1,0 +1,40 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/git-sync.mjs\" --hook",
+            "timeout": 45,
+            "statusMessage": "Syncing with GitHub…"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/git-sync.mjs\" --hook --throttle=120",
+            "timeout": 45,
+            "statusMessage": "Checking GitHub for new changes…"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/git-deploy.mjs\"",
+            "timeout": 180,
+            "statusMessage": "Deploying to GitHub and Vercel…"
+          }
+        ]
+      }
+    ]
+  }
+}
