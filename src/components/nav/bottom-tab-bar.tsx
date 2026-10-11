@@ -20,7 +20,7 @@ export function BottomTabBar() {
             key={item.href}
             href={item.href}
             className={cn(
-              "flex w-20 shrink-0 flex-col items-center gap-1 py-3 text-sm font-medium",
+              "flex min-w-20 shrink-0 flex-col items-center gap-1 px-1.5 py-3 text-sm font-medium",
               active ? "text-cacao font-semibold" : "text-muted-foreground",
             )}
           >

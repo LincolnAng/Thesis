@@ -138,7 +138,7 @@ function TransactionsPageInner() {
 
   if (viewMode === "simple") {
     return (
-      <Page title="Money">
+      <Page title="Transactions">
         <SimpleMoney />
       </Page>
     );
@@ -146,7 +146,7 @@ function TransactionsPageInner() {
 
   return (
     <Page
-      title="Money"
+      title="Transactions"
       right={
         <>
           <button
@@ -258,7 +258,7 @@ function TransactionsPageInner() {
         <div className="flex flex-col overflow-hidden rounded-2xl border border-line/15 bg-card">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line/10 px-[18px] py-3.5">
               <div className="text-sm font-semibold">
-                Money · <span className="font-medium text-muted-foreground">{period === "all" ? "All time" : monthLabel(period)}</span>
+                Transactions · <span className="font-medium text-muted-foreground">{period === "all" ? "All time" : monthLabel(period)}</span>
               </div>
               <div className="flex gap-1.5">
                 {(

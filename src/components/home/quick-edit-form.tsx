@@ -179,7 +179,7 @@ export function QuickEditForm({
       next.counterparty = null;
       // A spoiled JAR is written off at what it cost to make; stock moved to an event and a
       // spoiled INGREDIENT are not — see summary/spoilage.ts. Logging the same loss from Home
-      // and from Money has to produce the same record, or where she happened to be standing
+      // and from Transactions has to produce the same record, or where she happened to be standing
       // decides whether it costs anything.
       next.amount = next.type === "WASTE" ? spoiledValue(next.sku, next.quantity, products, costCtx) : null;
       setAmountText(next.amount == null ? "" : String(next.amount));
