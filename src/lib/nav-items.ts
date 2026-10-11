@@ -15,7 +15,7 @@ export interface NavItem {
  * changed — Inventory became Stock, Pricing became Prices, Transactions became Money — so the
  * same page had two names depending on a toggle elsewhere, and a note saying "check Inventory"
  * pointed at nothing she could see. Each section keeps the one name that says what it's for:
- * Products is what she sells, Inventory is what's on the shelf, and Prices works
+ * Products is what she sells, Inventory is what's on the shelf, and Price Calculator works
  * out what to charge.
  */
 export const NAV_ITEMS: NavItem[] = [
@@ -24,7 +24,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/products", label: "Products", icon: ShoppingBag },
   { href: "/inventory", label: "Inventory", icon: Box },
   { href: "/people", label: "People", icon: Users },
-  { href: "/pricing", label: "Prices", icon: Tag },
+  { href: "/pricing", label: "Price Calculator", icon: Tag },
 ];
 
 /** Pinned to the bottom of the sidebar, below the main sections. */

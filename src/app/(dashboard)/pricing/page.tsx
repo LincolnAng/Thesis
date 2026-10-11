@@ -271,14 +271,14 @@ export default function PricingPageInner() {
 
   if (viewMode === "simple") {
     return (
-      <Page title="Prices">
+      <Page title="Price Calculator">
         <SimplePrices />
       </Page>
     );
   }
 
   return (
-    <Page title="Prices">
+    <Page title="Price Calculator">
       {products.length === 0 ? (
         <div className="rounded-2xl border border-line/15 bg-card px-6 py-12 text-center text-sm text-muted-foreground">
           No products yet.{" "}
