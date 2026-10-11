@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ChocolateBarLogo } from "@/components/ui/chocolate-bar-logo";
 import { cn } from "@/lib/utils";
 import { useViewMode } from "@/lib/summary/view-mode";
 import { NAV_ITEMS, SETTINGS_ITEM, type NavItem } from "@/lib/nav-items";
@@ -48,9 +49,7 @@ export function SidebarNav() {
       )}
     >
       <div className="mb-8 flex items-center gap-2.5 px-2">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-cacao font-display text-[15px] font-bold text-ivory">
-          M
-        </div>
+        <ChocolateBarLogo className="h-9 w-[29px]" />
         <div className="hidden min-[1024px]:block">
           <div className="font-display text-[15px] font-semibold leading-tight">Mang Kiko&apos;s</div>
           <div className="text-[11px] leading-tight text-muted-foreground">Cocoa · Dashboard</div>

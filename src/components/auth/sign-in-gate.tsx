@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import Image from "next/image";
 import { Camera } from "lucide-react";
+import { ChocolateBarLogo } from "@/components/ui/chocolate-bar-logo";
 import { useStore } from "@/lib/store/use-store";
 import { addUser, updateUser } from "@/lib/store/store";
 import { hashPin, signIn, useCurrentUser } from "@/lib/auth/current-user";
@@ -174,9 +175,7 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-ivory px-4">
         <div className="w-full max-w-[420px] rounded-2xl border border-line/15 bg-card p-7 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-cacao font-display text-xl font-bold text-ivory">
-            M
-          </div>
+          <ChocolateBarLogo className="mx-auto mb-4 h-12 w-[38px]" />
           <h1 className="font-display text-[26px] font-semibold">Make your profile</h1>
           <p className="mt-1 text-[14px] leading-relaxed text-muted-foreground">
             Everything you save gets your name on it. You can add the people who help you afterwards.
@@ -217,9 +216,7 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen items-center justify-center bg-ivory px-4 py-10">
       <div className={`w-full ${picked ? "max-w-[420px]" : "max-w-[680px]"}`}>
         <div className="mb-6 flex flex-col items-center gap-3 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cacao font-display text-xl font-bold text-ivory">
-            M
-          </div>
+          <ChocolateBarLogo className="h-12 w-[38px]" />
           <h1 className="font-display text-[30px] font-semibold">Who&apos;s using this?</h1>
         </div>
 

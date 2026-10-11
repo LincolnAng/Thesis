@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Box, TrendingUp, TriangleAlert, Users, type LucideIcon } from "lucide-react";
+import { ChocolateBarLogo } from "@/components/ui/chocolate-bar-logo";
 import { ChatComposer } from "@/components/home/chat-composer";
 import { QuickLog } from "@/components/home/quick-log";
 import { useStore } from "@/lib/store/use-store";
@@ -51,7 +52,7 @@ export function ChatLanding({ onSubmit, disabled }: { onSubmit: (text: string) =
   return (
     <div className="mx-auto flex w-full max-w-[720px] flex-col items-center px-4">
       <div className="mb-2 flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cacao font-display text-lg font-bold text-ivory">M</div>
+        <ChocolateBarLogo className="h-10 w-8" />
         <h1 className="font-display text-[38px] font-semibold tracking-tight text-foreground">{name ? `Hi, ${name}` : "Hi there"}</h1>
       </div>
       <p className="mb-8 text-base text-muted-foreground">What happened in the business today?</p>
@@ -88,3 +89,4 @@ export function ChatLanding({ onSubmit, disabled }: { onSubmit: (text: string) =
     </div>
   );
 }
+
