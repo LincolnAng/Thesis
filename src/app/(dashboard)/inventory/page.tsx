@@ -318,7 +318,7 @@ export default function InventoryPage() {
 
   return (
     <Page
-      title="Stock"
+      title="Inventory"
       right={
         simple ? undefined : (
         <>
