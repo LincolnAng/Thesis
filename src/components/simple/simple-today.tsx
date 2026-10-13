@@ -1,5 +1,6 @@
 "use client";
 
+import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 import Link from "next/link";
 import { useStore } from "@/lib/store/use-store";
 import { useProductionPlan } from "@/lib/summary/use-production-plan";
@@ -27,6 +28,7 @@ export function SimpleToday() {
   // The same plan Inventory shows. See use-production-plan for why this is not worked out here.
   const plan = useProductionPlan();
   const now = new Date();
+  const exec = isExecutive(useCurrentUser());
   const thisMonth = monthKey(0, now);
   const lastMonth = monthKey(-1, now);
   const sum = (month: string, type: "SALE" | "EXPENSE") =>
@@ -38,8 +40,20 @@ export function SimpleToday() {
   const hadLastMonth = entries.some((e) => monthKeyOf(e.timestamp) === lastMonth);
   const cards: Card[] = [];
 
-  // 1. Money
-  cards.push({
+  // 1. Money. An employee sees what was sold, never what was kept: their copy of the data has
+  // no expenses in it, so "kept" would just be sales again, presented as profit.
+  if (!exec) {
+    cards.push({
+      tone: "good",
+      text: (
+        <>
+          This month the shop has sold <Em>{formatPeso(sales)}</Em> so far.
+        </>
+      ),
+      action: "See sales",
+      href: "/transactions",
+    });
+  } else cards.push({
     tone: kept >= 0 ? "good" : "bad",
     text:
       kept >= 0 ? (
@@ -76,7 +90,7 @@ export function SimpleToday() {
         </>
       ),
       action: "See your stock",
-      href: "/inventory",
+      href: "/production",
     });
   } else if (lowButCovered) {
     cards.push({
@@ -88,10 +102,10 @@ export function SimpleToday() {
         </>
       ),
       action: "See your stock",
-      href: "/inventory",
+      href: "/production",
     });
   } else {
-    cards.push({ tone: "good", text: <>Your stock looks fine — nothing is running low.</>, action: "See your stock", href: "/inventory" });
+    cards.push({ tone: "good", text: <>Your stock looks fine — nothing is running low.</>, action: "See your stock", href: "/production" });
   }
 
   // 3. What's next: an upcoming event, or progress toward the sales goal.

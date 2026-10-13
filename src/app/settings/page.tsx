@@ -1,5 +1,6 @@
 "use client";
 
+import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 import { useEffect, useState, type ChangeEvent } from "react";
 import { useTheme } from "next-themes";
 import { CalendarClock, ChevronDown, ChevronUp, Database, Download, KeyRound, Languages, Minus, Moon, Plus, Sheet, Trash2, Type, Upload } from "lucide-react";
@@ -110,6 +111,7 @@ function ExpiryWarningCard() {
 
 export default function SettingsPageInner() {
   const [viewMode] = useViewMode();
+  const exec = isExecutive(useCurrentUser());
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [settings, setSettings] = useState<SettingsState | null>(null);
@@ -304,6 +306,18 @@ export default function SettingsPageInner() {
     reader.readAsText(file);
   }
 
+  // An employee's Settings is their own profile: the rest — AI key, spreadsheet, backups,
+  // reset — is the owners', and the server refuses those requests from an employee anyway.
+  if (!exec) {
+    return (
+      <Page title="Settings" hideModeToggle>
+        <div className="w-full max-w-4xl">
+          <PeopleCard />
+        </div>
+      </Page>
+    );
+  }
+
   if (viewMode === "simple") {
     return (
       <Page title="Settings">
@@ -425,7 +439,7 @@ export default function SettingsPageInner() {
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            This lets Mang Kiko&apos;s Cocoa use AI to understand what you type and answer your questions. You&apos;ll
+            This lets Mang Kiko&apos;s Cacao use AI to understand what you type and answer your questions. You&apos;ll
             need a Claude API key from Anthropic —{" "}
             <a
               href="https://console.anthropic.com/"

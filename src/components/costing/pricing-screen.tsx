@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { Page, PageTabs } from "@/components/layout/page";
 import { PricingCalculatorCard } from "@/components/finance/pricing-calculator-card";
@@ -260,7 +261,7 @@ function PricingDetail({ product, cost, actual }: { product: Product; cost: Prod
   );
 }
 
-export default function PricingPageInner() {
+export function PricingScreen({ subnav }: { subnav?: ReactNode }) {
   const { products, entries } = useStore();
   const costCtx = useCostContext();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -271,14 +272,14 @@ export default function PricingPageInner() {
 
   if (viewMode === "simple") {
     return (
-      <Page title="Price Calculator">
+      <Page title="Costing" subnav={subnav}>
         <SimplePrices />
       </Page>
     );
   }
 
   return (
-    <Page title="Price Calculator">
+    <Page title="Costing" subnav={subnav}>
       {products.length === 0 ? (
         <div className="rounded-2xl border border-line/15 bg-card px-6 py-12 text-center text-sm text-muted-foreground">
           No products yet.{" "}

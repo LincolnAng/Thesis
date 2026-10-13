@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useRef, useState } from "react";
 import { MaterialsPanel } from "@/components/products/materials-panel";
 import { ProductExpiryStrip } from "@/components/products/product-expiry-strip";
@@ -87,7 +88,7 @@ function ProductPhoto({ product, gradient, photo }: { product: Product; gradient
   );
 }
 
-export default function ProductsPage() {
+export function ProductsScreen({ subnav }: { subnav?: ReactNode }) {
   const { products } = useStore();
   const costCtx = useCostContext();
   const photos = useProductPhotos();
@@ -111,7 +112,7 @@ export default function ProductsPage() {
 
   if (simple) {
     return (
-      <Page title="Products">
+      <Page title="Costing" subnav={subnav}>
         <SimpleInventory onAddProduct={() => setAdding(true)} onEditProduct={setEditingId} />
         {adding && <AddProductDialog products={products} onClose={() => setAdding(false)} />}
         {editing && (
@@ -122,7 +123,7 @@ export default function ProductsPage() {
   }
 
   return (
-    <Page title="Products">
+    <Page title="Costing" subnav={subnav}>
       <div className="mb-4 flex flex-wrap items-center gap-4">
         <CarouselNav
           label={SECTIONS[section]}

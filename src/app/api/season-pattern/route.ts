@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/auth/session";
 import { ADVISOR_MODEL, callClaude, stripJsonFences } from "@/lib/ai/client";
 import { getAiSettings } from "@/lib/sheets/settings";
 
@@ -45,6 +46,8 @@ function normalise(values: unknown): number[] | null {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireSession(["executive"]);
+  if (auth.denied) return auth.denied;
   let body: {
     productName?: string;
     category?: string;
@@ -76,7 +79,7 @@ export async function POST(req: NextRequest) {
     body.category ? `Kind of product: ${body.category}` : "",
     body.pricePhp ? `Sells for: ₱${body.pricePhp}` : "",
     body.shelfLifeDays ? `Shelf life: ${body.shelfLifeDays} days` : "",
-    `The business is Mang Kiko's Cocoa, a very small Filipino cacao spread maker selling at bazaars and direct to buyers.`,
+    `The business is Mang Kiko's Cacao, a very small Filipino cacao spread maker selling at bazaars and direct to buyers.`,
     body.monthsOfHistory
       ? `She has ${body.monthsOfHistory} month(s) of sales logged for it — not enough to measure the pattern from her own data, which is why you are being asked.`
       : "She has no sales history for it yet.",

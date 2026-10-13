@@ -13,7 +13,12 @@ const nextConfig: NextConfig = {
     return [
       { source: "/sales", destination: "/transactions", permanent: false },
       { source: "/expenses", destination: "/transactions", permanent: false },
-      { source: "/scheduling", destination: "/inventory", permanent: false },
+      { source: "/scheduling", destination: "/calendar", permanent: false },
+      // The five-tab redesign: Products and the price calculator became Costing, and Stock
+      // (with its production calendar) became Production and Calendar.
+      { source: "/products", destination: "/costing", permanent: false },
+      { source: "/pricing", destination: "/costing?view=pricing", permanent: false },
+      { source: "/inventory", destination: "/production", permanent: false },
       { source: "/customers", destination: "/people", permanent: false },
       { source: "/suppliers", destination: "/people?tab=suppliers", permanent: false },
       // Ask AI now lives on Home, and Events is a tab under People.

@@ -11,7 +11,7 @@ export function ChocolateBarLogo({ className }: { className?: string }) {
   // Each logo on the page needs its own mask id, or they would all share the first one's bite.
   const biteId = `chocolate-bite-${useId()}`;
   return (
-    <svg viewBox="0 0 32 40" className={cn("shrink-0", className)} role="img" aria-label="Mang Kiko's Cocoa">
+    <svg viewBox="0 0 32 40" className={cn("shrink-0", className)} role="img" aria-label="Mang Kiko's Cacao">
       <defs>
         <mask id={biteId}>
           <rect width="32" height="40" fill="white" />

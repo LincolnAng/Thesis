@@ -1,5 +1,6 @@
 "use client";
 
+import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 import { Suspense } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Page, PageTabs } from "@/components/layout/page";
@@ -15,10 +16,14 @@ function PeoplePageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const [viewMode] = useViewMode();
+  const [chosenMode] = useViewMode();
+  // Suppliers are prices paid — owners' business. Employees see customers and events, in the
+  // plain table view (the Simple summary leads with supplier spending).
+  const exec = isExecutive(useCurrentUser());
+  const viewMode = exec ? chosenMode : "advanced";
   // Kept in the URL so a link (or the old /suppliers and /events addresses) opens the right tab.
   const param = searchParams.get("tab");
-  const tab: Tab = param === "suppliers" || param === "events" ? param : "customers";
+  const tab: Tab = (param === "suppliers" && exec) || param === "events" ? param : "customers";
 
   function selectTab(next: Tab) {
     router.replace(next === "customers" ? pathname : `${pathname}?tab=${next}`, { scroll: false });
@@ -33,14 +38,21 @@ function PeoplePageInner() {
   }
 
   return (
-    <Page title="People">
+    <Page title="People" hideModeToggle={!exec}>
       <div className="mb-6">
         <PageTabs
-          tabs={[
-            ["customers", "Customers"],
-            ["suppliers", "Suppliers"],
-            ["events", "Events"],
-          ]}
+          tabs={
+            exec
+              ? [
+                  ["customers", "Customers"],
+                  ["suppliers", "Suppliers"],
+                  ["events", "Events"],
+                ]
+              : [
+                  ["customers", "Customers"],
+                  ["events", "Events"],
+                ]
+          }
           value={tab}
           onChange={selectTab}
         />

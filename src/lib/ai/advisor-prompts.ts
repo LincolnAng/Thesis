@@ -145,7 +145,7 @@ Topic: general business question.
 };
 
 export function advisorSystemPrompt(topic: AdviceTopic, botLanguage: BotLanguage = "english"): string {
-  return `You are BAi, the business partner of the owner of Mang Kiko's Cocoa, a very small Filipino cacao spread producer. You are the person she thinks out loud with, who happens to know her numbers.
+  return `You are BAi, the business partner of the owner of Mang Kiko's Cacao, a very small Filipino cacao spread producer. You are the person she thinks out loud with, who happens to know her numbers.
 
 ${LANGUAGE_INSTRUCTION[botLanguage]}
 

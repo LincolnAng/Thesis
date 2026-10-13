@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
+
 import { useMemo, useState } from "react";
-import { Page, PageTabs } from "@/components/layout/page";
+import { Page } from "@/components/layout/page";
 import { SimpleStock } from "@/components/simple/simple-stock";
 import { useViewMode } from "@/lib/summary/view-mode";
 import { EventPlanDialog } from "@/components/inventory/event-plan-dialog";
@@ -230,12 +232,18 @@ function StockVsForecast({
   );
 }
 
-export default function InventoryPage() {
+/**
+ * Production and Calendar are one screen's two halves, split into their own tabs: Production
+ * is stock, what to make and the forecast; Calendar is the production plan laid out by day.
+ * Both read the same plan (useProductionPlan) so they can never disagree. The calendar used
+ * to sit behind Advanced; as its own tab it shows for everyone.
+ */
+export function ProductionScreen({ section }: { section: "production" | "calendar" }) {
   const { products, entries, machines, events, businessSettings } = useStore();
   const [viewMode] = useViewMode();
-  const simple = viewMode === "simple";
+  const simple = section === "production" && viewMode === "simple";
   const [strategy, setStrategy] = useState<ScheduleStrategy>("fastest");
-  const [tab, setTab] = useState<"plan" | "stock">("plan");
+  const tab = section === "calendar" ? "plan" : "stock";
   const [addStockOpen, setAddStockOpen] = useState(false);
   const [addProductOpen, setAddProductOpen] = useState(false);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
@@ -318,7 +326,8 @@ export default function InventoryPage() {
 
   return (
     <Page
-      title="Inventory"
+      title={section === "calendar" ? "Calendar" : "Production"}
+      hideModeToggle={section === "calendar"}
       right={
         simple ? undefined : (
         <>
@@ -397,9 +406,9 @@ export default function InventoryPage() {
                   </div>
                 ))}
                 {low.length > 4 && (
-                  <button type="button" onClick={() => setTab("stock")} className="mt-0.5 self-start text-xs font-semibold text-cacao">
-                    +{low.length - 4} more — see Stock & forecast
-                  </button>
+                  <Link href="/production" className="mt-0.5 self-start text-xs font-semibold text-cacao">
+                    +{low.length - 4} more — see Production
+                  </Link>
                 )}
               </div>
             )}
@@ -466,15 +475,6 @@ export default function InventoryPage() {
             </div>
           </div>
         </div>
-
-        <PageTabs
-          tabs={[
-            ["plan", "Production plan"],
-            ["stock", "Stock & forecast"],
-          ]}
-          value={tab}
-          onChange={setTab}
-        />
 
         {tab === "plan" ? (
           <div className="flex flex-col gap-4 rounded-2xl border border-line/15 bg-card p-5">

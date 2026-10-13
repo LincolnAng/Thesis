@@ -19,7 +19,7 @@ import {
 import { findProduct } from "@/lib/summary/product-match";
 import { rawQuantityNeeded } from "@/lib/summary/cacao";
 import { ENTRY_TYPE_LABELS, formatPeso } from "@/lib/format";
-import { currentUser } from "@/lib/auth/current-user";
+import { currentUser, signOut } from "@/lib/auth/current-user";
 import type { BusinessSettingRow } from "@/lib/sheets/business-settings";
 import type {
   AiStatus,
@@ -36,6 +36,7 @@ import type {
   Machine,
   SupplierPrice,
   AppUser,
+  Role,
   ActivityEvent,
 } from "./types";
 
@@ -157,7 +158,9 @@ function ensureHydrated() {
     state = loadState();
     hydrated = true;
   }
-  if (!serverLoadStarted) {
+  // Nothing to load until someone has signed in: the server answers per profile, and an
+  // unsigned request is refused.
+  if (!serverLoadStarted && currentUser()) {
     serverLoadStarted = true;
     void loadAllFromServer();
     startSyncPolling();
@@ -397,29 +400,50 @@ function safeParse<T>(raw: string | undefined): T | null {
   }
 }
 
-export function addUser(name: string, pinHash: string): AppUser {
-  const user: AppUser = { id: genId("user"), name: name.trim(), pinHash, createdAt: new Date().toISOString() };
-  setState((prev) => ({ ...prev, users: [...prev.users, user] }));
-  void mirrorOp("users", "append", { item: user });
-  return user;
+/**
+ * Profiles are managed by /api/auth/profiles, never written as raw rows: the server hashes
+ * PINs and decides who may add whom. These return the server's reason on failure so the
+ * screen can say it ("only an executive can add people").
+ */
+async function profileRequest(method: "POST" | "PATCH" | "DELETE", body: Record<string, unknown>): Promise<{ ok: boolean; reason?: string }> {
+  try {
+    const res = await fetch("/api/auth/profiles", {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json();
+    if (!json.success) return { ok: false, reason: json.reason ?? "failed" };
+    await refreshProfiles();
+    return { ok: true };
+  } catch {
+    return { ok: false, reason: "offline" };
+  }
 }
 
-export function updateUser(id: string, patch: Partial<AppUser>) {
-  let updated: AppUser | undefined;
-  setState((prev) => ({
-    ...prev,
-    users: prev.users.map((u) => {
-      if (u.id !== id) return u;
-      updated = { ...u, ...patch };
-      return updated;
-    }),
-  }));
-  if (updated) void mirrorOp("users", "update", { id, item: updated });
+export async function refreshProfiles(): Promise<AppUser[]> {
+  try {
+    const json = await fetch("/api/auth/profiles").then((r) => r.json());
+    if (json.success && Array.isArray(json.profiles)) {
+      setState((prev) => ({ ...prev, users: json.profiles as AppUser[] }));
+      return json.profiles as AppUser[];
+    }
+  } catch {
+    // keep what we have
+  }
+  return state.users;
 }
 
-export function deleteUser(id: string) {
-  setState((prev) => ({ ...prev, users: prev.users.filter((u) => u.id !== id) }));
-  void mirrorOp("users", "delete", { id });
+export function createProfile(input: { name: string; pin: string; role: Role; color?: string }) {
+  return profileRequest("POST", input);
+}
+
+export function updateProfile(id: string, patch: { name?: string; pin?: string; role?: Role; color?: string }) {
+  return profileRequest("PATCH", { id, ...patch });
+}
+
+export function deleteProfile(id: string) {
+  return profileRequest("DELETE", { id });
 }
 
 /** Pushes whatever's currently local up to Sheets exactly once, the first time the
@@ -427,12 +451,13 @@ export function deleteUser(id: string) {
  * the migration logic (and its "don't re-run, don't double-import" flag) isn't
  * duplicated five times. */
 async function migrateCollectionIfEmpty<T>(
+  canSeed: boolean,
   collectionName: string,
   flagKey: string,
   serverItems: T[],
   localItems: T[],
 ): Promise<{ items: T[]; migrated: boolean }> {
-  if (serverItems.length > 0 || window.localStorage.getItem(flagKey)) {
+  if (!canSeed || serverItems.length > 0 || window.localStorage.getItem(flagKey)) {
     return { items: serverItems, migrated: false };
   }
   if (localItems.length === 0) {
@@ -481,10 +506,19 @@ function priceHistoryToRows(supplierId: string, history: PriceHistoryPoint[]): S
 async function loadAllFromServer() {
   try {
     const res = await fetch("/api/business-data");
+    if (res.status === 401) {
+      // Signed out on the server (cookie expired, or the profile was removed elsewhere).
+      void signOut();
+      return;
+    }
     const json = await res.json();
     if (!json.success) return; // Sheets unreachable — keep local/paint-cache state
+    // Seeding an empty sheet from this device is an executive's job; an employee's copy is
+    // missing whole collections on purpose, and "empty" there means "not yours to see".
+    const canSeed = json.role === "executive";
 
     const entriesMigration = await migrateCollectionIfEmpty<Entry>(
+      canSeed,
       "entries",
       ENTRIES_MIGRATION_FLAG_KEY,
       Array.isArray(json.entries) ? json.entries : [],
@@ -492,6 +526,7 @@ async function loadAllFromServer() {
     );
 
     const productsMigration = await migrateCollectionIfEmpty<ProductRow>(
+      canSeed,
       "products",
       PRODUCTS_MIGRATION_FLAG_KEY,
       Array.isArray(json.products) ? json.products : [],
@@ -504,6 +539,7 @@ async function loadAllFromServer() {
     }
 
     const rawMaterialsMigration = await migrateCollectionIfEmpty<RawMaterialStock>(
+      canSeed,
       "rawMaterials",
       RAW_MATERIALS_MIGRATION_FLAG_KEY,
       Array.isArray(json.rawMaterials) ? json.rawMaterials : [],
@@ -511,6 +547,7 @@ async function loadAllFromServer() {
     );
 
     const suppliersMigration = await migrateCollectionIfEmpty<SupplierRow>(
+      canSeed,
       "suppliers",
       SUPPLIERS_MIGRATION_FLAG_KEY,
       Array.isArray(json.suppliers) ? json.suppliers : [],
@@ -523,6 +560,7 @@ async function loadAllFromServer() {
     }
 
     const budgetsMigration = await migrateCollectionIfEmpty<BudgetRow>(
+      canSeed,
       "budgets",
       BUDGETS_MIGRATION_FLAG_KEY,
       Array.isArray(json.budgets) ? json.budgets : [],
@@ -530,6 +568,7 @@ async function loadAllFromServer() {
     );
 
     const eventsMigration = await migrateCollectionIfEmpty<BusinessEvent>(
+      canSeed,
       "events",
       EVENTS_MIGRATION_FLAG_KEY,
       Array.isArray(json.events) ? json.events : [],
@@ -537,6 +576,7 @@ async function loadAllFromServer() {
     );
 
     const eventStockMigration = await migrateCollectionIfEmpty<EventStockMovement>(
+      canSeed,
       "eventStock",
       EVENT_STOCK_MIGRATION_FLAG_KEY,
       Array.isArray(json.eventStock) ? json.eventStock : [],
@@ -544,6 +584,7 @@ async function loadAllFromServer() {
     );
 
     const machinesMigration = await migrateCollectionIfEmpty<Machine>(
+      canSeed,
       "machines",
       MACHINES_MIGRATION_FLAG_KEY,
       Array.isArray(json.machines) ? json.machines : [],
@@ -551,6 +592,7 @@ async function loadAllFromServer() {
     );
 
     const supplierPricesMigration = await migrateCollectionIfEmpty<SupplierPrice>(
+      canSeed,
       "supplierPrices",
       SUPPLIER_PRICES_MIGRATION_FLAG_KEY,
       Array.isArray(json.supplierPrices) ? json.supplierPrices : [],
@@ -558,6 +600,7 @@ async function loadAllFromServer() {
     );
 
     const businessSettingsMigration = await migrateCollectionIfEmpty<BusinessSettingRow>(
+      canSeed,
       "businessSettings",
       BUSINESS_SETTINGS_MIGRATION_FLAG_KEY,
       Array.isArray(json.businessSettings) ? json.businessSettings : [],

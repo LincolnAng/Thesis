@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/auth/session";
 import { callClaude, stripJsonFences } from "@/lib/ai/client";
 import { getAiSettings } from "@/lib/sheets/settings";
 
@@ -38,6 +39,8 @@ Deciding rules:
 Reply with ONLY: {"mode":"log"} or {"mode":"records"} or {"mode":"research"}`;
 
 export async function POST(req: NextRequest) {
+  const auth = await requireSession();
+  if (auth.denied) return auth.denied;
   let body: { text?: string; products?: string[] };
   try {
     body = await req.json();

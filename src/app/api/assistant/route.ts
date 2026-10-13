@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/auth/session";
 import { callClaude, stripJsonFences, type AnthropicMessage } from "@/lib/ai/client";
 import { assistantSystemPromptStatic, assistantSystemPromptDynamic, buildAssistantPrompt } from "@/lib/ai/prompts";
 import { getAiSettings } from "@/lib/sheets/settings";
@@ -112,6 +113,8 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireSession();
+  if (auth.denied) return auth.denied;
   let body: { text?: string; dataSummary?: string; history?: ChatTurn[]; categories?: string[] };
   try {
     body = await req.json();

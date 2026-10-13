@@ -1,5 +1,6 @@
 "use client";
 
+import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 import { useEffect, useState } from "react";
 import { ExternalLink, FileDown } from "lucide-react";
 
@@ -43,6 +44,12 @@ function excelUrl(url: string): string {
 
 /** `excel` adds the .xlsx download beside it — wanted in Settings, too much for a header. */
 export function SpreadsheetButton({ excel = false }: { excel?: boolean }) {
+  const exec = isExecutive(useCurrentUser());
+  return exec ? <SheetLinks excel={excel} /> : null;
+}
+
+/** The sheet holds every record unfiltered, so it is only ever offered to executives. */
+function SheetLinks({ excel }: { excel: boolean }) {
   const url = useSpreadsheetUrl();
   if (!url) return null;
 

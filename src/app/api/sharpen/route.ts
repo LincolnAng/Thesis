@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/auth/session";
 import { callClaude, stripJsonFences } from "@/lib/ai/client";
 import { getAiSettings } from "@/lib/sheets/settings";
 
@@ -13,7 +14,7 @@ import { getAiSettings } from "@/lib/sheets/settings";
  * "ask a more specific question" is not.
  */
 
-const SYSTEM = `You help the owner of Mang Kiko's Cocoa, a very small Filipino cacao spread producer, ask better questions of her business assistant.
+const SYSTEM = `You help the owner of Mang Kiko's Cacao, a very small Filipino cacao spread producer, ask better questions of her business assistant.
 
 She has no business background. Her questions are often a topic rather than a question, which produces vague answers she cannot tell are vague. Her vague question has been BLOCKED — she cannot send it as written. What you write is what she gets to choose from, so these have to be worth choosing.
 
@@ -33,6 +34,8 @@ Reply with ONLY a single raw JSON object, no fences:
 {"suggestions":["...","...","...","..."]}`;
 
 export async function POST(req: NextRequest) {
+  const auth = await requireSession();
+  if (auth.denied) return auth.denied;
   let body: { text?: string; context?: string; extra?: string };
   try {
     body = await req.json();

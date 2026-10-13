@@ -1,49 +1,83 @@
 import { createSheetCollection } from "./collection";
-import type { AppUser } from "@/lib/store/types";
+import type { AppUser, Role } from "@/lib/store/types";
 
 /**
- * Who uses this app. One row per person, and the sheet is where they are created.
+ * Who uses this app. One row per person. Server-only: the PIN columns never reach a browser —
+ * the API hands out `AppUser` (see `toPublicProfile`), which only says whether a PIN is set.
  *
- * The PIN is stored as the four digits, not a hash. A hash was the better instinct and the
- * wrong fit: profiles are now typed straight into the spreadsheet, and nobody can work out a
- * SHA-256 of "id:1234" in a cell. Plain digits are also honest about what this is — anyone
- * who can open the sheet can read every PIN, change any row, or add themselves. The PIN stops
- * two people on one tablet saving as each other; it is not a lock, and nothing on screen
- * claims otherwise.
+ * PINs are stored hashed with scrypt (see lib/auth/pin.ts) in `pinSecure`. A row can still be
+ * typed straight into the sheet with the four digits in the `pin` column; the first successful
+ * sign-in writes the scrypt hash.
+ *
+ * TRANSITION — while the live site (main) still runs the old sign-in, which reads `pin` and the
+ * old SHA-256 `pinHash`, this code keeps those two columns working: it never clears them, and
+ * a PIN set here also writes the old SHA-256 hash, so a profile made on the redesign preview
+ * can still sign in on the live site. Both legacy columns are as readable as the digits
+ * themselves (four digits are 10,000 guesses). Once the redesign is live, run the cleanup
+ * that blanks `pin` and `pinHash` and drop the legacy writes (see `LEGACY_PIN_COLUMNS`).
+ *
+ * `role` is "executive" or "employee". A blank role reads as executive: every profile made
+ * before roles came back had full access, and taking it away silently would lock the owners
+ * out of their own costing. New profiles always get an explicit role.
  *
  * A hand-typed row has no id, so one is derived from the name. That means renaming someone in
  * the sheet creates a new profile rather than renaming the old one — the trade for being able
  * to add a person by typing two cells.
  */
-const USER_HEADER = ["id", "name", "pinHash", "role", "createdAt", "deletedAt", "pin"];
+const USER_HEADER = ["id", "name", "pinHash", "role", "createdAt", "deletedAt", "pin", "color", "pinSecure"];
+
+/** Keep writing the old-format PIN columns the live site's sign-in reads. See TRANSITION above. */
+export const LEGACY_PIN_COLUMNS = true;
+
+export interface UserRecord extends AppUser {
+  /** scrypt hash — the one this code trusts. */
+  pinSecure: string;
+  /** Legacy SHA-256 over "id:digits", which the live site's old sign-in checks. */
+  pinHash: string;
+  /** Plain digits typed into the sheet. */
+  pin: string;
+}
 
 /** Stable id for a row somebody typed without one. */
 function idFromName(name: string): string {
   return `sheet:${name.trim().toLowerCase().replace(/\s+/g, "-")}`;
 }
 
-function userToRow(u: AppUser): string[] {
-  // The role column is kept and written blank: dropping it would shift every cell after
-  // it on rows that already exist.
-  return [u.id, u.name, u.pinHash, "", u.createdAt, "", u.pin ?? ""];
+export function parseRole(raw: string | undefined): Role {
+  return (raw ?? "").trim().toLowerCase() === "employee" ? "employee" : "executive";
 }
 
-function userFromRow(row: string[]): AppUser | null {
-  const [id, name, pinHash, , createdAt, , pin] = row;
+function userToRow(u: UserRecord): string[] {
+  return [u.id, u.name, u.pinHash, u.role, u.createdAt, "", u.pin, u.color, u.pinSecure];
+}
+
+function userFromRow(row: string[]): UserRecord | null {
+  const [id, name, pinHash, role, createdAt, , pin, color, pinSecure] = row;
   const trimmedName = (name ?? "").trim();
   // A row needs a name, not an id — the id is what the app wants and the name is what a
   // person types. Rows with neither are blank spreadsheet lines and are skipped.
   if (!trimmedName) return null;
+  const hash = (pinHash ?? "").trim();
+  const digits = (pin ?? "").trim();
+  const secure = (pinSecure ?? "").trim();
   return {
     id: id || idFromName(trimmedName),
     name: trimmedName,
-    pinHash: pinHash ?? "",
-    pin: (pin ?? "").trim(),
+    role: parseRole(role),
+    color: (color ?? "").trim(),
+    hasPin: Boolean(secure || hash || digits),
+    pinSecure: secure,
+    pinHash: hash,
+    pin: digits,
     createdAt: createdAt || new Date().toISOString(),
   };
 }
 
-export const usersCollection = createSheetCollection<AppUser>({
+export function toPublicProfile(u: UserRecord): AppUser {
+  return { id: u.id, name: u.name, role: u.role, color: u.color, hasPin: u.hasPin, createdAt: u.createdAt };
+}
+
+export const usersCollection = createSheetCollection<UserRecord>({
   sheetName: "Users",
   header: USER_HEADER,
   idColumn: "id",

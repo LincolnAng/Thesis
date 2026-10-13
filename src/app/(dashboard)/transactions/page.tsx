@@ -3,6 +3,7 @@
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 import { ArrowDown, ArrowRight, ArrowUp } from "lucide-react";
 import { CarouselNav } from "@/components/ui/carousel-nav";
 import { Page } from "@/components/layout/page";
@@ -87,6 +88,10 @@ function StatCard({
 function TransactionsPageInner() {
   const { entries, categoryBudgets, businessSettings } = useStore();
   const [viewMode] = useViewMode();
+  // An employee records and checks sales and spoilage; money out, profit and the budget are
+  // the owners'. The server doesn't send them expenses or R&D at all — this keeps the screen
+  // from showing boxes that would read as ₱0.
+  const exec = isExecutive(useCurrentUser());
   const searchParams = useSearchParams();
   // Arriving from a supplier's "See spending" link: show only what was paid to them.
   const supplierFilter = searchParams.get("supplier");
@@ -136,7 +141,7 @@ function TransactionsPageInner() {
       .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
   }, [periodRows, kind, search, supplierFilter]);
 
-  if (viewMode === "simple") {
+  if (exec && viewMode === "simple") {
     return (
       <Page title="Transactions">
         <SimpleMoney />
@@ -147,15 +152,16 @@ function TransactionsPageInner() {
   return (
     <Page
       title="Transactions"
+      hideModeToggle={!exec}
       right={
         <>
-          <button
+          {exec && <button
             type="button"
             onClick={() => setShowBudget((v) => !v)}
             className={`rounded-[10px] border px-4 py-2.5 text-[13px] font-semibold ${showBudget ? "border-cacao/30 bg-cacao/10 text-cacao" : "border-line/20 bg-card"}`}
           >
             {showBudget ? "Hide target & budget" : "Target & budget"}
-          </button>
+          </button>}
           <button
             type="button"
             onClick={() => setAddOpen(true)}
@@ -203,14 +209,15 @@ function TransactionsPageInner() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 gap-4 min-[900px]:grid-cols-3">
+        <div className={`grid grid-cols-1 gap-4 ${exec ? "min-[900px]:grid-cols-3" : "min-[900px]:grid-cols-2"}`}>
           <StatCard
-            label={`Money IN · ${periodName}`}
+            label={exec ? `Money IN · ${periodName}` : `Sales · ${periodName}`}
             value={periodTotals.totalIn}
             tone="good"
-            sub={periodTarget > 0 ? `${Math.round((periodTotals.totalIn / periodTarget) * 100)}% of ${formatPeso(periodTarget)} target` : "No target set"}
+            sub={!exec ? "everything sold" : periodTarget > 0 ? `${Math.round((periodTotals.totalIn / periodTarget) * 100)}% of ${formatPeso(periodTarget)} target` : "No target set"}
             icon={<ArrowUp className="h-5 w-5 text-success" strokeWidth={2} />}
           />
+          {exec && (<>
           <StatCard
             label={`Money OUT · ${periodName}`}
             value={periodTotals.totalOut}
@@ -232,9 +239,10 @@ function TransactionsPageInner() {
             }
             icon={<ArrowRight className="h-5 w-5 text-white" strokeWidth={2} />}
           />
+          </>)}
         </div>
 
-        {showBudget && (
+        {exec && showBudget && (
           <div className="flex flex-col gap-4 rounded-2xl border border-line/15 bg-card p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="text-sm font-semibold">Target & budget</div>
@@ -269,7 +277,7 @@ function TransactionsPageInner() {
                     ["RND", "R&D"],
                     ["WASTE", "Spoilage"],
                   ] as const
-                ).map(([k, label]) => (
+                ).filter(([k]) => exec || k === "all" || k === "SALE" || k === "WASTE").map(([k, label]) => (
                   <button
                     key={k}
                     type="button"

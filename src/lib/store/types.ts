@@ -238,15 +238,24 @@ export interface SyncStatus {
   failedAt: string | null;
 }
 
-/** Someone who uses this app on the shared device. See lib/sheets/users.ts on the PIN. */
+/**
+ * What a profile can see and do. Executives see everything; employees log sales, spoilage and
+ * batches but never costs, margins, R&D or payroll. Enforced on the server (lib/auth/permissions),
+ * so hiding a screen is only ever the polite half of it.
+ */
+export type Role = "executive" | "employee";
+
+/**
+ * Someone who uses this app, as every device sees them. The PIN itself never leaves the server:
+ * `hasPin` is all the profile picker needs to know. See lib/sheets/users.ts for the stored row.
+ */
 export interface AppUser {
   id: string;
   name: string;
-  /** Legacy hashed PIN from before profiles were created in the spreadsheet. Still accepted
-   *  on sign-in so nobody set up the old way is locked out. */
-  pinHash: string;
-  /** The four digits, as typed in the Users sheet. See sheets/users.ts on why it is plain. */
-  pin?: string;
+  role: Role;
+  /** Tile colour, saved with the profile so it looks the same on every device. */
+  color: string;
+  hasPin: boolean;
   createdAt: string;
 }
 

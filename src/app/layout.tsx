@@ -22,8 +22,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Mang Kiko's Cocoa",
-  description: "Tell me what happened — I'll track it. A simple business tracker for Mang Kiko's Cocoa.",
+  title: "Mang Kiko's Cacao",
+  description: "Tell me what happened — I'll track it. A simple business tracker for Mang Kiko's Cacao.",
 };
 
 export const viewport: Viewport = {

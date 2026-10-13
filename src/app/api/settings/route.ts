@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/auth/session";
 import { getAiSettings, maskApiKey, saveAiSettings, type BotLanguage } from "@/lib/sheets/settings";
 
 const VALID_BOT_LANGUAGES: BotLanguage[] = ["english", "filipino", "cebuano"];
 
 export async function GET() {
+  const auth = await requireSession(["executive"]);
+  if (auth.denied) return auth.denied;
   try {
     const settings = await getAiSettings();
     const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
@@ -25,6 +28,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireSession(["executive"]);
+  if (auth.denied) return auth.denied;
   let body: { apiKey?: string; model?: string; botLanguage?: string };
   try {
     body = await req.json();

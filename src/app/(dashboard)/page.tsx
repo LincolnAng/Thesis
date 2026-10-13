@@ -1,5 +1,6 @@
 "use client";
 
+import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 import { useMemo } from "react";
 import Link from "next/link";
 import { ArrowLeftRight, Box, CalendarDays, CircleDollarSign, Tag, Users, type LucideIcon } from "lucide-react";
@@ -112,14 +113,14 @@ function buildTiles(
     },
     low.length
       ? {
-          href: "/inventory",
+          href: "/production",
           icon: Box,
           label: "Inventory — running low",
           value: `${low[0].p.name}: ${low[0].p.stockQty} left`,
           note: low.length > 1 ? `+ ${low.slice(1, 3).map((l) => l.p.name).join(", ")}${low.length > 3 ? ` +${low.length - 3} more` : ""}` : "Restock soon",
           tone: "bad",
         }
-      : { href: "/inventory", icon: Box, label: "Inventory", value: "Stock looks healthy", note: "Covers next month's forecast", tone: "good" },
+      : { href: "/production", icon: Box, label: "Production", value: "Stock looks healthy", note: "Covers next month's forecast", tone: "good" },
     {
       href: "/people",
       icon: Users,
@@ -138,14 +139,14 @@ function buildTiles(
       : { href: "/people?tab=events", icon: CalendarDays, label: "Events", value: "Nothing planned", note: "Add one under People → Events" },
     best
       ? {
-          href: "/pricing",
+          href: "/costing?view=pricing",
           icon: Tag,
           label: "Pricing — best margin",
           value: `${best.p.name} — ${formatPeso(best.price)}`,
           note: `${Math.round(best.pct)}% margin`,
           tone: best.pct >= 15 ? "good" : "bad",
         }
-      : { href: "/pricing", icon: Tag, label: "Pricing", value: "No products yet", note: "Add products first" },
+      : { href: "/costing?view=pricing", icon: Tag, label: "Pricing", value: "No products yet", note: "Add products first" },
   ];
 }
 
@@ -212,7 +213,10 @@ function TodayAtAGlance({ tiles }: { tiles: Tile[] }) {
 
 export default function HomePage() {
   const { entries, products, suppliers, categoryBudgets, events, businessSettings } = useStore();
-  const [viewMode] = useViewMode();
+  const [chosenMode] = useViewMode();
+  // Employees get the plain Today cards: the Advanced overview is profit, margins and costs.
+  const exec = isExecutive(useCurrentUser());
+  const viewMode = exec ? chosenMode : "simple";
   const costCtx = useCostContext();
 
   const sales = useMemo(
@@ -240,7 +244,7 @@ export default function HomePage() {
   );
 
   return (
-    <Page title="Home">
+    <Page title="Home" hideModeToggle={!exec}>
     <div className="space-y-14 pb-4">
       <HomeChat />
 

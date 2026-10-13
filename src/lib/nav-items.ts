@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Box, Home, Settings, ShoppingBag, Tag, Users, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, CalendarDays, Factory, Home, Settings, Tag, Users, type LucideIcon } from "lucide-react";
 
 export interface NavItem {
   href: string;
@@ -9,23 +9,27 @@ export interface NavItem {
 }
 
 /**
- * The main sections, in sidebar order. Ask AI lives on Home; Events live under People.
+ * The five main tabs, the same for every profile. What each one shows depends on the role
+ * (an employee's Costing is a product gallery), but nobody gets a different set of tabs:
+ * "check Costing" should point at something everyone can see. Ask AI lives on Home.
  *
- * ONE name per section, in both modes. The sidebar used to rename itself when the view mode
- * changed — Inventory became Stock, Pricing became Prices, Transactions became Money — so the
- * same page had two names depending on a toggle elsewhere, and a note saying "check Inventory"
- * pointed at nothing she could see. Each section keeps the one name that says what it's for:
- * Products is what she sells, Inventory is what's on the shelf, and Price Calculator works
- * out what to charge.
+ * ONE name per section, in both modes: a page that renames itself depending on a toggle
+ * elsewhere leaves a note like "check Inventory" pointing at nothing.
  */
 export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Home", icon: Home },
   { href: "/transactions", label: "Transactions", icon: ArrowLeftRight },
-  { href: "/products", label: "Products", icon: ShoppingBag },
-  { href: "/inventory", label: "Inventory", icon: Box },
-  { href: "/people", label: "People", icon: Users },
-  { href: "/pricing", label: "Price Calculator", icon: Tag },
+  { href: "/costing", label: "Costing", icon: Tag },
+  { href: "/production", label: "Production", icon: Factory },
+  { href: "/calendar", label: "Calendar", icon: CalendarDays },
 ];
 
-/** Pinned to the bottom of the sidebar, below the main sections. */
+/**
+ * Not tabs: reached from the profile menu (bottom of the sidebar, last tab on phones). People
+ * holds customers, suppliers and events; Settings is the owner's — AI key, spreadsheet, reset.
+ */
+export const PEOPLE_ITEM: NavItem = { href: "/people", label: "People", icon: Users };
 export const SETTINGS_ITEM: NavItem = { href: "/settings", label: "Settings", icon: Settings };
+
+/** Everyone gets Settings — an employee's holds only their own profile (to change their PIN). */
+export const SECONDARY_ITEMS: NavItem[] = [PEOPLE_ITEM, SETTINGS_ITEM];

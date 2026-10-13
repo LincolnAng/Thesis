@@ -1,5 +1,6 @@
 "use client";
 
+import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 import { useState } from "react";
 import { Check, Plus, Trash2, X } from "lucide-react";
 import { useStore } from "@/lib/store/use-store";
@@ -165,6 +166,8 @@ export function TransactionGrid({
 }) {
   const { entries, products, rawMaterials, suppliers, categoryBudgets, businessSettings } = useStore();
   const costCtx = useCostContext();
+  // Employees can record sales and spoilage only; the server refuses anything else from them.
+  const exec = isExecutive(useCurrentUser());
   /**
    * Which rows are being counted in bulk, by entry id ("new" for the draft).
    *
@@ -356,8 +359,8 @@ export function TransactionGrid({
               onChange={(e) => changeNew({ type: e.target.value as "SALE" | "EXPENSE" | "RND" | "WASTE" })}
             >
               <option value="SALE">Sale</option>
-              <option value="EXPENSE">Expense</option>
-              <option value="RND">R&amp;D</option>
+              {exec && <option value="EXPENSE">Expense</option>}
+              {exec && <option value="RND">R&amp;D</option>}
               <option value="WASTE">Spoilage</option>
             </select>
             {itemCell(newRow.sku, (sku) => changeNew({ sku }))}
@@ -460,8 +463,8 @@ export function TransactionGrid({
               onChange={(ev) => patch(e, { type: ev.target.value as "SALE" | "EXPENSE" | "RND" | "WASTE" })}
             >
               <option value="SALE">Sale</option>
-              <option value="EXPENSE">Expense</option>
-              <option value="RND">R&amp;D</option>
+              {exec && <option value="EXPENSE">Expense</option>}
+              {exec && <option value="RND">R&amp;D</option>}
               <option value="WASTE">Spoilage</option>
             </select>
             {itemCell(e.sku, (sku) => patch(e, { sku }))}

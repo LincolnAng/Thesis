@@ -13,8 +13,11 @@ export function Page({
   right,
   children,
   hideModeToggle,
+  subnav,
 }: {
   title: string;
+  /** A tab strip under the title bar, for pages that hold more than one view (Costing). */
+  subnav?: ReactNode;
   /** Plain-words title for Simple mode, when it differs. */
   right?: ReactNode;
   children: ReactNode;
@@ -30,7 +33,10 @@ export function Page({
           {!hideModeToggle && <ViewModeToggle />}
         </div>
       </header>
-      <div className="flex-1 px-4 py-7 min-[1024px]:px-8">{children}</div>
+      <div className="flex-1 px-4 py-7 min-[1024px]:px-8">
+        {subnav && <div className="mb-6">{subnav}</div>}
+        {children}
+      </div>
     </div>
   );
 }

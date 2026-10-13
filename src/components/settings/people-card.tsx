@@ -8,18 +8,36 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { ConfirmDeleteButton } from "@/components/data-table/confirm-delete-button";
 import { useStore } from "@/lib/store/use-store";
-import { addUser, deleteUser, updateUser, canUndo, undoActivity } from "@/lib/store/store";
-import { signOut, useCurrentUser } from "@/lib/auth/current-user";
-import type { AppUser } from "@/lib/store/types";
+import { canUndo, createProfile, deleteProfile, undoActivity, updateProfile } from "@/lib/store/store";
+import { isExecutive, signOut, useCurrentUser } from "@/lib/auth/current-user";
+import type { AppUser, Role } from "@/lib/store/types";
 
 /**
- * Who may use the app, and what everyone has been changing.
+ * Who may use the app, what each person can see, and what everyone has been changing.
+ *
+ * Executives add people, choose their role and reset PINs; everyone else sees the list and can
+ * change only their own PIN. The server enforces the same (api/auth/profiles), so this screen
+ * is the convenient half of the rule, not the rule.
  *
  * The PIN is a "whose turn is it on the tablet" check, not a security boundary — it's
  * described that way here rather than implying more than it does.
  */
 
 const SHOW_FIRST = 12;
+
+const ROLE_HINT: Record<Role, string> = {
+  executive: "Executive — sees everything, including costs, R&D and payroll",
+  employee: "Employee — logs sales, spoilage and batches; no costs or profit",
+};
+
+const REASONS: Record<string, string> = {
+  forbidden: "Only an Executive can do that.",
+  name_taken: "Someone already has that name.",
+  last_executive: "There has to be at least one Executive.",
+  pin_must_be_4_digits: "The PIN has to be 4 digits.",
+  missing_name: "Type a name first.",
+  offline: "Couldn't reach the server. Check your connection.",
+};
 
 function when(iso: string): string {
   const date = new Date(iso);
@@ -30,30 +48,54 @@ function when(iso: string): string {
     : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+function RolePicker({ value, onChange, disabled }: { value: Role; onChange: (r: Role) => void; disabled?: boolean }) {
+  return (
+    <select
+      value={value}
+      disabled={disabled}
+      onChange={(e) => onChange(e.target.value as Role)}
+      className="h-11 rounded-md border border-input bg-transparent px-2 text-sm disabled:opacity-60"
+      aria-label="Role"
+    >
+      <option value="executive">Executive</option>
+      <option value="employee">Employee</option>
+    </select>
+  );
+}
+
 export function PeopleCard() {
   const { users } = useStore();
   const me = useCurrentUser();
+  const exec = isExecutive(me);
   const [name, setName] = useState("");
   const [pin, setPin] = useState("");
+  const [role, setRole] = useState<Role>("employee");
   const [resetting, setResetting] = useState<string | null>(null);
   const [newPin, setNewPin] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
-  function add() {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    // Plain digits, matching what somebody would type straight into the sheet — see
-    // sheets/users.ts for why the hash was the wrong fit once the sheet became the way in.
-    const user = addUser(trimmed, "");
-    updateUser(user.id, { pin: pin.replace(/\D/g, "").slice(0, 4) });
-    setName("");
-    setPin("");
+  async function run(action: Promise<{ ok: boolean; reason?: string }>): Promise<boolean> {
+    setError(null);
+    const result = await action;
+    if (!result.ok) setError(REASONS[result.reason ?? ""] ?? "That didn't save. Try again.");
+    return result.ok;
   }
 
-  function savePin(user: AppUser) {
-    // Writing `pin` also clears any old hash, so the two can never disagree about the digits.
-    updateUser(user.id, { pin: newPin.replace(/\D/g, "").slice(0, 4), pinHash: "" });
-    setResetting(null);
-    setNewPin("");
+  async function add() {
+    const trimmed = name.trim();
+    if (!trimmed || pin.length !== 4) return;
+    if (await run(createProfile({ name: trimmed, pin, role }))) {
+      setName("");
+      setPin("");
+      setRole("employee");
+    }
+  }
+
+  async function savePin(user: AppUser) {
+    if (await run(updateProfile(user.id, { pin: newPin }))) {
+      setResetting(null);
+      setNewPin("");
+    }
   }
 
   return (
@@ -66,92 +108,109 @@ export function PeopleCard() {
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Everyone picks their name when they open the app, and everything they save gets their name on it.
-            Add someone by putting their name and a 4-digit PIN in the <span className="font-semibold">Users</span>{" "}
-            tab of your Google Sheet — they appear at the next sync. The PIN keeps two people on one tablet from
-            saving as each other; it is not a password, and anyone who can open the sheet can read or change it.
+            Everyone picks their profile when they open the app, on any device, and everything they save gets their name
+            on it. {exec ? "You can add people and choose what they see." : "Only an Executive can add people or change roles."}{" "}
+            The PIN keeps people sharing a tablet apart; it is not a password, and anyone with access to the Google Sheet
+            can see every record in it.
           </p>
 
           {users.length > 0 && (
             <ul className="divide-y divide-border rounded-[var(--radius-panel)] border border-border">
-              {users.map((user) => (
-                <li key={user.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-foreground">
-                      {user.name}
-                      {me?.id === user.id && <span className="text-muted-foreground"> · you</span>}
+              {users.map((user) => {
+                const mine = me?.id === user.id;
+                return (
+                  <li key={user.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-foreground">
+                        {user.name}
+                        {mine && <span className="text-muted-foreground"> · you</span>}
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        {ROLE_HINT[user.role]}
+                        {!user.hasPin && " · no PIN yet"}
+                      </span>
                     </span>
-                    <span className="block text-xs text-muted-foreground">
-                      {user.pin || user.pinHash ? "PIN set" : "No PIN yet — they can't sign in"}
-                    </span>
-                  </span>
-                  {resetting === user.id ? (
-                    <span className="flex items-center gap-1.5">
-                      <Input
-                        autoFocus
-                        type="password"
-                        inputMode="numeric"
-                        maxLength={4}
-                        placeholder="New PIN"
-                        className="h-9 w-24"
-                        value={newPin}
-                        onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ""))}
-                        onKeyDown={(e) => e.key === "Enter" && void savePin(user)}
-                      />
-                      <Button size="sm" onClick={() => void savePin(user)}>
-                        Save
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => setResetting(null)}>
-                        Cancel
-                      </Button>
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-1.5">
-                      <Button size="sm" variant="secondary" onClick={() => (setResetting(user.id), setNewPin(""))}>
-                        Set PIN
-                      </Button>
-                      <ConfirmDeleteButton onConfirm={() => deleteUser(user.id)} />
-                    </span>
-                  )}
-                </li>
-              ))}
+                    {resetting === user.id ? (
+                      <span className="flex items-center gap-1.5">
+                        <Input
+                          autoFocus
+                          type="password"
+                          inputMode="numeric"
+                          maxLength={4}
+                          placeholder="New PIN"
+                          className="h-11 w-24"
+                          value={newPin}
+                          onChange={(e) => setNewPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                          onKeyDown={(e) => e.key === "Enter" && void savePin(user)}
+                        />
+                        <Button className="min-h-11" onClick={() => void savePin(user)} disabled={newPin.length !== 4}>
+                          Save
+                        </Button>
+                        <Button className="min-h-11" variant="ghost" onClick={() => setResetting(null)}>
+                          Cancel
+                        </Button>
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1.5">
+                        {exec && (
+                          <RolePicker value={user.role} onChange={(r) => void run(updateProfile(user.id, { role: r }))} />
+                        )}
+                        {(exec || mine) && (
+                          <Button className="min-h-11" variant="secondary" onClick={() => (setResetting(user.id), setNewPin(""))}>
+                            Set PIN
+                          </Button>
+                        )}
+                        {exec && !mine && <ConfirmDeleteButton onConfirm={() => void run(deleteProfile(user.id))} />}
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
 
-          <div className="flex flex-wrap items-end gap-2 border-t border-border pt-3">
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Name</Label>
-              <Input
-                className="h-9 w-40"
-                placeholder="e.g. Kuya Jun"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && void add()}
-              />
+          {exec && (
+            <div className="flex flex-wrap items-end gap-2 border-t border-border pt-3">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Name</Label>
+                <Input
+                  className="h-11 w-40"
+                  placeholder="e.g. Kuya Jun"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && void add()}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">4-digit PIN</Label>
+                <Input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={4}
+                  className="h-11 w-24"
+                  placeholder="••••"
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Role</Label>
+                <RolePicker value={role} onChange={setRole} />
+              </div>
+              <Button className="min-h-11" disabled={!name.trim() || pin.length !== 4} onClick={() => void add()}>
+                Add person
+              </Button>
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">PIN (optional)</Label>
-              <Input
-                type="password"
-                inputMode="numeric"
-                maxLength={8}
-                className="h-9 w-24"
-                placeholder="4 digits"
-                value={pin}
-                onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-              />
-            </div>
-            <Button size="sm" disabled={!name.trim()} onClick={() => void add()}>
-              Add person
-            </Button>
-          </div>
+          )}
+
+          {error && <p className="text-sm text-danger">{error}</p>}
 
           {me && (
             <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
               <span className="text-sm text-muted-foreground">
                 Signed in as <span className="font-medium text-foreground">{me.name}</span>
               </span>
-              <Button size="sm" variant="secondary" onClick={signOut}>
+              <Button className="min-h-11" variant="secondary" onClick={() => void signOut()}>
                 Switch person
               </Button>
             </div>

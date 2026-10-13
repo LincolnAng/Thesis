@@ -1,5 +1,6 @@
 "use client";
 
+import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 import { useMemo, useState } from "react";
 import { Box, FlaskConical, Receipt, Trash2, TruckIcon, Wallet, type LucideIcon } from "lucide-react";
 import { QuickEditDialog } from "@/components/home/quick-edit-dialog";
@@ -56,7 +57,9 @@ export function QuickLog() {
   const count = (type: EntryType) => todays.filter((e) => e.type === type).length;
   const hasOpenEvent = events.some((e) => e.status === "open");
 
-  const actions: Action[] = [
+  // Paying and R&D are the owners' to record; the server refuses them from an employee.
+  const exec = isExecutive(useCurrentUser());
+  const allActions: Action[] = [
     {
       type: "SALE",
       icon: Receipt,
@@ -111,6 +114,7 @@ export function QuickLog() {
         ]
       : []),
   ];
+  const actions = exec ? allActions : allActions.filter((a) => a.type !== "EXPENSE" && a.type !== "RND");
 
   /**
    * What you sell most, so a sale opens with the usual product and one of it already in —

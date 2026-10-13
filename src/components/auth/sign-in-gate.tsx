@@ -1,29 +1,30 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { Camera } from "lucide-react";
 import { ChocolateBarLogo } from "@/components/ui/chocolate-bar-logo";
-import { useStore } from "@/lib/store/use-store";
-import { addUser, updateUser } from "@/lib/store/store";
-import { hashPin, signIn, useCurrentUser } from "@/lib/auth/current-user";
+import { adoptSignedInProfile, signInWithPin, useCurrentUser, verifySession } from "@/lib/auth/current-user";
 import { setProfilePhoto, useProfilePhotos } from "@/lib/auth/profile-photos";
+import { profileColor } from "@/lib/auth/profile-colors";
 import { shrinkImage } from "@/lib/products/photos";
-import { CARD_GRADIENTS } from "@/lib/summary/item-icons";
 import type { AppUser } from "@/lib/store/types";
 
 /**
- * "Who's using this?" — shown over the app until somebody says who they are, so every save
- * can be stamped with a name.
+ * "Who's using this?" — Netflix-style: pick your profile, enter your PIN, and the server signs
+ * this device in as you. Shown over the app until somebody has, so every save is stamped with
+ * a name and every screen shows only what that profile's role allows.
  *
- * Profiles are made here. Creating one used to mean typing a row into the Users sheet, which
- * is a detour through a spreadsheet to answer a question the screen is already asking — so
- * the screen asks it: a name and four digits, and you are in.
+ * The profile list comes from the server, so a profile made on one device is on every device.
+ * The PIN is checked there too, and never reaches this page. It is still not a password: it
+ * keeps two people on one tablet apart, and anyone with access to the Google Sheet can see
+ * everything in it.
  *
- * The PIN is required and is not security. It stops two people sharing a tablet from saving
- * as each other; anyone who can open the spreadsheet can read every PIN in it. Saying so
- * plainly is better than a lock that is trusted further than it deserves.
+ * New profiles are added by an executive in Settings → People. The one exception is the very
+ * first profile, which is how a new shop gets in at all.
  */
+
+const ROLE_LABEL: Record<AppUser["role"], string> = { executive: "Executive", employee: "Employee" };
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -46,10 +47,6 @@ function Tile({
   onPhoto: (file: File | undefined) => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
-  // No PIN is a nudge, never a lock. Every profile that already existed was created without
-  // one, and refusing those would have left the app with no way in at all — the person who
-  // could add the PINs is behind the screen asking for them.
-  const noPin = !person.pin && !person.pinHash;
 
   return (
     <div className="group flex w-[128px] flex-col items-center gap-2.5">
@@ -57,9 +54,8 @@ function Tile({
         <button
           type="button"
           onClick={onPick}
-          className={`flex h-[128px] w-[128px] items-center justify-center overflow-hidden rounded-2xl shadow-sm transition hover:scale-[1.03] hover:ring-2 hover:ring-cacao/50 ${
-            photo ? "" : `bg-gradient-to-br ${CARD_GRADIENTS[index % CARD_GRADIENTS.length]}`
-          }`}
+          style={photo ? undefined : { background: profileColor(person.color, index) }}
+          className="flex h-[128px] w-[128px] items-center justify-center overflow-hidden rounded-2xl shadow-sm transition hover:scale-[1.03] hover:ring-2 hover:ring-cacao/50"
         >
           {photo ? (
             <Image src={photo} alt="" width={128} height={128} className="h-full w-full object-cover" unoptimized />
@@ -82,7 +78,7 @@ function Tile({
           type="button"
           onClick={() => input.current?.click()}
           aria-label={`Change ${person.name}'s photo`}
-          className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full border border-line/15 bg-card text-muted-foreground opacity-0 transition hover:text-cacao group-hover:opacity-100 focus-visible:opacity-100"
+          className="absolute -bottom-1 -right-1 flex h-11 w-11 items-center justify-center rounded-full border border-line/15 bg-card text-muted-foreground opacity-0 transition hover:text-cacao group-hover:opacity-100 focus-visible:opacity-100"
         >
           <Camera className="h-4 w-4" />
         </button>
@@ -90,115 +86,164 @@ function Tile({
 
       <span className="flex flex-col items-center">
         <span className="text-[15px] font-semibold">{person.name}</span>
-        {noPin && <span className="text-[11px] text-muted-foreground">No PIN yet</span>}
+        <span className="text-[11px] text-muted-foreground">
+          {ROLE_LABEL[person.role]}
+          {!person.hasPin && " · No PIN yet"}
+        </span>
       </span>
     </div>
   );
 }
 
-/**
- * Name and four digits. No roles to choose and nothing optional, because every extra field
- * here is a question asked before anybody has seen the app.
- */
-function NewProfile({ onDone, autoSignIn = false }: { onDone: () => void; autoSignIn?: boolean }) {
+/** The first profile: the owner's, so it is an executive, and the server signs them in. */
+function FirstProfile() {
   const [name, setName] = useState("");
   const [pin, setPin] = useState("");
-  const ready = name.trim().length > 0 && pin.length === 4;
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const ready = name.trim().length > 0 && pin.length === 4 && !saving;
 
-  function create() {
+  async function create() {
     if (!ready) return;
-    const made = addUser(name.trim(), "");
-    updateUser(made.id, { pin });
-    if (autoSignIn) signIn({ id: made.id, name: made.name });
-    setName("");
-    setPin("");
-    onDone();
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/auth/profiles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), pin }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        setError(json.reason === "forbidden" ? "Someone already set this shop up — refresh to see their profile." : "Couldn't save that. Check your connection and try again.");
+        setSaving(false);
+        return;
+      }
+      adoptSignedInProfile({ id: json.profile.id, name: json.profile.name, role: json.profile.role });
+    } catch {
+      setError("Couldn't reach the server. Check your connection and try again.");
+      setSaving(false);
+    }
   }
 
   return (
     <div className="mx-auto flex w-full max-w-[360px] flex-col gap-2 rounded-2xl border border-line/15 bg-card p-4">
-      <label className="text-xs text-muted-foreground">Name</label>
+      <label className="text-xs text-muted-foreground" htmlFor="first-name">Name</label>
       <input
+        id="first-name"
         autoFocus
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="e.g. Auntie Sandy"
-        className="h-10 rounded-lg border border-input bg-transparent px-3 text-[15px] outline-none focus:border-cacao"
+        className="h-11 rounded-lg border border-input bg-transparent px-3 text-[15px] outline-none focus:border-cacao"
       />
-      <label className="mt-1 text-xs text-muted-foreground">Pick a 4-digit PIN</label>
+      <label className="mt-1 text-xs text-muted-foreground" htmlFor="first-pin">Pick a 4-digit PIN</label>
       <input
+        id="first-pin"
         type="password"
         inputMode="numeric"
         maxLength={4}
         value={pin}
         onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
-        onKeyDown={(e) => e.key === "Enter" && create()}
+        onKeyDown={(e) => e.key === "Enter" && void create()}
         placeholder="••••"
-        className="h-10 rounded-lg border border-input bg-transparent px-3 text-center font-display text-[20px] tracking-[0.4em] outline-none focus:border-cacao"
+        className="h-11 rounded-lg border border-input bg-transparent px-3 text-center font-display text-[20px] tracking-[0.4em] outline-none focus:border-cacao"
       />
       <p className="text-[11px] leading-relaxed text-muted-foreground">
-        The PIN keeps two people on one tablet from saving as each other. It is not a password — anyone who can open
-        your Google Sheet can read it.
+        You&apos;ll be an Executive, with full access. The PIN keeps people sharing a tablet apart — it is not a password,
+        and anyone with access to your Google Sheet can see your records.
       </p>
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={create}
-          disabled={!ready}
-          className="flex-1 rounded-[10px] bg-cacao px-4 py-2 text-[14px] font-semibold text-ivory disabled:opacity-40"
-        >
-          Create
-        </button>
-        <button type="button" onClick={onDone} className="rounded-[10px] border border-line/20 px-4 py-2 text-[14px] font-semibold">
-          Cancel
-        </button>
-      </div>
+      {error && <p className="text-[13px] text-danger">{error}</p>}
+      <button
+        type="button"
+        onClick={() => void create()}
+        disabled={!ready}
+        className="min-h-11 rounded-[10px] bg-cacao px-4 py-2 text-[14px] font-semibold text-ivory disabled:opacity-40"
+      >
+        {saving ? "Setting up…" : "Create"}
+      </button>
     </div>
   );
 }
 
 export function SignInGate({ children }: { children: React.ReactNode }) {
-  const { users } = useStore();
   const user = useCurrentUser();
   const photos = useProfilePhotos();
+  const [profiles, setProfiles] = useState<AppUser[] | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [picked, setPicked] = useState<AppUser | null>(null);
   const [pin, setPin] = useState("");
-  const [wrong, setWrong] = useState(false);
-  const [creating, setCreating] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
 
-  // Nobody set up yet. A shop that has not set anyone up is not locked out of its own
-  // app — it just has no name to stamp on things.
+  useEffect(() => {
+    if (user) {
+      void verifySession();
+      return;
+    }
+    let cancelled = false;
+    fetch("/api/auth/profiles")
+      .then((r) => r.json())
+      .then((json) => {
+        if (cancelled) return;
+        if (json.success) setProfiles(json.profiles as AppUser[]);
+        else setLoadFailed(true);
+      })
+      .catch(() => !cancelled && setLoadFailed(true));
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
   if (user) return <>{children}</>;
-  // A shop that has never added anyone is not locked out of its own app; it just has no name
-  // to stamp on things until somebody makes a profile.
-  if (users.length === 0 && !creating) {
+
+  if (loadFailed) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-ivory px-4">
-        <div className="w-full max-w-[420px] rounded-2xl border border-line/15 bg-card p-7 text-center">
-          <ChocolateBarLogo className="mx-auto mb-4 h-12 w-[38px]" />
-          <h1 className="font-display text-[26px] font-semibold">Make your profile</h1>
-          <p className="mt-1 text-[14px] leading-relaxed text-muted-foreground">
-            Everything you save gets your name on it. You can add the people who help you afterwards.
-          </p>
-          <div className="mt-5 text-left">
-            <NewProfile onDone={() => setCreating(false)} autoSignIn />
-          </div>
+      <Centered>
+        <h1 className="font-display text-[26px] font-semibold">Can&apos;t reach the shop&apos;s records</h1>
+        <p className="mt-2 text-[14px] text-muted-foreground">Check the internet connection, then try again.</p>
+        <button type="button" onClick={() => window.location.reload()} className="mt-5 min-h-11 rounded-[10px] bg-cacao px-5 text-[14px] font-semibold text-ivory">
+          Try again
+        </button>
+      </Centered>
+    );
+  }
+
+  if (profiles === null) {
+    return (
+      <Centered>
+        <p className="text-[14px] text-muted-foreground">Loading profiles…</p>
+      </Centered>
+    );
+  }
+
+  if (profiles.length === 0) {
+    return (
+      <Centered>
+        <h1 className="font-display text-[26px] font-semibold">Make your profile</h1>
+        <p className="mt-1 text-[14px] leading-relaxed text-muted-foreground">
+          Everything you save gets your name on it. You can add the people who help you afterwards, in Settings → People.
+        </p>
+        <div className="mt-5 text-left">
+          <FirstProfile />
         </div>
-      </div>
+      </Centered>
     );
   }
 
   async function submit(person: AppUser, digits: string) {
-    const entered = digits.trim();
-    // Plain digits for rows typed into the sheet; the old hash is still accepted so anyone
-    // set up before this change can still get in.
-    const ok = person.pin ? entered === person.pin : person.pinHash === (await hashPin(person.id, entered));
-    if (!ok) {
-      setWrong(true);
-      setPin("");
-      return;
-    }
-    signIn({ id: person.id, name: person.name });
+    setChecking(true);
+    const result = await signInWithPin(person.id, digits);
+    if (result.ok) return; // the page reloads signed in
+    setChecking(false);
+    setPin("");
+    setMessage(
+      result.reason === "wrong_pin"
+        ? "That PIN doesn't match. Try again."
+        : result.reason === "locked"
+          ? `Too many tries. Wait ${result.retryInSeconds ?? 60} seconds and try again.`
+          : "Couldn't sign in. Check your connection and try again.",
+    );
   }
 
   async function handlePhoto(person: AppUser, file: File | undefined) {
@@ -229,24 +274,25 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
               inputMode="numeric"
               maxLength={4}
               value={pin}
-              aria-invalid={wrong}
+              disabled={checking}
+              aria-invalid={Boolean(message)}
               onChange={(e) => {
-                setWrong(false);
+                setMessage(null);
                 const digits = e.target.value.replace(/\D/g, "").slice(0, 4);
                 setPin(digits);
                 if (digits.length === 4) void submit(picked, digits);
               }}
               className="w-full rounded-xl border border-input bg-transparent px-4 py-3 text-center font-display text-[28px] tracking-[0.5em]"
             />
-            {wrong && <p className="mt-2 text-center text-[13px] text-danger">That PIN doesn&apos;t match. Try again.</p>}
+            {message && <p className="mt-2 text-center text-[13px] text-danger">{message}</p>}
             <button
               type="button"
               onClick={() => {
                 setPicked(null);
                 setPin("");
-                setWrong(false);
+                setMessage(null);
               }}
-              className="mt-4 w-full rounded-[10px] border border-line/20 px-4 py-2.5 text-[14px] font-semibold"
+              className="mt-4 min-h-11 w-full rounded-[10px] border border-line/20 px-4 py-2.5 text-[14px] font-semibold"
             >
               Back
             </button>
@@ -257,17 +303,19 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
               Tap your name. Everything you save gets your name on it, so the shop knows who did what.
             </p>
             <div className="flex flex-wrap items-start justify-center gap-5">
-              {users.map((person, i) => (
+              {profiles.map((person, i) => (
                 <Tile
                   key={person.id}
                   person={person}
                   index={i}
                   photo={photos[person.id]}
                   onPick={() => {
-                    setWrong(false);
+                    setMessage(null);
                     setPin("");
-                    if (!person.pin && !person.pinHash) {
-                      signIn({ id: person.id, name: person.name });
+                    // No PIN is a nudge, never a lock: profiles from before PINs were required
+                    // would otherwise have no way in. The server still signs them in properly.
+                    if (!person.hasPin) {
+                      void submit(person, "");
                       return;
                     }
                     setPicked(person);
@@ -276,21 +324,22 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
                 />
               ))}
             </div>
-            <div className="mt-7 flex flex-col items-center gap-3">
-              {creating ? (
-                <NewProfile onDone={() => setCreating(false)} />
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setCreating(true)}
-                  className="text-[13px] font-semibold text-cacao hover:underline"
-                >
-                  + Create a profile
-                </button>
-              )}
-            </div>
+            <p className="mt-7 text-center text-[12px] text-muted-foreground">
+              Not here? Ask an Executive to add you in Settings → People.
+            </p>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+function Centered({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-ivory px-4">
+      <div className="w-full max-w-[420px] rounded-2xl border border-line/15 bg-card p-7 text-center">
+        <ChocolateBarLogo className="mx-auto mb-4 h-12 w-[38px]" />
+        {children}
       </div>
     </div>
   );

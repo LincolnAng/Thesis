@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/auth/session";
 import { ADVISOR_MODEL, callClaude, stripJsonFences } from "@/lib/ai/client";
 import { advisorSystemPrompt, advisorUserPrompt, detectTopic } from "@/lib/ai/advisor-prompts";
 import { getAiSettings } from "@/lib/sheets/settings";
@@ -71,6 +72,8 @@ function coerce(parsed: Record<string, unknown>, searched: { title: string; url:
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireSession(["executive"]);
+  if (auth.denied) return auth.denied;
   let body: { question?: string; context?: string };
   try {
     body = await req.json();
