@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { Page, PageTabs } from "@/components/layout/page";
-import { PricingCalculatorCard } from "@/components/finance/pricing-calculator-card";
+import { RecipeEditor } from "@/components/finance/pricing-calculator-card";
 import { AddProductDialog } from "@/components/stock/edit-product-dialog";
 import { formatPrice, pluralize } from "@/lib/format";
 import { useStore } from "@/lib/store/use-store";
@@ -111,13 +111,13 @@ function PricingDetail({ product, cost, actual }: { product: Product; cost: Prod
 
         {tab === "recipe" && (
           <div className="flex flex-col gap-4">
-            <CostBreakdown product={product} cost={cost} />
-            {cost.unconvertible.length > 0 && (
-              <div className="text-xs text-danger">
-                {`Couldn't price ${cost.unconvertible.join(", ")} — check the units in the recipe.`}
+            <RecipeEditor product={product} />
+            <div>
+              <div className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                What one {(product.unit || "jar").replace(/s$/, "")} costs
               </div>
-            )}
-            <PricingCalculatorCard product={product} />
+              <CostBreakdown product={product} cost={cost} />
+            </div>
           </div>
         )}
 

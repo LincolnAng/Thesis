@@ -2,19 +2,16 @@
 
 import { useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronUp, Minus, Plus, Trash2 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { formatPeso } from "@/lib/format";
 import { updateProduct } from "@/lib/store/store";
 import { useStore } from "@/lib/store/use-store";
-import { effectiveProductPrice, ingredientRowCost, productCostPerJar } from "@/lib/summary/recipe-cost";
+import { ingredientRowCost, productCostPerJar } from "@/lib/summary/recipe-cost";
 import { CostBreakdownChart } from "@/components/finance/cost-breakdown-chart";
-import { PricingMethodPicker } from "@/components/finance/pricing-method-picker";
 import { CostBreakdownLines } from "@/components/finance/cost-breakdown-lines";
 import { LaborEditor } from "@/components/finance/labor-editor";
-import { useViewMode } from "@/lib/summary/view-mode";
 import { useCostContext } from "@/lib/summary/use-cost-context";
 import { useNumericDraft } from "@/lib/use-numeric-draft";
 import type { Product, RawMaterialStock, RecipeExtraRow, RecipeIngredientRow } from "@/lib/store/types";
@@ -40,54 +37,62 @@ function ExtraRow({
         placeholder="What for?"
         value={row.label}
         onChange={(e) => onChange(row.id, { label: e.target.value })}
-        className="h-8 flex-1 text-sm"
+        className="h-11 min-w-0 flex-1 text-sm"
       />
       <Input
         type="number"
-        placeholder="₱"
+        inputMode="decimal"
+        placeholder="₱ per batch"
+        aria-label="Cost per batch"
         value={costField.value}
         onChange={(e) => costField.onChange(e.target.value)}
-        className="h-8 w-24 text-sm"
+        className="h-11 w-28 shrink-0 text-right text-sm"
       />
-      <Button size="icon-sm" variant="ghost" className="text-muted-foreground" onClick={() => onRemove(row.id)}>
-        <Trash2 className="h-3.5 w-3.5" />
+      <Button size="icon" variant="ghost" className="h-11 w-11 shrink-0 text-muted-foreground" aria-label="Remove" onClick={() => onRemove(row.id)}>
+        <Trash2 className="h-4 w-4" />
       </Button>
     </div>
   );
 }
 
-function ExtraRowsSection({
+/**
+ * One of the three things a batch costs — Recipe, Labor, Fixed costs — as its own block with
+ * its own heading, so labor and fixed costs don't read as lines of the recipe above them.
+ * The heading line carries the block's total and its one action.
+ */
+export function CostSection({
   title,
-  subtitle,
-  rows,
-  onAdd,
-  onChange,
-  onRemove,
+  total,
+  hint,
+  action,
+  children,
 }: {
   title: string;
-  subtitle?: string;
-  rows: RecipeExtraRow[];
-  onAdd: () => void;
-  onChange: (id: string, patch: Partial<RecipeExtraRow>) => void;
-  onRemove: (id: string) => void;
+  total?: string;
+  hint?: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <div>
-          <Label className="text-xs font-semibold text-muted-foreground">{title}</Label>
-          {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
-        </div>
-        <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" onClick={onAdd}>
-          <Plus className="h-3.5 w-3.5" /> Add
-        </Button>
+    <section className="rounded-xl border border-line/15 bg-card p-3.5">
+      <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="font-display text-[16px] font-semibold">
+          {title}
+          {total && <span className="ml-2 font-sans text-[13px] font-semibold text-muted-foreground">{total}</span>}
+        </h3>
+        {action}
       </div>
-      <div className="space-y-2">
-        {rows.map((row) => (
-          <ExtraRow key={row.id} row={row} onChange={onChange} onRemove={onRemove} />
-        ))}
-      </div>
-    </div>
+      {hint && <p className="-mt-1.5 mb-2.5 text-xs text-muted-foreground">{hint}</p>}
+      <div className="space-y-2">{children}</div>
+    </section>
+  );
+}
+
+function AddButton({ onClick, disabled, children }: { onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
+  return (
+    <Button size="sm" variant="ghost" className="min-h-11 gap-1 px-2 text-xs font-semibold text-cacao" onClick={onClick} disabled={disabled}>
+      <Plus className="h-3.5 w-3.5" /> {children}
+    </Button>
   );
 }
 
@@ -107,35 +112,36 @@ function IngredientRowEditor({
   const qtyField = useNumericDraft(row.quantity, (n) => onUpdate(row.id, { quantity: n }));
   const costCtx = useCostContext();
   return (
-    <div className="space-y-1.5 rounded-xl border border-border p-2.5">
-      <div className="flex items-center gap-2">
-        <select
-          value={row.materialId}
-          onChange={(e) => onUpdate(row.id, { materialId: e.target.value })}
-          className="h-8 flex-1 rounded-md border border-input bg-transparent px-2 text-sm"
-        >
-          {rawMaterials.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.name}
-            </option>
-          ))}
-        </select>
-        <Button size="icon-sm" variant="ghost" className="text-muted-foreground" onClick={() => onRemove(row.id)}>
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
-      </div>
-      <div className="flex items-center gap-2">
-        <Input
-          type="number"
-          value={qtyField.value}
-          onChange={(e) => qtyField.onChange(e.target.value)}
-          className="h-8 flex-1 text-sm"
-        />
-        <span className="w-10 shrink-0 text-xs text-muted-foreground">{material?.unit ?? ""}</span>
-        <span className="w-20 shrink-0 text-right text-xs font-medium text-foreground">
-          {formatPeso(ingredientRowCost(row, costCtx))}
-        </span>
-      </div>
+    // One line per ingredient: what, how much, in what, what it costs. Splitting the name and
+    // the quantity over two lines made a five-ingredient recipe read like ten loose fields.
+    <div className="flex items-center gap-2">
+      <select
+        value={row.materialId}
+        onChange={(e) => onUpdate(row.id, { materialId: e.target.value })}
+        aria-label="Ingredient"
+        className="h-11 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2 text-sm"
+      >
+        {rawMaterials.map((m) => (
+          <option key={m.id} value={m.id}>
+            {m.name}
+          </option>
+        ))}
+      </select>
+      <Input
+        type="number"
+        inputMode="decimal"
+        aria-label="Quantity"
+        value={qtyField.value}
+        onChange={(e) => qtyField.onChange(e.target.value)}
+        className="h-11 w-20 shrink-0 text-right text-sm"
+      />
+      <span className="w-10 shrink-0 text-xs text-muted-foreground">{material?.unit ?? ""}</span>
+      <span className="hidden w-20 shrink-0 text-right text-xs font-medium text-foreground min-[480px]:block">
+        {formatPeso(ingredientRowCost(row, costCtx))}
+      </span>
+      <Button size="icon" variant="ghost" className="h-11 w-11 shrink-0 text-muted-foreground" aria-label="Remove" onClick={() => onRemove(row.id)}>
+        <Trash2 className="h-4 w-4" />
+      </Button>
     </div>
   );
 }
@@ -165,12 +171,11 @@ function TierRow({
   );
 }
 
-export function PricingCalculatorCard({ product }: { product: Product }) {
+export function RecipeEditor({ product }: { product: Product }) {
   const { rawMaterials } = useStore();
   const costCtx = useCostContext();
   const [showMore, setShowMore] = useState(false);
   const [batchCount, setBatchCount] = useState(1);
-  const [viewMode] = useViewMode();
 
   const ingredients = product.recipeIngredients;
   // Still written back on every save so the rows survive, but no longer costed: labor now
@@ -182,14 +187,8 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
   const totalForRun = cost.batchTotal * batchCount;
   const jarsForRun = product.batchYield * batchCount;
 
-  const effectivePrice = effectiveProductPrice(product, cost);
-
-  // A part-priced recipe has no total. Showing one here while the rest of the page says the
-  // cost is unknown would make the page argue with itself, and the figure that looks most
-  // authoritative — a big number under "Total cost" — would be the wrong one.
+  // A part-priced recipe has no total; the batch planner below only states one when it's whole.
   const costable = cost.unpriced.length === 0;
-  const standardProfit = effectivePrice - cost.costPerJar;
-  const standardBelowCost = standardProfit < 0;
 
   const yieldField = useNumericDraft(product.batchYield, (n) => persist(ingredients, labor, misc, n));
 
@@ -272,47 +271,77 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">{product.name}</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="grid gap-4 min-[640px]:grid-cols-[1fr_auto]">
-          <PricingMethodPicker product={product} costPerJar={costable ? cost.costPerJar : 0} effectivePrice={effectivePrice} />
-          <div className="space-y-1.5 min-[640px]:text-right">
-            <Label className="text-xs font-semibold text-muted-foreground">Total cost</Label>
-            {costable ? (
-              <p className="text-lg font-semibold text-foreground">
-                {formatPeso(cost.costPerJar)} <span className="text-xs font-normal text-muted-foreground">/jar</span>
-              </p>
-            ) : (
-              <p className="text-lg font-semibold text-muted-foreground">
-                — <span className="text-xs font-normal">{`nothing bought for ${cost.unpriced.join(", ")}`}</span>
-              </p>
-            )}
-          </div>
-        </div>
-
-        <p
-          className={cn(
-            "text-sm font-medium",
-            !costable
-              ? "text-muted-foreground"
-              : standardBelowCost
-                ? "text-[var(--status-warning)]"
-                : "text-[var(--status-good)]",
-          )}
+    // The Recipe tab of Pricing: what a batch costs, in three blocks. The price itself is set
+    // on the Price tab, so it isn't repeated here.
+    <div className="space-y-3">
+        <CostSection
+          title="Recipe"
+          total={`${formatPeso(cost.ingredientTotal + cost.packagingTotal)} a batch`}
+          action={
+            <AddButton onClick={addIngredient} disabled={rawMaterials.length === 0}>
+              Add ingredient
+            </AddButton>
+          }
         >
-          {!costable
-            ? `Profit per jar can't be worked out until you log buying ${cost.unpriced.join(", ")}.`
-            : standardBelowCost
-              ? `You lose ${formatPeso(Math.abs(standardProfit))} on every jar you sell at the regular price.`
-              : `You make ${formatPeso(standardProfit)} profit on every jar you sell at the regular price.`}
-        </p>
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-muted-foreground">One batch makes</span>
+            <Input
+              type="number"
+              inputMode="numeric"
+              aria-label="Units per batch"
+              value={yieldField.value}
+              onChange={(e) => yieldField.onChange(e.target.value)}
+              className="h-11 w-20 text-right"
+            />
+            <span className="text-muted-foreground">{product.unit || "jars"}</span>
+          </div>
+          {rawMaterials.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No raw materials or packaging yet — add them under Costing first.</p>
+          ) : ingredients.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No recipe yet. Tap &quot;Add ingredient&quot; for each thing that goes into a batch.</p>
+          ) : (
+            <>
+              <div className="flex gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <span className="flex-1">Ingredient</span>
+                <span className="w-20 text-right">Qty</span>
+                <span className="w-10" />
+                <span className="hidden w-20 text-right min-[480px]:block">Cost</span>
+                <span className="w-11" />
+              </div>
+              {ingredients.map((row) => (
+                <IngredientRowEditor
+                  key={row.id}
+                  row={row}
+                  material={rawMaterials.find((m) => m.id === row.materialId)}
+                  rawMaterials={rawMaterials}
+                  onUpdate={updateIngredient}
+                  onRemove={removeIngredient}
+                />
+              ))}
+            </>
+          )}
+        </CostSection>
 
-        <Button size="sm" variant="ghost" className="w-full gap-1 text-xs text-muted-foreground" onClick={() => setShowMore((v) => !v)}>
+        <CostSection title="Labor" total={`${formatPeso(cost.laborTotal)} a batch`}>
+          <LaborEditor product={product} hourlyRate={costCtx.hourlyLaborRate} />
+        </CostSection>
+
+        <CostSection
+          title="Fixed costs"
+          total={`${formatPeso(cost.miscTotal)} a batch`}
+          hint="Gas, electricity, a share of rent — anything a batch costs besides the recipe and labor."
+          action={<AddButton onClick={addMisc}>Add fixed cost</AddButton>}
+        >
+          {misc.length === 0 ? (
+            <p className="text-xs text-muted-foreground">None added.</p>
+          ) : (
+            misc.map((row) => <ExtraRow key={row.id} row={row} onChange={updateMisc} onRemove={removeMisc} />)
+          )}
+        </CostSection>
+
+        <Button size="sm" variant="ghost" className="min-h-11 w-full gap-1 text-xs text-muted-foreground" onClick={() => setShowMore((v) => !v)}>
           {showMore ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-          {showMore ? "Show less" : "See more"}
+          {showMore ? "Show less" : "Other prices, cost breakdown and batch planning"}
         </Button>
 
         {showMore && (
@@ -327,60 +356,9 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
             </div>
 
             <div className="space-y-2">
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold text-muted-foreground">What this jar costs to make</Label>
-                <CostBreakdownLines cost={cost} />
-              </div>
-
-              {viewMode === "advanced" && <CostBreakdownChart cost={cost} />}
-
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Ingredients in a batch</span>
-                <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" onClick={addIngredient} disabled={rawMaterials.length === 0}>
-                  <Plus className="h-3.5 w-3.5" /> Add ingredient
-                </Button>
-              </div>
-
-              {rawMaterials.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  No ingredients tracked yet — add one in Ingredient costs above first.
-                </p>
-              ) : ingredients.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No ingredients yet. Tap &quot;Add ingredient&quot; to get started.</p>
-              ) : (
-                <div className="space-y-2">
-                  {ingredients.map((row) => (
-                    <IngredientRowEditor
-                      key={row.id}
-                      row={row}
-                      material={rawMaterials.find((m) => m.id === row.materialId)}
-                      rawMaterials={rawMaterials}
-                      onUpdate={updateIngredient}
-                      onRemove={removeIngredient}
-                    />
-                  ))}
-                </div>
-              )}
-
-              <LaborEditor product={product} hourlyRate={costCtx.hourlyLaborRate} laborPerBatch={cost.laborTotal} />
-              <ExtraRowsSection
-                title="Fixed costs per batch"
-                subtitle="Electricity, gas, rent share — anything a batch costs besides ingredients and packaging."
-                rows={misc}
-                onAdd={addMisc}
-                onChange={updateMisc}
-                onRemove={removeMisc}
-              />
-
-              <div className="space-y-1.5">
-                <Label className="text-xs">Jars per batch</Label>
-                <Input
-                  type="number"
-                  value={yieldField.value}
-                  onChange={(e) => yieldField.onChange(e.target.value)}
-                  className="h-8 w-28"
-                />
-              </div>
+              <Label className="text-xs font-semibold text-muted-foreground">What one {(product.unit || "jar").replace(/s$/, "")} costs to make</Label>
+              <CostBreakdownLines cost={cost} />
+              <CostBreakdownChart cost={cost} />
             </div>
 
             <div className="space-y-2 rounded-xl border border-border p-3">
@@ -425,7 +403,6 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
             </div>
           </div>
         )}
-      </CardContent>
-    </Card>
+    </div>
   );
 }

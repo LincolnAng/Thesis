@@ -58,6 +58,9 @@ export interface StoreState {
   tokenUsage: TokenUsage;
   aiStatus: AiStatus;
   syncStatus: SyncStatus;
+  /** True once this page has the server's data, not just the paint cache or the built-in
+   *  samples. Anything that changes data based on what is (or isn't) there waits for it. */
+  loadedFromServer: boolean;
 }
 
 const STORAGE_KEY = "mang-kikos-cocoa-state-v6";
@@ -112,6 +115,7 @@ function defaultState(): StoreState {
       failing: false,
       failedAt: null,
     },
+    loadedFromServer: false,
   };
 }
 
@@ -125,7 +129,7 @@ function loadState(): StoreState {
     // Spread over defaultState() (not just the cached blob) so a field added after
     // a user's browser already cached state under this same SCHEMA_VERSION — like
     // syncStatus — still comes back defined instead of undefined.
-    return { ...defaultState(), ...(parsed.state as Partial<StoreState>) };
+    return { ...defaultState(), ...(parsed.state as Partial<StoreState>), loadedFromServer: false };
   } catch {
     return defaultState();
   }
@@ -629,6 +633,7 @@ async function loadAllFromServer() {
         users: Array.isArray(json.users) ? (json.users as AppUser[]) : prev.users,
         activity: Array.isArray(json.activity) ? (json.activity as ActivityEvent[]) : prev.activity,
         businessSettings: businessSettingRowsToRecord(businessSettingsMigration.items),
+        loadedFromServer: true,
       };
     });
   } catch {

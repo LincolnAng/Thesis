@@ -2,7 +2,6 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { formatPeso } from "@/lib/format";
 import { updateProduct } from "@/lib/store/store";
 import { useNumericDraft } from "@/lib/use-numeric-draft";
@@ -18,11 +17,9 @@ import type { Product } from "@/lib/store/types";
 export function LaborEditor({
   product,
   hourlyRate,
-  laborPerBatch,
 }: {
   product: Product;
   hourlyRate: number;
-  laborPerBatch: number;
 }) {
   const isOverride = product.laborCostOverride != null;
   const minutesField = useNumericDraft(product.minutesPerBatch ?? 0, (n) =>
@@ -33,58 +30,42 @@ export function LaborEditor({
   );
   const derived = ((product.minutesPerBatch ?? 0) / 60) * hourlyRate;
 
-  return (
-    <div className="space-y-2">
-      <Label className="text-xs font-semibold text-muted-foreground">Labor per batch</Label>
-
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Minutes a batch takes</Label>
-          <Input
-            type="number"
-            inputMode="decimal"
-            className="h-8 w-24"
-            value={minutesField.value}
-            onChange={(e) => minutesField.onChange(e.target.value)}
-          />
-        </div>
-        <p className="pb-1.5 text-xs text-muted-foreground">
-          × {formatPeso(hourlyRate)}/hr = <span className="font-medium text-foreground">{formatPeso(derived)}</span>
-        </p>
-      </div>
-
-      {isOverride ? (
-        <div className="space-y-1.5 rounded-xl border border-border p-2.5">
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Entered by hand</Label>
-              <Input
-                type="number"
-                inputMode="decimal"
-                className="h-8 w-24"
-                value={overrideField.value}
-                onChange={(e) => overrideField.onChange(e.target.value)}
-              />
-            </div>
-            <Button
-              size="sm"
-              variant="secondary"
-              className="h-8"
-              onClick={() => updateProduct(product.id, { laborCostOverride: null })}
-            >
-              Recalculate from time
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            This figure is being used instead of the timed one. Costing this batch at{" "}
-            {formatPeso(laborPerBatch)}.
-          </p>
-        </div>
-      ) : (
-        <p className="text-xs text-muted-foreground">
-          Costed from time. {hourlyRate <= 0 && "Set an hourly rate in Settings for this to count for anything."}
-        </p>
-      )}
+  // One line either way: minutes × rate = cost, or the hand-entered figure that replaces it.
+  return isOverride ? (
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      <span className="text-muted-foreground">Entered by hand</span>
+      <Input
+        type="number"
+        inputMode="decimal"
+        aria-label="Labor per batch, entered by hand"
+        className="h-11 w-24 text-right"
+        value={overrideField.value}
+        onChange={(e) => overrideField.onChange(e.target.value)}
+      />
+      <span className="text-muted-foreground">a batch</span>
+      <Button
+        size="sm"
+        variant="ghost"
+        className="min-h-11 text-xs font-semibold text-cacao"
+        onClick={() => updateProduct(product.id, { laborCostOverride: null })}
+      >
+        Work it out from time instead
+      </Button>
+    </div>
+  ) : (
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      <Input
+        type="number"
+        inputMode="decimal"
+        aria-label="Minutes a batch takes"
+        className="h-11 w-20 text-right"
+        value={minutesField.value}
+        onChange={(e) => minutesField.onChange(e.target.value)}
+      />
+      <span className="text-muted-foreground">
+        minutes × {formatPeso(hourlyRate)}/hr = <span className="font-semibold text-foreground">{formatPeso(derived)}</span>
+      </span>
+      {hourlyRate <= 0 && <span className="text-xs text-[#9A6B12]">Set an hourly rate in Settings for this to count.</span>}
     </div>
   );
 }

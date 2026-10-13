@@ -8,7 +8,7 @@ import { SizeStrip } from "@/components/products/size-strip";
 import { familiesOf } from "@/lib/summary/product-sizes";
 import { Package } from "lucide-react";
 import { Page } from "@/components/layout/page";
-import { NewProductsCard } from "@/components/costing/new-products-card";
+import { useCatalogUpdate } from "@/components/costing/catalog-update";
 import { AddProductDialog, EditProductDialog } from "@/components/stock/edit-product-dialog";
 import { useStore } from "@/lib/store/use-store";
 import { useCostContext } from "@/lib/summary/use-cost-context";
@@ -113,12 +113,13 @@ export function ProductsScreen({
   const [editingId, setEditingId] = useState<string | null>(null);
   const editing = products.find((p) => p.id === editingId) ?? null;
   const families = familiesOf(products);
+  // Only executives reach this screen (employees get the gallery), so this runs as one.
+  useCatalogUpdate(true);
 
   return (
     <Page title="Costing" subnav={subnav} hideModeToggle>
       {list === "products" && (
       <>
-      <NewProductsCard />
       {products.length === 0 && (
         <div className="mb-4 rounded-2xl border border-line/15 bg-card px-6 py-8 text-center text-sm text-muted-foreground">
           No products yet. Add what you sell, then its recipe — the cost and price follow from that.
