@@ -7,6 +7,7 @@ import { PricingCalculatorCard } from "@/components/finance/pricing-calculator-c
 import { AddProductDialog } from "@/components/stock/edit-product-dialog";
 import { formatPrice, pluralize } from "@/lib/format";
 import { useStore } from "@/lib/store/use-store";
+import { fullName } from "@/lib/summary/product-sizes";
 import { updateProduct } from "@/lib/store/store";
 import { effectiveProductPrice, productCostPerJar, type ProductCostBreakdown } from "@/lib/summary/recipe-cost";
 import { useCostContext } from "@/lib/summary/use-cost-context";
@@ -14,8 +15,6 @@ import { MAX_MARGIN_PCT, PRICING_METHODS, pricingModeChange } from "@/lib/summar
 import { CostBreakdown } from "@/components/pricing/cost-breakdown";
 import { buildPricingRows, PRICING_WINDOW_DAYS } from "@/lib/summary/pricing-reality";
 import type { PricingMode, Product } from "@/lib/store/types";
-import { SimplePrices } from "@/components/simple/simple-prices";
-import { useViewMode } from "@/lib/summary/view-mode";
 
 /** Pesos with centavos when there are any (₱57.60), whole otherwise (₱180). */
 const peso = formatPrice;
@@ -84,7 +83,9 @@ function PricingDetail({ product, cost, actual }: { product: Product; cost: Prod
    * rates hid behind a toggle labelled "Edit", so the two things she changes most often were
    * the two hardest to find — and neither could be looked at while the price was on screen.
    */
-  const [tab, setTab] = useState<"price" | "recipe" | "rates">("price");
+  const { products } = useStore();
+  // A product with no recipe has no cost to price from, so it opens on the recipe.
+  const [tab, setTab] = useState<"price" | "recipe" | "rates">(product.recipeIngredients.length === 0 ? "recipe" : "price");
   const price = effectiveProductPrice(product, cost);
   const profit = price - cost.costPerJar;
   const margin = price > 0 ? (profit / price) * 100 : 0;
@@ -96,7 +97,7 @@ function PricingDetail({ product, cost, actual }: { product: Product; cost: Prod
     <div className="flex flex-1 flex-col gap-4">
       <div className="flex flex-col gap-5 rounded-2xl border border-line/15 bg-card p-[22px]">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="font-display text-xl font-semibold">{product.name}</div>
+          <div className="font-display text-xl font-semibold">{fullName(product, products)}</div>
           <PageTabs
             tabs={[
               ["price", "Price"],
@@ -261,25 +262,30 @@ function PricingDetail({ product, cost, actual }: { product: Product; cost: Prod
   );
 }
 
-export function PricingScreen({ subnav }: { subnav?: ReactNode }) {
+/**
+ * Pricing and recipes, one product at a time: what goes into it, what that costs, and the
+ * price — set directly, as a markup on cost, or from a target margin. `productId` comes from
+ * the URL so tapping a product on the Products list lands here on that product.
+ */
+export function PricingScreen({
+  subnav,
+  productId,
+  onSelect,
+}: {
+  subnav?: ReactNode;
+  productId: string | null;
+  onSelect: (productId: string) => void;
+}) {
   const { products, entries } = useStore();
   const costCtx = useCostContext();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selectedId = productId;
+  const setSelectedId = onSelect;
   const [adding, setAdding] = useState(false);
   const rows = useMemo(() => buildPricingRows(products, entries, costCtx), [products, entries, costCtx]);
   const selected = products.find((p) => p.id === selectedId) ?? products[0];
-  const [viewMode] = useViewMode();
-
-  if (viewMode === "simple") {
-    return (
-      <Page title="Costing" subnav={subnav}>
-        <SimplePrices />
-      </Page>
-    );
-  }
 
   return (
-    <Page title="Costing" subnav={subnav}>
+    <Page title="Costing" subnav={subnav} hideModeToggle>
       {products.length === 0 ? (
         <div className="rounded-2xl border border-line/15 bg-card px-6 py-12 text-center text-sm text-muted-foreground">
           No products yet.{" "}
@@ -303,10 +309,12 @@ export function PricingScreen({ subnav }: { subnav?: ReactNode }) {
                     p.id === selected?.id ? "border border-cacao shadow-sm" : "border border-line/15 hover:border-cacao/40"
                   }`}
                 >
-                  <div className="text-sm font-semibold">{p.name}</div>
+                  <div className="text-sm font-semibold">{fullName(p, products)}</div>
                   <div className="mt-1.5 flex justify-between text-[13px] text-muted-foreground">
-                    <span>{peso(price)} / jar</span>
-                    {cost.unpriced.length === 0 ? (
+                    {price > 0 ? <span>{peso(price)} / {p.unit || "jar"}</span> : <span className="text-[#9A6B12]">No price yet</span>}
+                    {p.recipeIngredients.length === 0 ? (
+                      <span className="font-semibold text-[#9A6B12]">no recipe yet</span>
+                    ) : cost.unpriced.length === 0 ? (
                       <span className={`font-semibold ${margin >= 15 ? "text-success" : "text-danger"}`}>
                         {Math.round(margin)}% margin
                       </span>

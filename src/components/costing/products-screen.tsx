@@ -6,10 +6,9 @@ import { MaterialsPanel } from "@/components/products/materials-panel";
 import { ProductExpiryStrip } from "@/components/products/product-expiry-strip";
 import { SizeStrip } from "@/components/products/size-strip";
 import { familiesOf } from "@/lib/summary/product-sizes";
-import { SimpleInventory } from "@/components/simple/simple-inventory";
-import { CarouselNav } from "@/components/ui/carousel-nav";
 import { Package } from "lucide-react";
 import { Page } from "@/components/layout/page";
+import { NewProductsCard } from "@/components/costing/new-products-card";
 import { AddProductDialog, EditProductDialog } from "@/components/stock/edit-product-dialog";
 import { useStore } from "@/lib/store/use-store";
 import { useCostContext } from "@/lib/summary/use-cost-context";
@@ -17,7 +16,6 @@ import { effectiveProductPrice, productCostPerJar } from "@/lib/summary/recipe-c
 import { setProductPhoto, shrinkImage, useProductPhotos } from "@/lib/products/photos";
 import { formatPrice, pluralize } from "@/lib/format";
 import type { Product } from "@/lib/store/types";
-import { useViewMode } from "@/lib/summary/view-mode";
 
 /** Shown behind the icon when a product has no photo yet, cycling by position. */
 const GRADIENTS = [
@@ -88,130 +86,102 @@ function ProductPhoto({ product, gradient, photo }: { product: Product; gradient
   );
 }
 
-export function ProductsScreen({ subnav }: { subnav?: ReactNode }) {
+/** Which list the Products, Raw materials and Packaging sub-tabs show. */
+export type CostingList = "products" | "ingredient" | "supply";
+
+/**
+ * The executive's Costing lists: products (SKUs), raw materials and packaging — the inputs
+ * every price is worked out from. One list per sub-tab; the carousel that used to rotate
+ * through them was a second way of doing what the Costing tabs now do.
+ *
+ * Tapping a product opens its pricing and recipe (`onOpenPricing`), because that is what
+ * Costing is for; the smaller Edit link keeps the name, size and stock settings.
+ */
+export function ProductsScreen({
+  subnav,
+  list,
+  onOpenPricing,
+}: {
+  subnav?: ReactNode;
+  list: CostingList;
+  onOpenPricing: (productId: string) => void;
+}) {
   const { products } = useStore();
   const costCtx = useCostContext();
   const photos = useProductPhotos();
-  const [viewMode] = useViewMode();
-  const simple = viewMode === "simple";
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const editing = products.find((p) => p.id === editingId) ?? null;
-  const [section, setSection] = useState(0);
   const families = familiesOf(products);
-  // Everything production runs on, on one page and in the order it is used: what she sells,
-  // what goes in it, what it is packed in. Stock answers "how much is left"; this answers
-  // "what is it made of". Three tabs made that one question into three errands.
-  // One section at a time. Stacked, the three grids ran to three screens of scrolling for a
-  // shop with three products and six materials, and the one you wanted was never the one on
-  // screen. Rotating keeps each list whole and the page one screen tall.
-  // "Everything" first, so the carousel has a home position and opening the page still shows
-  // the whole picture — rotating is for narrowing down, not the only way to see things.
-  const SECTIONS = ["Everything", "Products", "Raw materials", "Supplies"] as const;
-  const rotate = (step: number) => setSection((n) => (n + step + SECTIONS.length) % SECTIONS.length);
-
-  if (simple) {
-    return (
-      <Page title="Costing" subnav={subnav}>
-        <SimpleInventory onAddProduct={() => setAdding(true)} onEditProduct={setEditingId} />
-        {adding && <AddProductDialog products={products} onClose={() => setAdding(false)} />}
-        {editing && (
-          <EditProductDialog key={editing.id} product={editing} products={products} onClose={() => setEditingId(null)} />
-        )}
-      </Page>
-    );
-  }
 
   return (
-    <Page title="Costing" subnav={subnav}>
-      <div className="mb-4 flex flex-wrap items-center gap-4">
-        <CarouselNav
-          label={SECTIONS[section]}
-          onPrev={() => rotate(-1)}
-          onNext={() => rotate(1)}
-          wrap
-          size="large"
-          labelWidth="min-w-[170px]"
-          prevLabel="Previous section"
-          nextLabel="Next section"
-        />
-        {/* Dots, so a carousel that wraps still says where you are and how many there are —
-            otherwise rotating past the end feels like the page is looping without end. */}
-        <div className="flex items-center gap-2">
-          {SECTIONS.map((name, i) => (
-            <button
-              key={name}
-              type="button"
-              onClick={() => setSection(i)}
-              aria-label={`Show ${name}`}
-              aria-current={i === section}
-              className={`h-2 rounded-full transition-all ${i === section ? "w-6 bg-cacao" : "w-2 bg-line/30 hover:bg-cacao/40"}`}
-            />
-          ))}
+    <Page title="Costing" subnav={subnav} hideModeToggle>
+      {list === "products" && (
+      <>
+      <NewProductsCard />
+      {products.length === 0 && (
+        <div className="mb-4 rounded-2xl border border-line/15 bg-card px-6 py-8 text-center text-sm text-muted-foreground">
+          No products yet. Add what you sell, then its recipe — the cost and price follow from that.
         </div>
-      </div>
-
-      {section === 0 && (
-        <div className="mb-3 text-xs font-bold uppercase tracking-wide text-muted-foreground">Products</div>
       )}
-      {(section === 0 || section === 1) && (
       <div className="grid grid-cols-1 gap-[18px] min-[600px]:grid-cols-2 min-[1000px]:grid-cols-3 min-[1300px]:grid-cols-4">
         {families.map(({ head: p, sizes }, i) => {
           const cost = productCostPerJar(p, costCtx);
           const price = effectiveProductPrice(p, cost);
           const marginPct = price > 0 ? ((price - cost.costPerJar) / price) * 100 : 0;
           const low = p.stockQty <= p.lowStockThreshold;
+          const unit = p.unit || "jar";
           // Half a recipe priced is not a margin, it is a flattering guess. Say what is missing.
           const costable = cost.unpriced.length === 0;
+          const noRecipe = p.recipeIngredients.length === 0;
           return (
             <div
               key={p.id}
               className="flex flex-col overflow-hidden rounded-2xl border border-line/15 bg-card transition hover:border-cacao/40 hover:shadow-sm"
             >
               <ProductPhoto product={p} gradient={GRADIENTS[i % GRADIENTS.length]} photo={photos[p.id]} />
-              <button type="button" onClick={() => setEditingId(p.id)} title="Edit product" className="flex flex-col gap-1.5 p-4 text-left">
+              <div className="flex flex-col gap-1.5 p-4">
                 <div className="flex w-full items-start justify-between gap-2">
-                  <span className="text-sm font-semibold">{p.name}</span>
-                  <span className="shrink-0 text-[11px] font-semibold text-faint">Edit</span>
+                  <button type="button" onClick={() => onOpenPricing(p.id)} className="min-h-11 text-left text-sm font-semibold hover:text-cacao">
+                    {p.name}
+                    {p.sizeLabel && <span className="block text-xs font-normal text-muted-foreground">{p.sizeLabel}</span>}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingId(p.id)}
+                    className="min-h-11 shrink-0 px-1 text-[11px] font-semibold text-faint hover:text-cacao"
+                  >
+                    Edit
+                  </button>
                 </div>
-                {simple ? (
-                  <div className="flex flex-col gap-1 text-[13px]">
-                    <span>
-                      Sells for <span className="font-bold">{formatPrice(price)}</span>
-                    </span>
-                    <span className={low ? "font-semibold text-danger" : "text-muted-foreground"}>
-                      {pluralize(p.stockQty, "jar")} on the shelf{low ? " — running low" : ""}
-                    </span>
-                    <span className={`font-semibold ${!costable ? "text-[#9A6B12]" : price - cost.costPerJar > 0 ? "text-success" : "text-danger"}`}>
-                      {!costable
-                        ? `Can't work this out until you log buying ${cost.unpriced.join(", ")}`
-                        : price - cost.costPerJar > 0
-                          ? `You keep ${formatPrice(price - cost.costPerJar)} a jar`
-                          : "It costs more to make than it sells for"}
+                <button type="button" onClick={() => onOpenPricing(p.id)} className="flex flex-col gap-1.5 text-left">
+                  <div className="flex w-full justify-between text-[13px]">
+                    {price > 0 ? (
+                      <span className="font-bold">{formatPrice(price)}</span>
+                    ) : (
+                      <span className="font-semibold text-[#9A6B12]">No price yet</span>
+                    )}
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${low ? "bg-danger/10 text-danger" : "bg-success/10 text-success"}`}>
+                      {pluralize(p.stockQty, unit)}{low ? " left" : ""}
                     </span>
                   </div>
-                ) : (
-                  <>
-                    <div className="flex w-full justify-between text-[13px]">
-                      <span className="font-bold">{formatPrice(price)}</span>
-                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${low ? "bg-danger/10 text-danger" : "bg-success/10 text-success"}`}>
-                        {pluralize(p.stockQty, "jar")}{low ? " left" : ""}
-                      </span>
-                    </div>
-                    {costable ? (
+                  {noRecipe ? (
+                    <div className="text-xs font-semibold text-[#9A6B12]">No recipe yet — tap to add what goes into it</div>
+                  ) : costable ? (
+                    price > 0 && (
                       <div className={`text-xs font-semibold ${marginPct >= 15 ? "text-success" : "text-danger"}`}>
-                        {Math.round(marginPct)}% margin
+                        {Math.round(marginPct)}% margin · costs {formatPrice(cost.costPerJar)} to make
                       </div>
-                    ) : (
-                      <div className="text-xs font-semibold text-[#9A6B12]">
-                        {`No margin yet — nothing bought for ${cost.unpriced.join(", ")}`}
-                      </div>
-                    )}
-                  </>
-                )}
-              </button>
+                    )
+                  ) : (
+                    <div className="text-xs font-semibold text-[#9A6B12]">
+                      {`No margin yet — no cost for ${cost.unpriced.join(", ")}`}
+                    </div>
+                  )}
+                </button>
+              </div>
               <ProductExpiryStrip product={p} />
-              <SizeStrip head={p} sizes={sizes} onOpen={setEditingId} />
+              <SizeStrip head={p} sizes={sizes} onOpen={onOpenPricing} />
             </div>
           );
         })}
@@ -223,24 +193,11 @@ export function ProductsScreen({ subnav }: { subnav?: ReactNode }) {
           + Add product
         </button>
       </div>
+      </>
       )}
 
-      {(section === 0 || section === 2) && (
-        <div className={section === 0 ? "mt-8" : ""}>
-          {section === 0 && (
-            <div className="mb-3 text-xs font-bold uppercase tracking-wide text-muted-foreground">Raw materials</div>
-          )}
-          <MaterialsPanel group="ingredient" />
-        </div>
-      )}
-      {(section === 0 || section === 3) && (
-        <div className={section === 0 ? "mt-8" : ""}>
-          {section === 0 && (
-            <div className="mb-3 text-xs font-bold uppercase tracking-wide text-muted-foreground">Supplies</div>
-          )}
-          <MaterialsPanel group="supply" />
-        </div>
-      )}
+      {list === "ingredient" && <MaterialsPanel group="ingredient" />}
+      {list === "supply" && <MaterialsPanel group="supply" />}
 
       {adding && <AddProductDialog products={products} onClose={() => setAdding(false)} />}
       {editing && <EditProductDialog key={editing.id} product={editing} products={products} onClose={() => setEditingId(null)} />}

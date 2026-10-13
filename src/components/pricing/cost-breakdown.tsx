@@ -101,9 +101,11 @@ export function CostBreakdown({ product, cost }: { product: Product; cost: Produ
         </div>
       </Group>
 
-      <Group title="Other" perJar={cost.miscPerJar}>
+      <Group title="Fixed costs" perJar={cost.miscPerJar}>
         <div className="py-1 pl-3 text-[12px] text-muted-foreground">
-          {cost.miscPerJar > 0 ? "Gas, electricity and anything else on the recipe." : "Nothing added."}
+          {cost.miscPerJar > 0
+            ? "Gas, electricity, rent share and anything else a batch costs, spread over its jars."
+            : "Nothing added — gas, electricity or a share of rent would go here."}
         </div>
       </Group>
 

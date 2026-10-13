@@ -52,13 +52,13 @@ export function PageTabs<T extends string>({
   onChange: (t: T) => void;
 }) {
   return (
-    <div className="flex w-fit gap-1.5 rounded-[10px] bg-secondary p-1">
+    <div className="flex w-fit max-w-full gap-1.5 overflow-x-auto rounded-[10px] bg-secondary p-1">
       {tabs.map(([k, label]) => (
         <button
           key={k}
           type="button"
           onClick={() => onChange(k)}
-          className={`rounded-lg px-4 py-2 text-[13px] ${value === k ? "bg-card font-semibold shadow-sm" : "font-medium text-muted-foreground"}`}
+          className={`min-h-11 shrink-0 rounded-lg px-4 py-2 text-[13px] ${value === k ? "bg-card font-semibold shadow-sm" : "font-medium text-muted-foreground"}`}
         >
           {label}
         </button>

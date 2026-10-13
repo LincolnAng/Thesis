@@ -148,7 +148,7 @@ export function MaterialsPanel({ group }: { group: MaterialGroup }) {
                         <span className="text-[11px] font-normal text-muted-foreground">{` / ${r.material.unit}`}</span>
                       </>
                     ) : (
-                      <span className="text-[12px] font-normal text-muted-foreground">no price yet</span>
+                      <span className="text-[12px] font-normal text-[#9A6B12]">No cost yet — log a purchase to price it</span>
                     )}
                   </span>
                   <span
@@ -206,7 +206,7 @@ export function MaterialsPanel({ group }: { group: MaterialGroup }) {
                         }
                       >
                         <option value="ingredient">Raw material</option>
-                        <option value="supply">Supply</option>
+                        <option value="supply">Packaging</option>
                       </select>
                     </div>
                   </div>
@@ -224,7 +224,7 @@ export function MaterialsPanel({ group }: { group: MaterialGroup }) {
           onClick={() => setAdding((v) => !v)}
           className="min-h-[220px] rounded-2xl border border-dashed border-line/25 text-sm font-semibold text-muted-foreground transition hover:border-cacao/40 hover:text-cacao"
         >
-          {group === "ingredient" ? "+ Add a raw material" : "+ Add a supply"}
+          {group === "ingredient" ? "+ Add a raw material" : "+ Add packaging"}
         </button>
       </div>
 

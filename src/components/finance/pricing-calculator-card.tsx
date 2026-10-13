@@ -364,8 +364,8 @@ export function PricingCalculatorCard({ product }: { product: Product }) {
 
               <LaborEditor product={product} hourlyRate={costCtx.hourlyLaborRate} laborPerBatch={cost.laborTotal} />
               <ExtraRowsSection
-                title="Other costs per batch"
-                subtitle="Electricity, gas, misc."
+                title="Fixed costs per batch"
+                subtitle="Electricity, gas, rent share — anything a batch costs besides ingredients and packaging."
                 rows={misc}
                 onAdd={addMisc}
                 onChange={updateMisc}

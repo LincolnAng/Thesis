@@ -50,11 +50,11 @@ export function SizeStrip({
               key={s.id}
               type="button"
               onClick={() => onOpen(s.id)}
-              title={`${sizeName(s)} — ${formatPrice(price)}, ${pluralize(s.stockQty, "jar")} on the shelf`}
+              title={`${sizeName(s)} — ${price > 0 ? formatPrice(price) : "no price yet"}, ${pluralize(s.stockQty, s.unit || "jar")} on the shelf`}
               className="rounded-full border border-line/20 px-2.5 py-1 text-[11px] font-semibold transition hover:border-cacao/40 hover:text-cacao"
             >
               {sizeName(s)}
-              <span className="ml-1 font-normal text-muted-foreground">{formatPrice(price)}</span>
+              <span className="ml-1 font-normal text-muted-foreground">{price > 0 ? formatPrice(price) : "no price"}</span>
             </button>
           );
         })}

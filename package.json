@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test \"src/**/*.test.ts\""
+    "test": "node --import ./scripts/test-resolve.mjs --test \"src/**/*.test.ts\""
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",
