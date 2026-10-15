@@ -1,6 +1,7 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, Plus, Trash2 } from "lucide-react";
 import { setBusinessSetting, updateProduct } from "@/lib/store/store";
 import { HOURLY_LABOR_RATE_KEY } from "@/lib/summary/use-cost-context";
 import { perBatch, perUnit, unitsPerBatch } from "@/lib/costing/per-unit";
@@ -14,13 +15,16 @@ import type { Product, RawMaterialStock, RecipeComponentRow, RecipeExtraRow, Rec
 
 /**
  * The Recipe tab: what goes into ONE unit — one jar, one pack — because batches vary in size and
- * a cost per batch would change every time. Three short lists, in the order it's made:
+ * a cost per batch would change every time. Four short lists, in the order it's made:
  *
  *   Ingredients — bought ones and ones you make yourself (tablea), in one list
  *   Packaging   — the jar, lid, label
- *   Your time   — minutes per jar at your hourly rate, or a peso amount typed in
+ *   Your time   — minutes per jar at your hourly rate
+ *   Other costs — anything else one costs
  *
- * Each shows its cost per unit beside its heading, and the total sits at the bottom. The recipe
+ * Each shows its cost per unit beside its heading, and what one costs to make sits at the
+ * bottom — this is the whole cost, so there is no separate cost page. Below it, a planner for
+ * making a batch of any size. The recipe
  * is stored as one batch's worth for production (see lib/costing/per-unit), so every amount here
  * is converted on the way in and out. Everything saves as it is typed.
  */
@@ -198,30 +202,40 @@ export function RecipePanel({ product }: { product: Product }) {
       </Section>
 
       <Section title="Your time" total={one(cost.laborTotal)} unit={unit} count={1}>
-        <TimeEditor key={product.laborCostOverride != null ? "typed" : "timed"} product={product} unit={unit} hourlyRate={ctx.hourlyLaborRate} save={save} />
+        <TimeEditor product={product} unit={unit} hourlyRate={ctx.hourlyLaborRate} save={save} />
       </Section>
 
-      {/* There are no fixed costs any more; anything entered before stays visible so it can be removed. */}
-      {product.recipeMisc.length > 0 && (
-        <Section title="Other costs" hint={`Entered before costing went per ${unit}. Remove any that no longer apply.`} total={one(cost.miscTotal)} unit={unit} count={product.recipeMisc.length}>
-          {product.recipeMisc.map((r) => (
-            <OtherCost
-              key={r.id}
-              row={r}
-              perUnit={perUnit(product, r.cost)}
-              onCost={(n) => saveMisc(product.recipeMisc.map((x) => (x.id === r.id ? { ...x, cost: perBatch(product, n) } : x)))}
-              onLabel={(label) => saveMisc(product.recipeMisc.map((x) => (x.id === r.id ? { ...x, label } : x)))}
-              onRemove={() => saveMisc(product.recipeMisc.filter((x) => x.id !== r.id))}
-            />
-          ))}
-        </Section>
-      )}
+      <Section
+        title="Other costs"
+        hint={`Anything else one ${unit} costs — a sticker, a share of gas or delivery.`}
+        total={one(cost.miscTotal)}
+        unit={unit}
+        addLabel="Add other cost"
+        onAdd={() => saveMisc([...product.recipeMisc, { id: newId("misc"), label: "", cost: 0 }])}
+        canAdd
+        emptyText="None added."
+        count={product.recipeMisc.length}
+      >
+        {product.recipeMisc.map((r) => (
+          <OtherCost
+            key={r.id}
+            row={r}
+            perUnit={perUnit(product, r.cost)}
+            onCost={(n) => saveMisc(product.recipeMisc.map((x) => (x.id === r.id ? { ...x, cost: perBatch(product, n) } : x)))}
+            onLabel={(label) => saveMisc(product.recipeMisc.map((x) => (x.id === r.id ? { ...x, label } : x)))}
+            onRemove={() => saveMisc(product.recipeMisc.filter((x) => x.id !== r.id))}
+          />
+        ))}
+      </Section>
 
       <div className="flex items-baseline justify-between pt-4">
         <span className="text-[14px] font-semibold">One {unit} costs</span>
         <span className="font-display text-[20px] font-bold tabular-nums">
           {cost.unpriced.length > 0 ? <span className="text-[14px] font-semibold text-muted-foreground">Not known yet</span> : formatPeso(one(cost.batchTotal))}
         </span>
+      </div>
+      <div className="pt-4">
+        <RunPlanner product={product} costEach={one(cost.batchTotal)} costKnown={cost.unpriced.length === 0} />
       </div>
     </div>
   );
@@ -232,56 +246,92 @@ function priceText(amount: number, unpriced: string[], name: string | undefined)
   return name && unpriced.includes(name) ? "No price yet" : formatPeso(amount);
 }
 
-/** Your time for one unit: minutes at the hourly rate, or a peso amount typed in. */
+/**
+ * Your time for one unit: minutes per jar at the hourly rate. The rate is one number for the
+ * whole business. A peso amount typed in before (laborCostOverride) still counts until it's
+ * switched back to minutes, and says so.
+ */
 function TimeEditor({ product, unit, hourlyRate, save }: { product: Product; unit: string; hourlyRate: number; save: (patch: Partial<Product>) => void }) {
-  const typed = product.laborCostOverride != null;
   const minutes = useNumericDraft(perUnit(product, product.minutesPerBatch ?? 0), (n) => save({ minutesPerBatch: perBatch(product, n) }));
   const rate = useNumericDraft(hourlyRate, (n) => setBusinessSetting(HOURLY_LABOR_RATE_KEY, String(n)));
-  const amount = useNumericDraft(perUnit(product, product.laborCostOverride ?? 0), (n) => save({ laborCostOverride: perBatch(product, n) }));
   const fromTime = (perUnit(product, product.minutesPerBatch ?? 0) / 60) * hourlyRate;
 
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex w-fit rounded-lg bg-secondary p-0.5 text-[13px]" role="radiogroup" aria-label="How to count your time">
-        {(
-          [
-            [false, "Minutes × hourly rate"],
-            [true, "A peso amount"],
-          ] as const
-        ).map(([isTyped, label]) => (
-          <button
-            key={label}
-            type="button"
-            role="radio"
-            aria-checked={typed === isTyped}
-            onClick={() => typed !== isTyped && save({ laborCostOverride: isTyped ? perBatch(product, Math.round(fromTime * 100) / 100) : null })}
-            className={`rounded-md px-3 py-1.5 font-semibold ${typed === isTyped ? "bg-card shadow-sm" : "text-muted-foreground"}`}
-          >
-            {label}
-          </button>
-        ))}
+  if (product.laborCostOverride != null) {
+    return (
+      <div className="flex flex-wrap items-center gap-2 text-[14px]">
+        <span>
+          Counted as <span className="font-semibold">{formatPeso(perUnit(product, product.laborCostOverride))}</span> per {unit}, a figure typed in before.
+        </span>
+        <button type="button" onClick={() => save({ laborCostOverride: null })} className="text-[13px] font-semibold text-cacao">
+          Use minutes instead
+        </button>
       </div>
-      {typed ? (
-        <div className="flex flex-wrap items-center gap-2 text-[14px]">
-          <span className="text-muted-foreground">₱</span>
-          <input inputMode="decimal" aria-label={`Your time for one ${unit}, in pesos`} value={amount.value} onChange={(e) => amount.onChange(e.target.value.replace(/[^0-9.]/g, ""))} className={`${input} w-24 text-right`} />
-          <span className="text-muted-foreground">for each {unit}</span>
-        </div>
-      ) : (
-        <>
-          <div className="flex flex-wrap items-center gap-2 text-[14px]">
-            <input inputMode="decimal" aria-label={`Minutes for one ${unit}`} value={minutes.value} onChange={(e) => minutes.onChange(e.target.value.replace(/[^0-9.]/g, ""))} className={`${input} w-20 text-right`} />
-            <span className="text-muted-foreground">minutes per {unit}, at ₱</span>
-            <input inputMode="decimal" aria-label="Hourly rate" value={rate.value} onChange={(e) => rate.onChange(e.target.value.replace(/[^0-9.]/g, ""))} className={`${input} w-20 text-right`} />
-            <span className="text-muted-foreground">
-              an hour = <span className="font-semibold text-foreground">{formatPeso(fromTime)}</span>
-            </span>
-          </div>
-          <p className="text-[12.5px] text-muted-foreground">
-            {hourlyRate <= 0 ? "Set what an hour of work is worth — until then your time counts as ₱0. " : ""}
-            The hourly rate is the same for every product; changing it here updates them all.
+    );
+  }
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex flex-wrap items-center gap-2 text-[14px]">
+        <input inputMode="decimal" aria-label={`Minutes for one ${unit}`} value={minutes.value} onChange={(e) => minutes.onChange(e.target.value.replace(/[^0-9.]/g, ""))} className={`${input} w-20 text-right`} />
+        <span className="text-muted-foreground">minutes per {unit}, at ₱</span>
+        <input inputMode="decimal" aria-label="Hourly rate" value={rate.value} onChange={(e) => rate.onChange(e.target.value.replace(/[^0-9.]/g, ""))} className={`${input} w-20 text-right`} />
+        <span className="text-muted-foreground">
+          an hour = <span className="font-semibold text-foreground">{formatPeso(fromTime)}</span>
+        </span>
+      </div>
+      <p className="text-[12.5px] text-muted-foreground">
+        {hourlyRate <= 0 ? "Set what an hour of work is worth — until then your time counts as ₱0. " : ""}
+        The hourly rate is the same for every product; changing it here updates them all.
+      </p>
+    </div>
+  );
+}
+
+/** Making N: what they'd cost, and which ingredients you'd run short of. */
+function RunPlanner({ product, costEach, costKnown }: { product: Product; costEach: number; costKnown: boolean }) {
+  const { rawMaterials } = useStore();
+  const [open, setOpen] = useState(false);
+  const [count, setCount] = useState(String(product.batchYield > 0 ? product.batchYield : 20));
+  const n = Math.max(0, Number(count) || 0);
+  const short = product.recipeIngredients
+    .map((r) => {
+      const m = rawMaterials.find((x) => x.id === r.materialId);
+      if (!m) return null;
+      const need = Math.round(perUnit(product, r.quantity) * n * 100) / 100;
+      const gap = Math.round((need - m.qty) * 100) / 100;
+      return gap > 0 ? { name: m.name, unit: m.unit, have: m.qty, need, gap } : null;
+    })
+    .filter((x) => x !== null);
+
+  return (
+    <div>
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="flex items-center gap-1 text-[13px] font-semibold text-cacao">
+        Planning to make a batch?
+        <ChevronDown className={`h-3.5 w-3.5 transition ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="mt-3 flex flex-col gap-2 rounded-xl bg-secondary/50 p-3 text-[14px]">
+          <label className="flex items-center gap-2">
+            <span>Make</span>
+            <input
+              inputMode="numeric"
+              aria-label="How many to make"
+              value={count}
+              onChange={(e) => setCount(e.target.value.replace(/[^0-9]/g, ""))}
+              className="h-9 w-20 rounded-lg border border-input bg-card text-center font-semibold tabular-nums"
+            />
+            <span>{product.unit || "jars"}</span>
+          </label>
+          <p>
+            Costs <span className="font-semibold">{formatPeso(costEach * n)}</span> to make
+            {costKnown ? "" : " so far — some ingredients have no price yet"}.
           </p>
-        </>
+          {short.map((s) => (
+            <p key={s.name} className="text-[13px] text-danger">
+              Not enough {s.name} — you have {s.have} {s.unit}, need {s.need} ({s.gap} {s.unit} short).
+            </p>
+          ))}
+          {short.length === 0 && n > 0 && <p className="text-[13px] text-muted-foreground">You have enough of everything for {n} {product.unit || "jars"}.</p>}
+        </div>
       )}
     </div>
   );

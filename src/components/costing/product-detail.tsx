@@ -6,7 +6,6 @@ import { Page } from "@/components/layout/page";
 import { ProductPhoto, GRADIENTS } from "@/components/costing/products-screen";
 import { PriceCalculator } from "@/components/costing/price-calculator";
 import { RecipePanel } from "@/components/costing/recipe-panel";
-import { CostBuildUp } from "@/components/costing/cost-build-up";
 import { StockPanel } from "@/components/costing/stock-panel";
 import { EditProductDialog } from "@/components/stock/edit-product-dialog";
 import { useStore } from "@/lib/store/use-store";
@@ -17,10 +16,10 @@ import { familiesOf, fullName } from "@/lib/summary/product-sizes";
 import { formatPeso } from "@/lib/format";
 
 /**
- * One product, in four plainly named tabs — one job each:
+ * One product, in three plainly named tabs — one job each:
  *
- *   Recipe        what goes into ONE unit: ingredients, packaging, your time
- *   Cost          what one costs to make, built up stage by stage
+ *   Recipe        what goes into ONE unit — ingredients, packaging, your time, other costs —
+ *                 each with its cost, adding up to what one costs to make
  *   Price         the three ways to set a price, side by side, and what you keep
  *   Stock & sizes what's on hand, how long it keeps, the usual batch size, the other sizes
  *
@@ -28,18 +27,17 @@ import { formatPeso } from "@/lib/format";
  * production (lib/costing/per-unit).
  *
  * Above the tabs, the three numbers that matter — price, cost, what you keep — always in view;
- * one that isn't known yet says so and links to the tab that fills it in. Recipe, Cost and Price
+ * one that isn't known yet says so and links to the tab that fills it in. Recipe and Price
  * carry a tick once they're done, and the page opens on the first one that isn't.
  *
  * Executives only: the Costing page shows employees the product gallery instead, and the server
  * never sends an employee recipe costs to begin with (lib/auth/permissions).
  */
 
-type Tab = "recipe" | "cost" | "price" | "stock";
+type Tab = "recipe" | "price" | "stock";
 
 const TABS: [Tab, string][] = [
   ["recipe", "Recipe"],
-  ["cost", "Cost"],
   ["price", "Price"],
   ["stock", "Stock & sizes"],
 ];
@@ -100,8 +98,8 @@ export function ProductDetail({
   // Per unit, whatever the batch size (lib/costing/per-unit).
   const perUnit = cost && complete ? Math.round(cost.costPerJar * 100) / 100 : null;
 
-  const done: Partial<Record<Tab, boolean>> = { recipe: hasRecipe, cost: perUnit != null, price: price > 0 };
-  const [tab, setTab] = useState<Tab>(() => (["recipe", "cost", "price"] as Tab[]).find((t) => !done[t]) ?? "recipe");
+  const done: Partial<Record<Tab, boolean>> = { recipe: perUnit != null, price: price > 0 };
+  const [tab, setTab] = useState<Tab>(() => (["recipe", "price"] as Tab[]).find((t) => !done[t]) ?? "recipe");
 
   if (!product || !cost) {
     return (
@@ -141,12 +139,12 @@ export function ProductDetail({
             </div>
             <div className="grid grid-cols-3 gap-3">
               <KeyFigure label="Sells for" value={price > 0 ? formatPeso(price) : null} missing="Set a price" onFix={() => setTab("price")} />
-              <KeyFigure label={`Costs to make one`} value={perUnit != null ? formatPeso(perUnit) : null} missing="Not known yet" onFix={() => setTab(hasRecipe ? "cost" : "recipe")} />
+              <KeyFigure label={`Costs to make one`} value={perUnit != null ? formatPeso(perUnit) : null} missing="Not known yet" onFix={() => setTab("recipe")} />
               <KeyFigure
                 label="You keep on each"
                 value={keep != null ? formatPeso(keep) : null}
                 missing="Needs cost & price"
-                onFix={() => setTab(perUnit == null ? (hasRecipe ? "cost" : "recipe") : "price")}
+                onFix={() => setTab(perUnit == null ? "recipe" : "price")}
                 tone={keep == null ? undefined : keep >= 0 ? "good" : "bad"}
               />
             </div>
@@ -174,28 +172,16 @@ export function ProductDetail({
         </div>
 
         <section role="tabpanel" className="rounded-xl border border-line/15 bg-card px-4 py-4 min-[700px]:px-5">
-          {tab === "recipe" && <RecipePanel product={product} />}
-
-          {tab === "cost" && (
+          {tab === "recipe" && (
             <div className="flex flex-col gap-4">
-              {perUnit == null && (
-                <Note
-                  action={
-                    <button type="button" onClick={() => setTab("recipe")} className="w-fit text-[13px] font-semibold text-cacao">
-                      Go to Recipe →
-                    </button>
-                  }
-                >
-                  {!hasRecipe
-                    ? "Add the recipe first, and the cost will be worked out here."
-                    : cost.unpriced.length > 0
-                      ? `We can't work out the cost yet — there's no price for ${cost.unpriced.join(", ")}. Log a purchase of it in Transactions to price it.`
-                      : cost.unconvertible.length > 0
-                        ? `Check the units on ${cost.unconvertible.join(", ")} — they couldn't be converted.`
-                        : `Add what goes into one ${unit}, and the cost will appear here.`}
+              {hasRecipe && perUnit == null && (
+                <Note>
+                  {cost.unpriced.length > 0
+                    ? `We can't work out the cost yet — there's no price for ${cost.unpriced.join(", ")}. Log a purchase of it in Transactions to price it.`
+                    : `Check the units on ${cost.unconvertible.join(", ")} — they couldn't be converted.`}
                 </Note>
               )}
-              <CostBuildUp product={product} cost={cost} unit={unit} />
+              <RecipePanel product={product} />
             </div>
           )}
 
