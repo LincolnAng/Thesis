@@ -59,6 +59,7 @@ export function ChatThread({
   onSaveQuickEdit,
   onCancelQuickEdit,
   onConfirmReview,
+  onPaymentChoice,
   onEditReview,
   onRetry,
   onGatePick,
@@ -76,6 +77,8 @@ export function ChatThread({
   onCancelQuickEdit: (id: string) => void;
   /** Writes the proposed entry to the ledger — nothing else in this thread does. */
   onConfirmReview: (id: string) => void;
+  /** Applies (or drops) a payment BAi prepared — only on her say-so. */
+  onPaymentChoice: (id: string, confirmed: boolean) => void;
   onEditReview: (id: string) => void;
   onRetry: (text: string) => void;
   onGatePick: (messageId: string, text: string) => void;
@@ -115,11 +118,47 @@ export function ChatThread({
               )}
             >
               <p className="whitespace-pre-wrap">{m.text}</p>
+              {/* Where an online answer came from — kept visibly apart from the shop's own records. */}
+              {m.role === "assistant" && m.sources && m.sources.length > 0 && (
+                <div className="border-t border-line/15 pt-2">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">From the web</p>
+                  <ul className="mt-1 space-y-0.5">
+                    {m.sources.map((src) => (
+                      <li key={src.url} className="truncate text-[12.5px]">
+                        <a href={src.url} target="_blank" rel="noreferrer" className="text-cacao underline decoration-dotted underline-offset-2">
+                          {src.title}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {m.role === "assistant" && m.retryText && (
                 <Button size="sm" variant="secondary" className="h-7 gap-1" onClick={() => onRetry(m.retryText!)}>
                   <RotateCw className="h-3.5 w-3.5" />
                   Try again
                 </Button>
+              )}
+            </div>
+          )}
+
+          {m.kind === "payment" && (
+            <div className="max-w-[85%] space-y-2.5 rounded-2xl border border-line/15 bg-card px-4 py-3 text-sm">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Payment to record</p>
+              <p className="text-[14px]">{m.summary}</p>
+              {m.resolved ? (
+                <p className={`text-[13px] font-semibold ${m.resolved === "confirmed" ? "text-success" : "text-muted-foreground"}`}>
+                  {m.resolved === "confirmed" ? "Recorded." : "Not recorded."}
+                </p>
+              ) : (
+                <div className="flex gap-2">
+                  <Button className="min-h-11" onClick={() => onPaymentChoice(m.id, true)}>
+                    Confirm
+                  </Button>
+                  <Button className="min-h-11" variant="secondary" onClick={() => onPaymentChoice(m.id, false)}>
+                    Don&apos;t record
+                  </Button>
+                </div>
               )}
             </div>
           )}

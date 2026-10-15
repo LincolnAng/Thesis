@@ -10,12 +10,10 @@ import { supplierPricesCollection } from "@/lib/sheets/supplier-prices";
 import { businessSettingsCollection } from "@/lib/sheets/business-settings";
 import { usersCollection } from "@/lib/sheets/users";
 import { activityCollection } from "@/lib/sheets/activity";
-import { toPublicProfile } from "@/lib/sheets/users";
 import type { SheetCollection } from "@/lib/sheets/collection";
 import { requireSession } from "@/lib/auth/session";
-import { decideWrite, needsExistingRow, redactForEmployee, type BusinessData } from "@/lib/auth/permissions";
-import { assembleProduct, type ProductRow } from "@/lib/store/sheet-shapes";
-import { effectiveProductPrice, productCostPerJar, type CostContext } from "@/lib/summary/recipe-cost";
+import { decideWrite, needsExistingRow } from "@/lib/auth/permissions";
+import { loadBusinessDataFor } from "@/lib/auth/load-business-data";
 
 const COLLECTIONS = {
   entries: entriesCollection,
@@ -49,63 +47,9 @@ export async function GET() {
   const auth = await requireSession();
   if (auth.denied) return auth.denied;
   try {
-    const [entries, products, recipes, rawMaterials, suppliers, supplierPriceHistory, budgets, events, eventStock, machines, supplierPrices, businessSettings, users, activity] =
-      await Promise.all([
-      entriesCollection.getAll(),
-      productsCollection.getAll(),
-      recipesCollection.getAll(),
-      rawMaterialsCollection.getAll(),
-      suppliersCollection.getAll(),
-      supplierPriceHistoryCollection.getAll(),
-      budgetsCollection.getAll(),
-      eventsCollection.getAll(),
-      eventStockCollection.getAll(),
-      machinesCollection.getAll(),
-      supplierPricesCollection.getAll(),
-      businessSettingsCollection.getAll(),
-      usersCollection.getAll(),
-      activityCollection.getAll(),
-    ]);
-
-    // The cookie says who signed in; the sheet says who they are now. A deleted profile is
-    // signed out, and a changed role applies from the next load rather than the next sign-in.
-    const me = users.find((u) => u.id === auth.session.userId);
-    if (!me) return NextResponse.json({ success: false, reason: "signed_out" }, { status: 401 });
-
-    const data: BusinessData = {
-      entries,
-      products,
-      recipes,
-      rawMaterials,
-      suppliers,
-      supplierPriceHistory,
-      budgets,
-      events,
-      eventStock,
-      machines,
-      supplierPrices,
-      businessSettings,
-      users: users.map(toPublicProfile),
-      activity,
-    };
-    if (me.role === "executive") return NextResponse.json({ success: true, role: me.role, ...data });
-
-    const settings = Object.fromEntries(businessSettings.map((s) => [s.key, s.value]));
-    const assembled = products.map((row) => assembleProduct(row, recipes));
-    const ctx: CostContext = {
-      rawMaterials,
-      supplierPrices,
-      // Same readings as useCostContext / cacaoUtilizationPct, which live in client modules.
-      hourlyLaborRate: Number(settings["hourly_labor_rate"]) || 0,
-      cacaoUtilization: Math.min(100, Math.max(1, Number(settings["cacaoUtilizationPct"]) || 100)) / 100,
-      entries,
-      products: assembled,
-    };
-    const sellingPrice = (row: ProductRow) => {
-      const product = assembled.find((p) => p.id === row.id);
-      return product ? effectiveProductPrice(product, productCostPerJar(product, ctx)) : row.standardPrice;
-    };
-    return NextResponse.json({ success: true, role: me.role, ...redactForEmployee(data, sellingPrice) });
+    const loaded = await loadBusinessDataFor(auth.session);
+    if (!loaded) return NextResponse.json({ success: false, reason: "signed_out" }, { status: 401 });
+    return NextResponse.json({ success: true, role: loaded.role, ...loaded.data });
   } catch (err) {
     return NextResponse.json({ success: false, detail: err instanceof Error ? err.message : String(err) });
   }

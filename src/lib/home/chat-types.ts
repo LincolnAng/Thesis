@@ -16,6 +16,21 @@ export type ChatMessage =
       text: string;
       /** Set when the message reports a failure — carries the input to send again. */
       retryText?: string;
+      /** Web pages the answer drew on, when it searched online. */
+      sources?: { title: string; url: string }[];
+      createdAt: string;
+      sessionId: string;
+    }
+  // A payment on a payable or receivable that BAi prepared. Nothing changes until the owner
+  // confirms; `resolved` records what she chose so the card stops offering.
+  | {
+      id: string;
+      role: "assistant";
+      kind: "payment";
+      entryId: string;
+      summary: string;
+      patch: Partial<import("@/lib/store/types").Entry>;
+      resolved?: "confirmed" | "cancelled";
       createdAt: string;
       sessionId: string;
     }

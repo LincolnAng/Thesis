@@ -5,27 +5,23 @@ import { Plus } from "lucide-react";
 import { ChatThread } from "@/components/home/chat-thread";
 import { ChatComposer } from "@/components/home/chat-composer";
 import { ChatLanding } from "@/components/home/chat-landing";
+import { TransactionDialog } from "@/components/transactions/transaction-dialog";
+import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 import { PastChatsButton } from "@/components/home/chat-sidebar";
 import type { ClarifyOption } from "@/lib/home/chat-types";
 import type { EntryDraft } from "@/lib/home/describe-entry";
 import { useAiStatus } from "@/lib/ai/use-ai-status";
 import { useStore } from "@/lib/store/use-store";
-import { requestAssistant } from "@/lib/ai/assistant-client";
-import { requestAdvice, requestSharpen, requestTriage } from "@/lib/ai/advisor-client";
+import { requestAgent } from "@/lib/ai/agent-client";
+import { requestAdvice, requestSharpen } from "@/lib/ai/advisor-client";
 import { buildAdvisorContext } from "@/lib/ai/advisor-context";
-import { classifyIntent } from "@/lib/ai/intent";
 import { assessSharpness } from "@/lib/ai/prompt-gate";
-import { localAnswer } from "@/lib/ai/local-fallback";
-import { buildDataSummary } from "@/lib/ai/data-summary";
-import { allExpenseCategories } from "@/lib/summary/expenses-summary";
 import { addEntry, deleteEntry, replaceEntry } from "@/lib/store/store";
-import { buildClarifyPrompt } from "@/lib/home/clarify";
 import { computeInsight } from "@/lib/home/insights";
 import { pushChatMessage, removeChatMessage, replaceChatMessage, startNewChat } from "@/lib/home/chat-store";
 import { useChatMessages } from "@/lib/home/use-chat-messages";
 import { useChatReady } from "@/lib/home/use-chat-ready";
 
-const CONFIDENCE_THRESHOLD = 0.7;
 const INSIGHT_EVERY = 3;
 
 function genId(): string {
@@ -70,7 +66,13 @@ export function HomeChat() {
   const [lookingUp, setLookingUp] = useState(false);
   const { degraded } = useAiStatus();
   const state = useStore();
+  const currentUser = useCurrentUser();
   const saveCount = useRef(0);
+  /** Multi-product orders, investments and payment details are edited in the full transaction
+   *  form, which understands them; the small inline form is for single-line entries. */
+  const [fullEdit, setFullEdit] = useState<{ messageId: string; entryId: string | null; draft: EntryDraft } | null>(null);
+  const needsFullForm = (d: EntryDraft) =>
+    Boolean(d.lineItems?.length) || d.type === "CAPITAL" || d.type === "ASSET" || Boolean(d.payments?.length) || Boolean(d.paymentMethod);
 
   const push = pushChatMessage;
   const replace = replaceChatMessage;
@@ -111,6 +113,10 @@ export function HomeChat() {
   function handleEditReview(id: string) {
     const message = messages.find((m) => m.id === id);
     if (!message || message.kind !== "review") return;
+    if (needsFullForm(message.draft)) {
+      setFullEdit({ messageId: id, entryId: null, draft: message.draft });
+      return;
+    }
     replace(id, {
       id,
       role: "assistant",
@@ -206,7 +212,7 @@ export function HomeChat() {
 
   async function handleSubmit(
     override?: string,
-    opts: { freshChat?: boolean; skipGate?: boolean; mode?: "ask" | "log" } = {},
+    opts: { freshChat?: boolean; skipGate?: boolean } = {},
   ) {
     if (!ready) return; // still loading history from Sheets — don't guess which chat this belongs to
     const rawText = (override ?? input).trim();
@@ -226,191 +232,79 @@ export function HomeChat() {
       return;
     }
 
-    // Which helper should answer. The word rules settle the obvious cases for free; when they
-    // admit they are guessing, the small model decides instead of a keyword list that has
-    // never seen this phrasing.
-    const guess = classifyIntent(rawText);
-    let intent = guess.intent;
-    // Chosen "Log" on the start screen: she is recording something, so it goes straight to the
-    // logging assistant (which still shows it for checking before saving), never to advice.
-    if (opts.mode === "log") {
-      intent = "transaction";
-    } else if (!guess.confident) {
-      setSubmitting(true);
-      const triaged = await requestTriage(rawText, state.products.map((p) => p.name));
-      setSubmitting(false);
-      if (triaged) intent = triaged;
-    }
-
-    // Advice questions take a different road: a bigger briefing, a longer answer, and a gate in
-    // front of the vague ones. Transaction logs never come down here.
-    if (!opts.skipGate && intent === "advice") {
-      const sharpness = assessSharpness(rawText);
-      if (!sharpness.sharp) {
-        setSubmitting(true);
-        const suggestions = await requestSharpen(rawText, buildAdvisorContext(state));
-        setSubmitting(false);
-        if (suggestions.status === "ok") {
-          push({
-            id: genId(),
-            role: "assistant",
-            kind: "prompt-gate",
-            rawText,
-            suggestions: suggestions.suggestions,
-            reasons: sharpness.reasons,
-            createdAt: nowIso(),
-          });
-          return;
-        }
-        // Couldn't reach the sharpener. The gate blocks vague questions, but it must not block
-        // on an outage she didn't cause and can't fix — so this one goes through.
-      }
-      await askAdvisor(rawText);
-      return;
-    }
-
+    // One assistant for everything: BAi decides whether this is a question about the shop, a
+    // general question, something to look up online, or something to record — and reads the
+    // shop's records itself, on the server, as this profile is allowed to see them.
     setSubmitting(true);
-    const summary = buildDataSummary(state);
-    // Only plain text turns carry usable conversation context; entry cards, clarify prompts
-    // and quick-edit forms aren't turns. `messages` is this render's snapshot, so it excludes
-    // the owner message pushed above — which is correct, that one is sent as `rawText`.
     const history = (opts.freshChat ? [] : messages)
       .filter((m) => m.kind === "text")
-      .slice(-6)
-      .map((m) => ({ role: m.role, content: m.text }));
-    const outcome = await requestAssistant(rawText, summary, history, allExpenseCategories(state.categoryBudgets));
+      .slice(-10)
+      .map((m) => ({ role: m.role, text: m.text }));
+    const outcome = await requestAgent([...history, { role: "user", text: rawText }]);
     setSubmitting(false);
 
-    if (outcome.status === "unavailable") {
+    if (outcome.status !== "ok") {
+      push({ id: genId(), role: "assistant", kind: "text", text: outcome.message, retryText: rawText, createdAt: nowIso() });
+      // Recording still works without the assistant: offer the form to fill in by hand.
+      if (outcome.status !== "signed_out") {
+        push({ id: genId(), role: "assistant", kind: "quick-edit", entryId: null, draft: blankDraft(rawText), createdAt: nowIso() });
+      }
+      return;
+    }
+
+    if (outcome.reply) {
       push({
         id: genId(),
         role: "assistant",
         kind: "text",
-        text: "I can't reach the assistant right now — that's a connection problem, not something you did. Try again, or fill this in and it'll still be recorded.",
-        retryText: rawText,
+        text: outcome.reply,
+        ...(outcome.sources.length ? { sources: outcome.sources } : {}),
         createdAt: nowIso(),
       });
-      push({
-        id: genId(),
-        role: "assistant",
-        kind: "quick-edit",
-        entryId: null,
-        draft: blankDraft(rawText),
-        createdAt: nowIso(),
-      });
-      return;
     }
-
-    if (outcome.status === "unreachable") {
-      // Deliberately not answered from the offline keyword matcher: a confident-sounding
-      // answer when the assistant never ran is the thing that reads as the app making
-      // things up.
+    if (outcome.proposal?.kind === "transaction") {
+      proposeDraft({ ...outcome.proposal.draft, rawText }, outcome.proposal.stated, rawText);
+    } else if (outcome.proposal?.kind === "payment") {
       push({
         id: genId(),
         role: "assistant",
-        kind: "text",
-        text: "I couldn't reach the AI just now, so I won't guess at an answer. Check the API key under Settings → AI assistant. You can still record this yourself below.",
-        retryText: rawText,
+        kind: "payment",
+        entryId: outcome.proposal.entryId,
+        summary: outcome.proposal.summary,
+        patch: outcome.proposal.patch,
         createdAt: nowIso(),
       });
-      push({
-        id: genId(),
-        role: "assistant",
-        kind: "quick-edit",
-        entryId: null,
-        draft: blankDraft(rawText),
-        createdAt: nowIso(),
-      });
-      return;
     }
+  }
 
-    if (outcome.status === "failed") {
-      push({
-        id: genId(),
-        role: "assistant",
-        kind: "text",
-        text: "I couldn't read that into an entry — the assistant replied with something I couldn't parse. Try again, reword it, or fill this in yourself.",
-        retryText: rawText,
-        createdAt: nowIso(),
-      });
-      push({
-        id: genId(),
-        role: "assistant",
-        kind: "quick-edit",
-        entryId: null,
-        draft: blankDraft(rawText),
-        createdAt: nowIso(),
-      });
-      return;
-    }
-
-    if (outcome.status === "chat") {
-      // It couldn't answer from her own records. Rather than showing an apology and making her
-      // ask again, hand straight over to the advisor, which can search. She never sees the seam.
-      if (outcome.needsLookup) {
-        setLookingUp(true);
-        await askAdvisor(rawText);
-        setLookingUp(false);
+  /** Applies a payment BAi prepared, once she confirms it — through the normal save path. */
+  function handlePaymentChoice(id: string, confirmed: boolean) {
+    const message = messages.find((m) => m.id === id);
+    if (!message || message.kind !== "payment" || message.resolved) return;
+    if (confirmed) {
+      const entry = state.entries.find((e) => e.id === message.entryId);
+      if (!entry) {
+        replace(id, { ...message, resolved: "cancelled", summary: `${message.summary} (That transaction no longer exists, so nothing was changed.)` });
         return;
       }
-      const fallback = outcome.reply.trim() || localAnswer(rawText, state);
-      push({ id: genId(), role: "assistant", kind: "text", text: fallback, createdAt: nowIso() });
-      return;
+      const { id: entryId, ...rest } = entry;
+      replaceEntry(entryId, { ...rest, ...message.patch });
     }
-
-    // outcome.status === "entry"
-    const draft: EntryDraft = {
-      timestamp: new Date(outcome.entry.date).toISOString(),
-      type: outcome.entry.type,
-      amount: outcome.entry.amount,
-      quantity: outcome.entry.quantity,
-      unit: outcome.entry.unit,
-      sku: outcome.entry.sku,
-      counterparty: outcome.entry.counterparty,
-      location: outcome.entry.location,
-      priceType: outcome.entry.priceType,
-      category: outcome.entry.category,
-      rawText,
-      confidence: outcome.entry.confidence,
-      notes: outcome.entry.notes,
-      // Owed either way: start it as not paid yet, with the due date if she said one.
-      ...(outcome.entry.paymentTerm && outcome.entry.paymentTerm !== "spot"
-        ? { paymentTerm: outcome.entry.paymentTerm, dueDate: outcome.entry.dueDate, paymentStatus: "pending" as const }
-        : {}),
-    };
-
-    if (outcome.clarifyQuestion && outcome.clarifyOptions && outcome.clarifyOptions.length > 0) {
-      const options: ClarifyOption[] = [
-        ...outcome.clarifyOptions.map((o) => ({ label: o.label, patch: o.patch })),
-        { label: "Something else", openEdit: true },
-      ];
-      push({
-        id: genId(),
-        role: "assistant",
-        kind: "clarify",
-        rawText,
-        question: outcome.clarifyQuestion,
-        draft,
-        options,
-        createdAt: nowIso(),
-      });
-      return;
-    }
-
-    if (draft.confidence < CONFIDENCE_THRESHOLD) {
-      // Defensive fallback: the model flagged low confidence but didn't supply its own
-      // clarifyQuestion — fall back to a generic confirmation rather than silently saving.
-      const { question, options } = buildClarifyPrompt(draft);
-      push({ id: genId(), role: "assistant", kind: "clarify", rawText, question, draft, options, createdAt: nowIso() });
-      return;
-    }
-
-    proposeDraft(draft, outcome.stated, rawText);
+    replace(id, { ...message, resolved: confirmed ? "confirmed" : "cancelled" });
   }
 
   function handleEdit(id: string) {
     const message = messages.find((m) => m.id === id);
     if (!message || message.kind !== "entry") return;
+    if (needsFullForm(message.draft)) {
+      const saved = state.entries.find((e) => e.id === message.entryId);
+      if (saved) {
+        const { id: _savedId, ...draft } = saved;
+        void _savedId;
+        setFullEdit({ messageId: id, entryId: message.entryId, draft });
+        return;
+      }
+    }
     replace(id, {
       id,
       role: "assistant",
@@ -506,7 +400,7 @@ export function HomeChat() {
       <div className="mx-auto w-full max-w-[760px]">
         {toolbar}
         <div className="pt-[6vh]">
-          <ChatLanding onSubmit={(text, mode) => void handleSubmit(text, { mode })} disabled={!ready || submitting} />
+          <ChatLanding onSubmit={(text) => void handleSubmit(text)} disabled={!ready || submitting} />
         </div>
       </div>
     );
@@ -523,6 +417,7 @@ export function HomeChat() {
         onSaveQuickEdit={handleSaveQuickEdit}
         onCancelQuickEdit={handleCancelQuickEdit}
         onConfirmReview={handleConfirmReview}
+        onPaymentChoice={handlePaymentChoice}
         onEditReview={handleEditReview}
         onRetry={handleRetry}
         onGatePick={(id, text) => void handleGateChoice(id, text)}
@@ -532,6 +427,25 @@ export function HomeChat() {
         isTyping={submitting}
         isLookingUp={lookingUp}
       />
+      {fullEdit && (
+        <TransactionDialog
+          open
+          onOpenChange={(open) => !open && setFullEdit(null)}
+          existing={{ ...fullEdit.draft, id: fullEdit.entryId ?? "draft" }}
+          exec={isExecutive(currentUser)}
+          onSave={(draft) => {
+            const message = messages.find((m) => m.id === fullEdit.messageId);
+            if (fullEdit.entryId) {
+              replaceEntry(fullEdit.entryId, draft);
+              if (message) replace(message.id, { id: message.id, role: "assistant", kind: "entry", entryId: fullEdit.entryId, draft, createdAt: message.createdAt });
+            } else if (message && message.kind === "review") {
+              // Still only proposed: the edited version goes back on the card to confirm.
+              replace(message.id, { ...message, draft, stated: [...new Set([...message.stated, "sku", "quantity", "amount"])] });
+            }
+            setFullEdit(null);
+          }}
+        />
+      )}
       <ChatComposer
         value={input}
         onChange={setInput}
