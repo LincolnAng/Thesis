@@ -61,6 +61,7 @@ export function ChatThread({
   onConfirmReview,
   onPaymentChoice,
   onEditReview,
+  onPatchReview,
   onRetry,
   onGatePick,
   onGateRefine,
@@ -80,6 +81,8 @@ export function ChatThread({
   /** Applies (or drops) a payment BAi prepared — only on her say-so. */
   onPaymentChoice: (id: string, confirmed: boolean) => void;
   onEditReview: (id: string) => void;
+  /** Changes a proposed entry before it's saved (how it was paid). */
+  onPatchReview?: (id: string, patch: Partial<EntryDraft>) => void;
   onRetry: (text: string) => void;
   onGatePick: (messageId: string, text: string) => void;
   onGateRefine: (messageId: string, extra: string) => void;
@@ -171,6 +174,7 @@ export function ChatThread({
               stated={m.stated}
               onConfirm={() => onConfirmReview(m.id)}
               onEdit={() => onEditReview(m.id)}
+              onPatch={onPatchReview ? (patch) => onPatchReview(m.id, patch) : undefined}
             />
           )}
 

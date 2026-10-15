@@ -8,6 +8,8 @@ import { findProduct } from "@/lib/summary/product-match";
 import { useStore } from "@/lib/store/use-store";
 import type { EntryDraft } from "@/lib/home/describe-entry";
 import { cn } from "@/lib/utils";
+import { MethodFields } from "@/components/transactions/method-fields";
+import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 
 /**
  * What the assistant understood, shown before anything is written.
@@ -16,19 +18,30 @@ import { cn } from "@/lib/utils";
  * stock and revenue by the time the owner saw it. Nothing here touches the ledger until the
  * confirm button is pressed, and anything the owner didn't actually say is marked as a guess
  * rather than presented as fact.
+ *
+ * A sale or expense paid on the spot asks how it was paid — Cash, or Bank transfer and which
+ * bank — right in the card, so it's recorded with the entry. Executives only: payment details
+ * are owner-only (lib/auth/permissions).
  */
 export function ReviewCard({
   draft,
   stated,
   onConfirm,
   onEdit,
+  onPatch,
 }: {
   draft: EntryDraft;
   stated: string[];
   onConfirm: () => void;
   onEdit: () => void;
+  /** Changes the proposed entry before it's saved — here, how it was paid. */
+  onPatch?: (patch: Partial<EntryDraft>) => void;
 }) {
   const { products } = useStore();
+  const exec = isExecutive(useCurrentUser());
+  const owedLater = draft.paymentTerm === "receivable" || draft.paymentTerm === "payable";
+  const asksMethod = exec && !!onPatch && (draft.type === "SALE" || draft.type === "EXPENSE") && !owedLater;
+  const needsBank = asksMethod && draft.paymentMethod === "bank_transfer" && !(draft.bankName ?? "").trim();
   const isStated = (field: string) => stated.includes(field);
 
   const matchedProduct = findProduct(products, draft.sku);
@@ -81,6 +94,26 @@ export function ReviewCard({
         ))}
       </ul>
 
+      {asksMethod && onPatch && (
+        <div className="border-t border-line/10 pt-2.5">
+          <MethodFields
+            label="Paid by"
+            method={draft.paymentMethod ?? null}
+            bankName={draft.bankName ?? null}
+            onChange={(n) =>
+              onPatch({
+                paymentTerm: draft.paymentTerm ?? "spot",
+                paymentMethod: n.method === "bank_transfer" ? "bank_transfer" : n.method === "cash" ? "cash" : null,
+                bankName: n.method === "bank_transfer" ? n.bankName : null,
+              })
+            }
+          />
+        </div>
+      )}
+      {owedLater && exec && (
+        <p className="text-xs text-muted-foreground">{draft.paymentTerm === "receivable" ? "The customer pays later" : "Paid later"} — how it&apos;s paid is asked when the payment comes in.</p>
+      )}
+
       {productUnknown && (
         <p className="flex items-start gap-1.5 rounded-xl bg-[var(--status-warning)]/10 p-2 text-xs text-[var(--status-warning)]">
           <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -92,7 +125,7 @@ export function ReviewCard({
       )}
 
       <div className="flex items-center gap-2">
-        <Button size="sm" className="flex-1" disabled={needsProduct} onClick={onConfirm}>
+        <Button size="sm" className="flex-1" disabled={needsProduct || needsBank} onClick={onConfirm}>
           Log this {draft.type === "SALE" ? "sale" : "entry"}
         </Button>
         <Button size="sm" variant="secondary" className={cn("gap-1", needsProduct && "flex-1")} onClick={onEdit}>
@@ -100,6 +133,7 @@ export function ReviewCard({
           Change
         </Button>
       </div>
+      {needsBank && <p className="text-xs text-muted-foreground">Which bank? Pick it above to log this.</p>}
       {needsProduct && (
         <p className="text-xs text-muted-foreground">
           A sale needs a product so it can come off your stock. Tap Change to pick one.

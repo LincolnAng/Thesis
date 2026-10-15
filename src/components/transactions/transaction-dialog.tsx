@@ -759,11 +759,6 @@ export function TransactionDialog({
             </div>
           )}
 
-          <label className="flex flex-col gap-1">
-            <span className={label}>Date</span>
-            <input type="date" value={date} onChange={(ev) => setDate(ev.target.value)} className={field} />
-          </label>
-
           {/* Payment */}
           {showPayment && (
             <fieldset className="flex flex-col gap-3 rounded-xl border border-line/15 p-3.5">
@@ -888,6 +883,11 @@ export function TransactionDialog({
               )}
             </fieldset>
           )}
+
+          <label className="flex flex-col gap-1">
+            <span className={label}>Date</span>
+            <input type="date" value={date} onChange={(ev) => setDate(ev.target.value)} className={field} />
+          </label>
 
           <label className="flex flex-col gap-1">
             <span className={label}>Notes</span>

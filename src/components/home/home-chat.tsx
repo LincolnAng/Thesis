@@ -110,6 +110,12 @@ export function HomeChat() {
     maybeAppendInsight();
   }
 
+  function handlePatchReview(id: string, patch: Partial<EntryDraft>) {
+    const message = messages.find((m) => m.id === id);
+    if (!message || message.kind !== "review") return;
+    replace(id, { ...message, draft: { ...message.draft, ...patch } });
+  }
+
   function handleEditReview(id: string) {
     const message = messages.find((m) => m.id === id);
     if (!message || message.kind !== "review") return;
@@ -419,6 +425,7 @@ export function HomeChat() {
         onConfirmReview={handleConfirmReview}
         onPaymentChoice={handlePaymentChoice}
         onEditReview={handleEditReview}
+        onPatchReview={handlePatchReview}
         onRetry={handleRetry}
         onGatePick={(id, text) => void handleGateChoice(id, text)}
         onGateRefine={(id, extra) => void handleGateRefine(id, extra)}
