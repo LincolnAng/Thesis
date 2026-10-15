@@ -204,6 +204,47 @@ function Details({ e, showPayment, owed, onPay }: { e: Entry; showPayment: boole
   );
 }
 
+/** One action in a row: an icon with its name under it. Shaded out, not hidden, when it doesn't apply. */
+function ActionIcon({
+  icon: Icon,
+  label,
+  title,
+  enabled,
+  active,
+  onClick,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  title: string;
+  enabled: boolean;
+  active?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(ev) => {
+        ev.stopPropagation();
+        if (enabled) onClick();
+      }}
+      disabled={!enabled}
+      aria-label={title}
+      aria-pressed={active}
+      title={title}
+      className={`flex w-12 flex-col items-center gap-0.5 rounded-lg py-1 text-[10.5px] font-semibold transition ${
+        !enabled
+          ? "cursor-not-allowed text-muted-foreground/30"
+          : active
+            ? "bg-secondary text-cacao"
+            : "text-muted-foreground hover:bg-secondary hover:text-cacao"
+      }`}
+    >
+      <Icon className="h-4 w-4" />
+      {label}
+    </button>
+  );
+}
+
 /** What can be done to an owed row. Executives only. */
 export interface OwedActions {
   /** A payment was saved, corrected or taken back: the message to tell the person, and — right
@@ -378,46 +419,30 @@ export function TransactionTable({
                     </td>
                   )}
                   <td className={`${td} whitespace-nowrap`}>{e.loggedByName}</td>
-                  <td className="px-2 py-1 text-center align-middle">
-                    <div className="flex items-center justify-center gap-1">
-                      {canPay && (
-                        <button
-                          type="button"
-                          onClick={(ev) => {
-                            ev.stopPropagation();
-                            setPaying(paying === e.id ? null : e.id);
-                          }}
-                          className="inline-flex h-8 items-center whitespace-nowrap rounded-lg border border-line/25 px-2.5 text-[12.5px] font-medium text-muted-foreground transition hover:border-cacao hover:text-cacao"
-                        >
-                          Log Payment
-                        </button>
+                  {/* The same three actions in the same places on every row; one that doesn't apply is shaded out. */}
+                  <td className="px-2 py-1.5 text-center align-middle">
+                    <div className="flex items-start justify-center gap-0.5">
+                      {showPayment && (
+                        <ActionIcon
+                          icon={HandCoins}
+                          label="Pay"
+                          title={canPay ? (kind === "receivable" ? "Log a payment received" : "Log a payment made") : kind ? "Nothing left to pay" : "Paid on the spot — nothing owed"}
+                          enabled={canPay}
+                          active={paying === e.id}
+                          onClick={() => setPaying(paying === e.id ? null : e.id)}
+                        />
                       )}
-                      {showPayment && kind && (
-                        <button
-                          type="button"
-                          onClick={(ev) => {
-                            ev.stopPropagation();
-                            toggle();
-                          }}
-                          aria-label={isOpen ? "Hide payment history" : "Show payment history"}
-                          aria-expanded={isOpen}
-                          title="Payment history"
-                          className={`flex h-9 w-9 items-center justify-center rounded-lg hover:bg-secondary hover:text-cacao ${isOpen ? "bg-secondary text-cacao" : "text-muted-foreground"}`}
-                        >
-                          <HistoryIcon className="h-4 w-4" />
-                        </button>
+                      {showPayment && (
+                        <ActionIcon
+                          icon={HistoryIcon}
+                          label="History"
+                          title={kind ? (isOpen ? "Hide payment history" : "Show payment history") : "No payment history — it wasn't owed"}
+                          enabled={!!kind}
+                          active={isOpen}
+                          onClick={toggle}
+                        />
                       )}
-                      <button
-                        type="button"
-                        onClick={(ev) => {
-                          ev.stopPropagation();
-                          onEdit(e);
-                        }}
-                        aria-label="Change this transaction"
-                        className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </button>
+                      <ActionIcon icon={Pencil} label="Edit" title="Change this transaction" enabled onClick={() => onEdit(e)} />
                     </div>
                   </td>
                 </tr>
