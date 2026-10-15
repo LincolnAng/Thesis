@@ -12,13 +12,15 @@ import type { Entry } from "@/lib/store/types";
  * Every recorded transaction, one row each, in one fixed set of columns — the same for sales,
  * expenses, receivables and payables, so what is owed reads exactly like what was paid:
  *
- *   Date · Customer / Supplier · Product · Qty · Amount · Payment (mode · bank) · Deadline · Recorded by
+ *   Date · Customer / Supplier · Product · Qty · Amount · Payment (mode · bank) · Owed · Deadline · Recorded by
  *
- * What is still owed on a receivable or payable sits under its Amount: the balance, the way to log a
- * payment, and a short pill (Recv / Pay, with an arrow in or out) saying which it is.
+ * Owed holds what is still owed on a receivable or payable: the balance on top, and beneath it a
+ * short pill (Recv / Pay, with an arrow in or out) saying which it is, beside the icon that logs a
+ * payment.
  *
- * An order of several products is still one row: its products are listed top to bottom in the
- * Product cell with their quantities lined up beside them, and the Amount is the order's total.
+ * An order of several products is still one row: its Product, Qty and Amount cells list the products
+ * top to bottom in ruled slots, and the rules run straight across those three columns so each
+ * product reads as one line.
  *
  * Receivables and payables have a history button beside the pencil: it opens each payment (date,
  * how, amount), each time the deadline moved, and a default, with the actions to log a payment,
@@ -69,7 +71,7 @@ function Slots({ children }: { children: React.ReactNode[] }) {
   return (
     <ul className="divide-y divide-line/10">
       {children.map((c, i) => (
-        <li key={i} className="flex h-8 items-center justify-center whitespace-nowrap">
+        <li key={i} className="flex h-8 items-center justify-center whitespace-nowrap px-3">
           {c}
         </li>
       ))}
@@ -235,7 +237,7 @@ export function TransactionTable({
   // name text wraps within a sensible width instead of stretching the table.
   const th = "whitespace-nowrap px-3 py-2.5 text-center text-[11px] font-bold uppercase tracking-wide text-muted-foreground";
   const td = "px-3 py-2 text-center align-middle";
-  const colCount = showPayment ? 9 : 7;
+  const colCount = showPayment ? 10 : 7;
 
   const head = (label: string, key?: SortKey) => (
     <th scope="col" className={th}>
@@ -270,6 +272,7 @@ export function TransactionTable({
             {head("Qty")}
             {head("Amount", "amount")}
             {showPayment && head("Payment")}
+            {showPayment && head("Owed")}
             {showPayment && head("Deadline", "due")}
             {head("Recorded by")}
             <th scope="col" className={th}>
@@ -292,44 +295,48 @@ export function TransactionTable({
             const more = items.length - shown.length;
             const info = kind && showPayment ? obligationInfo(e, new Date()) : null;
             // Only product, quantity and amount repeat per product; they share the same slots so they line up.
-            const pad = multi ? "py-1" : "";
+            // Split cells drop their side padding (the slots carry it), so the rules of Product, Qty
+            // and Amount run on as one unbroken line across the three columns.
+            const split = multi ? "px-0 py-1 text-center align-middle" : td;
             const moreSlot = more > 0 ? [<span key="more" className="text-[12px] text-muted-foreground">+{more} more</span>] : [];
             const blankSlot = more > 0 ? [<span key="blank" />] : [];
             const amountText = (v: number | null) =>
               v == null ? "—" : `${e.type === "WASTE" ? "" : moneyIn ? "+" : "−"}${formatPeso(v)}`;
-            // Under the amount: what is left, the way to log a payment, and which kind of debt this is.
+            // The Owed cell: what is left on top; beneath it, which kind of debt it is and the way to log a payment.
             const owedNode =
               kind && info ? (
-                <div className="mt-1 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 font-normal">
+                <div className="flex flex-col items-center gap-1">
                   <span
-                    className={`text-[12px] font-semibold tabular-nums ${
+                    className={`text-[13px] font-semibold tabular-nums ${
                       info.remaining > 0 ? (info.status === "overdue" || info.status === "defaulted" ? "text-danger" : "text-[var(--status-warning)]") : "text-success"
                     }`}
                   >
                     {info.remaining > 0 ? `${formatPeso(info.remaining)} left` : "Paid in full"}
                   </span>
-                  {owed && info.remaining > 0 && (
-                    <button
-                      type="button"
-                      onClick={(ev) => {
-                        ev.stopPropagation();
-                        setPaying(paying === e.id ? null : e.id);
-                      }}
-                      aria-label={kind === "receivable" ? "Log a payment received" : "Log a payment made"}
-                      title={kind === "receivable" ? "Log a payment received" : "Log a payment made"}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
+                  <span className="flex items-center gap-1">
+                    <span
+                      title={kind === "receivable" ? "Receivable: a customer owes us this" : "Payable: we owe a supplier this"}
+                      className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wide ${
+                        kind === "receivable" ? "bg-success/10 text-success" : "bg-[#9A6B12]/10 text-[#9A6B12]"
+                      }`}
                     >
-                      <HandCoins className="h-4 w-4" />
-                    </button>
-                  )}
-                  <span
-                    title={kind === "receivable" ? "Receivable: a customer owes us this" : "Payable: we owe a supplier this"}
-                    className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wide ${
-                      kind === "receivable" ? "bg-success/10 text-success" : "bg-[#9A6B12]/10 text-[#9A6B12]"
-                    }`}
-                  >
-                    {kind === "receivable" ? <ArrowDownLeft className="h-3 w-3" strokeWidth={2.6} /> : <ArrowUpRight className="h-3 w-3" strokeWidth={2.6} />}
-                    {kind === "receivable" ? "Recv" : "Pay"}
+                      {kind === "receivable" ? <ArrowDownLeft className="h-3 w-3" strokeWidth={2.6} /> : <ArrowUpRight className="h-3 w-3" strokeWidth={2.6} />}
+                      {kind === "receivable" ? "Recv" : "Pay"}
+                    </span>
+                    {owed && info.remaining > 0 && (
+                      <button
+                        type="button"
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          setPaying(paying === e.id ? null : e.id);
+                        }}
+                        aria-label={kind === "receivable" ? "Log a payment received" : "Log a payment made"}
+                        title={kind === "receivable" ? "Log a payment received" : "Log a payment made"}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
+                      >
+                        <HandCoins className="h-4 w-4" />
+                      </button>
+                    )}
                   </span>
                 </div>
               ) : null;
@@ -367,7 +374,7 @@ export function TransactionTable({
                   </td>
                   {/* Product, quantity, amount: one slot per product */}
                   <td
-                    className={`${td} max-w-[240px] ${pad}`}
+                    className={`${split} max-w-[240px]`}
                     title={items.map((l) => l.name).join(", ") + (e.type === "EXPENSE" && e.category ? ` · ${EXPENSE_CATEGORY_LABELS[e.category] ?? e.category}` : "")}
                   >
                     {multi ? (
@@ -385,7 +392,7 @@ export function TransactionTable({
                       <span className="line-clamp-2">{items[0].name || <span className="text-muted-foreground">—</span>}</span>
                     )}
                   </td>
-                  <td className={`${td} tabular-nums ${pad}`}>
+                  <td className={`${split} tabular-nums`}>
                     {multi ? (
                       <Slots>
                         {[
@@ -403,7 +410,7 @@ export function TransactionTable({
                       <span className="text-muted-foreground">—</span>
                     )}
                   </td>
-                  <td className={`${td} whitespace-nowrap font-semibold tabular-nums ${pad} ${e.type === "WASTE" ? "text-muted-foreground" : moneyIn ? "text-success" : "text-danger"}`}>
+                  <td className={`${split} whitespace-nowrap font-semibold tabular-nums ${e.type === "WASTE" ? "text-muted-foreground" : moneyIn ? "text-success" : "text-danger"}`}>
                     {multi ? (
                       <Slots>
                         {[...shown.map((l, j) => <span key={j}>{amountText(l.amount)}</span>), ...blankSlot]}
@@ -411,9 +418,9 @@ export function TransactionTable({
                     ) : (
                       amountText(e.amount)
                     )}
-                    {owedNode}
                   </td>
                   {showPayment && <td className={`${td} whitespace-nowrap text-[12.5px]`}>{paymentNode}</td>}
+                  {showPayment && <td className={`${td} text-[12.5px]`}>{owedNode ?? <NA />}</td>}
                   {showPayment && (
                     <td className={`${td} text-[12.5px]`}>
                       {kind ? (
