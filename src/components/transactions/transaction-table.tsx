@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, HandCoins, Pencil } from "lucide-react";
+import { BanknoteArrowDown, BanknoteArrowUp, Pencil } from "lucide-react";
 import { EXPENSE_CATEGORY_LABELS, PRICE_TYPE_LABELS, describePaymentMethod, formatDate, formatPeso } from "@/lib/format";
 import { dueInfo, obligationInfo, obligationKind, outstanding, paymentsOf } from "@/lib/transactions/ledger";
 import { expandOrderLines } from "@/lib/transactions/order-lines";
@@ -19,9 +19,9 @@ import type { Entry } from "@/lib/store/types";
  * balance isn't counted per product. Rows of one order are striped together so they read as
  * one block.
  *
- * Only executives see the payment columns; an employee's copy has no payment data at all. The
- * arrow opens what the row can't show (payments on something owed, the price type, a note) and
- * the pencil opens the form that adds a transaction, which is where the money rules are
+ * Only executives see the payment columns; an employee's copy has no payment data at all.
+ * Pressing a row opens what it can't show (payments on something owed, the price type, a note)
+ * and the pencil opens the form that adds a transaction, which is where the money rules are
  * checked. Receivables and payables carry their own actions — record a payment, confirm a
  * default, move the due date. Tap a column heading to sort by it.
  */
@@ -125,8 +125,8 @@ function Details({ e, showPayment, owed }: { e: Entry; showPayment: boolean; owe
           {owed && info.status !== "settled" && (
             <div className="mt-1 flex flex-wrap gap-2">
               <button type="button" onClick={() => owed.onPay(e)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line/25 px-3 text-[13px] font-medium transition hover:border-cacao hover:text-cacao">
-                <HandCoins className="h-4 w-4" />
-                Add payment
+                {kind === "receivable" ? <BanknoteArrowDown className="h-4 w-4" /> : <BanknoteArrowUp className="h-4 w-4" />}
+                Record a payment
               </button>
               <button type="button" onClick={() => owed.onMoveDue(e)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line/25 px-3 text-[13px] font-medium transition hover:border-cacao hover:text-cacao">
                 Change due date
@@ -253,12 +253,25 @@ export function TransactionTable({
             const moneyIn = origin.type === "SALE" || origin.type === "CAPITAL";
             const { method, bank } = methodOf(origin);
             const isOpen = open.has(origin.id);
+            const expandable = hasDetails(origin, showPayment);
+            const toggle = () =>
+              setOpen((prev) => {
+                const next = new Set(prev);
+                if (next.has(origin.id)) next.delete(origin.id);
+                else next.add(origin.id);
+                return next;
+              });
             const stripe = overdue ? "bg-danger/[0.05]" : gi % 2 === 0 ? "bg-card" : "bg-[#FBFAF7] dark:bg-secondary/30";
             return (
               <Fragment key={origin.id}>
                 {group.map(({ key, row, first, last }) => (
                   // Rows of one order share a stripe and only the last carries a rule, so they read as a block.
-                  <tr key={key} className={`${stripe} ${last ? "border-b border-line/5" : ""}`}>
+                  <tr
+                    key={key}
+                    onClick={expandable ? toggle : undefined}
+                    aria-expanded={expandable ? isOpen : undefined}
+                    className={`${stripe} ${last ? "border-b border-line/5" : ""} ${expandable ? "cursor-pointer hover:brightness-[0.98]" : ""}`}
+                  >
                     <td className={`${td} whitespace-nowrap`}>
                       <div>{formatDate(row.timestamp)}</div>
                       {first && carried && <div className="text-[11px] font-semibold text-[var(--status-warning)]">Carried from {carried}</div>}
@@ -313,36 +326,24 @@ export function TransactionTable({
                           {owed && kind && outstanding(origin) > 0 && (
                             <button
                               type="button"
-                              onClick={() => owed.onPay(origin)}
-                              aria-label={kind === "receivable" ? "Add a payment received" : "Add a payment made"}
+                              onClick={(ev) => {
+                                ev.stopPropagation();
+                                owed.onPay(origin);
+                              }}
+                              aria-label={kind === "receivable" ? "Record a payment received" : "Record a payment made"}
                               className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg border border-line/20 px-2.5 text-[12px] font-medium text-muted-foreground transition hover:border-cacao hover:text-cacao active:scale-[0.97]"
                             >
-                              <HandCoins className="h-3.5 w-3.5" />
-                              Add payment
+                              {kind === "receivable" ? <BanknoteArrowDown className="h-3.5 w-3.5" /> : <BanknoteArrowUp className="h-3.5 w-3.5" />}
+                              Record a payment
                             </button>
                           )}
                           <div className="flex items-center justify-center gap-0.5">
-                            {hasDetails(origin, showPayment) && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setOpen((prev) => {
-                                    const next = new Set(prev);
-                                    if (next.has(origin.id)) next.delete(origin.id);
-                                    else next.add(origin.id);
-                                    return next;
-                                  })
-                                }
-                                aria-expanded={isOpen}
-                                aria-label={isOpen ? "Hide details" : "Show details"}
-                                className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
-                              >
-                                {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                              </button>
-                            )}
                             <button
                               type="button"
-                              onClick={() => onEdit(origin)}
+                              onClick={(ev) => {
+                                ev.stopPropagation();
+                                onEdit(origin);
+                              }}
                               aria-label="Change this transaction"
                               className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
                             >
