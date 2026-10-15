@@ -226,9 +226,12 @@ async function mirrorOp(
   /** Set for writes that are a consequence of another write (stock moving because a sale
    * was logged), so the log shows the thing the person did and not its bookkeeping. */
   silent = false,
-): Promise<void> {
+): Promise<boolean> {
   if (!silent) recordActivity(collection, op, payload);
   pendingWrites += 1;
+  // True only once the server has said the write landed. Callers that tell the owner "saved"
+  // wait for this; everything else carries on as before.
+  let confirmed = false;
   try {
     await enqueueForCollection(collection, async () => {
       for (let attempt = 0; ; attempt++) {
@@ -241,6 +244,7 @@ async function mirrorOp(
           const json = await res.json();
           if (!json.success) throw new Error(json.reason ?? json.detail ?? "sync failed");
           setSyncFailing(false);
+          confirmed = true;
           return;
         } catch {
           // A 400 (bad request) won't succeed on retry, but those are programming errors;
@@ -256,6 +260,7 @@ async function mirrorOp(
   } finally {
     pendingWrites -= 1;
   }
+  return confirmed;
 }
 
 // --- Who changed what -------------------------------------------------------------------
@@ -658,12 +663,12 @@ function startSyncPolling() {
   document.addEventListener("visibilitychange", tick);
 }
 
-async function mirrorEntryAppend(entry: Entry) {
-  await mirrorOp("entries", "append", { item: entry });
+async function mirrorEntryAppend(entry: Entry): Promise<boolean> {
+  return mirrorOp("entries", "append", { item: entry });
 }
 
-async function mirrorEntryUpdate(id: string, entry: Entry, before?: Entry) {
-  await mirrorOp("entries", "update", { id, item: entry, before });
+async function mirrorEntryUpdate(id: string, entry: Entry, before?: Entry): Promise<boolean> {
+  return mirrorOp("entries", "update", { id, item: entry, before });
 }
 
 async function mirrorEntryDelete(id: string, before?: Entry) {
@@ -836,6 +841,11 @@ function mirrorStockRows(productIds: string[], materialIds: string[]) {
 }
 
 export function addEntry(input: Omit<Entry, "id"> & { id?: string }): Entry {
+  return addEntryTracked(input).entry;
+}
+
+/** Like addEntry, plus a promise that settles true once the server has confirmed the save. */
+export function addEntryTracked(input: Omit<Entry, "id"> & { id?: string }): { entry: Entry; saved: Promise<boolean> } {
   // Stamped here rather than at each call site: there are half a dozen ways to log something
   // and a screen that forgot would leave a row nobody can account for.
   const who = currentUser();
@@ -854,9 +864,9 @@ export function addEntry(input: Omit<Entry, "id"> & { id?: string }): Entry {
     touchedMaterialIds = result.touchedMaterialIds;
     return { ...prev, entries: [entry, ...prev.entries], products: result.products, rawMaterials: result.rawMaterials };
   });
-  void mirrorEntryAppend(entry);
+  const saved = mirrorEntryAppend(entry);
   mirrorStockRows(touchedProductIds, touchedMaterialIds);
-  return entry;
+  return { entry, saved };
 }
 
 /** Removes an entry and reverses whatever stock/ingredient effects it applied. Used by Undo. */
@@ -885,6 +895,11 @@ export function deleteEntry(id: string) {
 
 /** Replaces an entry's fields, reversing the old side effects and applying the new ones. Used by Edit. */
 export function replaceEntry(id: string, next: Omit<Entry, "id">) {
+  void replaceEntryTracked(id, next);
+}
+
+/** Like replaceEntry, plus a promise that settles true once the server has confirmed the change. */
+export function replaceEntryTracked(id: string, next: Omit<Entry, "id">): Promise<boolean> {
   const previous = state.entries.find((e) => e.id === id);
   let updatedEntry: Entry | null = null;
   let touchedProductIds: string[] = [];
@@ -904,8 +919,9 @@ export function replaceEntry(id: string, next: Omit<Entry, "id">) {
       rawMaterials: applied.rawMaterials,
     };
   });
-  if (updatedEntry) void mirrorEntryUpdate(id, updatedEntry, previous);
+  const saved = updatedEntry ? mirrorEntryUpdate(id, updatedEntry, previous) : Promise.resolve(false);
   mirrorStockRows(touchedProductIds, touchedMaterialIds);
+  return saved;
 }
 
 // --- Products ------------------------------------------------------------

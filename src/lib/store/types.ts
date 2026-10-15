@@ -31,18 +31,6 @@ export type PaymentTerm = "spot" | "payable" | "receivable";
  *  given up on (defaulted), which keeps its unpaid balance on the books as still owed. */
 export type PaymentStatus = "pending" | "partial" | "settled" | "defaulted";
 
-/** How money moved. Bank transfers also name the bank — never an account number. */
-export type PaymentMethod = "cash" | "bank_transfer";
-
-/** One payment made against a payable or receivable, dated so cash lands in the right month. */
-export interface PaymentRecord {
-  /** "YYYY-MM-DD" */
-  date: string;
-  amount: number;
-  method: PaymentMethod;
-  bankName?: string | null;
-}
-
 /** One product in a multi-product order, with the price it actually sold at. */
 export interface OrderLine {
   /** Null when the product has since been removed from Costing. */
@@ -52,6 +40,36 @@ export interface OrderLine {
   quantity: number;
   /** Price per unit at the time of the sale — kept, so later price changes don't rewrite history. */
   unitPrice: number;
+}
+
+/** How money changed hands. The bank is named, never an account number or balance. */
+export type PaymentMethod = "cash" | "bank_transfer";
+
+/**
+ * One actual receipt or payment against a receivable or payable. The obligation keeps its
+ * original amount; what has been paid is the sum of these, so nothing is ever rewritten to
+ * make a balance look right.
+ */
+export interface PaymentRecord {
+  id: string;
+  /** "YYYY-MM-DD" — the day the money changed hands. */
+  date: string;
+  amount: number;
+  /** "cash", "bank_transfer", or null for a payment carried in from before methods were kept. */
+  method: string | null;
+  bankName: string | null;
+  note: string | null;
+  recordedById?: string | null;
+  recordedByName?: string | null;
+}
+
+/** A change to the agreed deadline, kept so an earlier due date is never silently erased. */
+export interface DueDateChange {
+  from: string | null;
+  to: string | null;
+  changedAt: string;
+  changedByName?: string | null;
+  reason?: string | null;
 }
 
 // The 6 built-ins below always exist; a plain string (not a closed union) so the
@@ -111,6 +129,12 @@ export interface Entry {
   /** Payments made against a payable or receivable, each dated. When present they are the
    *  record of what was paid; `amountPaid` is kept equal to their sum for older readers. */
   payments?: PaymentRecord[] | null;
+  /** The credit arrangement on a payable or receivable: "net_30", "date", … (see PAYMENT_TERMS). */
+  paymentTerms?: string | null;
+  /** Every time the due date was moved, oldest first. */
+  dueDateHistory?: DueDateChange[] | null;
+  /** When the owner confirmed it defaulted. Kept after it is paid, as part of its history. */
+  defaultedAt?: string | null;
 }
 
 export interface RecipeIngredientRow {

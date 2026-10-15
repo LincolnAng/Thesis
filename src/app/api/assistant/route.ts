@@ -9,8 +9,13 @@ import { INVESTMENT_CATEGORIES } from "@/lib/format";
 
 const VALID_TYPES = ["SALE", "EXPENSE", "RND", "INVENTORY_IN", "INVENTORY_OUT", "WASTE", "SUPPLIER", "NOTE"];
 const VALID_PRICE_TYPES = ["standard", "friend", "wholesale"];
-const STATED_FIELDS = ["amount", "quantity", "unit", "sku", "counterparty", "category", "priceType", "notes", "paymentTerm", "dueDate"];
+const STATED_FIELDS = [
+  "amount", "quantity", "unit", "sku", "counterparty", "category", "priceType", "notes",
+  "paymentTerm", "dueDate", "paymentMethod", "bankName", "paymentTerms",
+];
 const VALID_PAYMENT_TERMS = ["spot", "receivable", "payable"];
+const VALID_METHODS = ["cash", "bank_transfer"];
+const VALID_AGREEMENTS = ["immediate", "net_7", "net_15", "net_30", "date", "custom"];
 
 const DEFAULT_VALID_CATEGORIES = ["raw_materials", "labor", "utilities", "packaging", "transport", "misc"];
 
@@ -30,6 +35,17 @@ export interface AssistantEntryResult {
   /** Spot unless she said it is owed: a sale on credit (utang) or a purchase paid later. */
   paymentTerm: Entry["paymentTerm"];
   dueDate: string | null;
+  /** "cash" or "bank_transfer" when she said how it was paid; otherwise null — never guessed. */
+  paymentMethod: string | null;
+  bankName: string | null;
+  /** The agreement behind the due date: immediate, net_7, net_15, net_30, date or custom. */
+  paymentTerms: string | null;
+  /**
+   * Set when the message is a payment against something that is ALREADY owed ("Juan paid 3,000
+   * of the 8,000 he owes me"), not a new sale or expense. The app finds the existing receivable
+   * or payable and adds the payment to it; this never becomes a second record.
+   */
+  settles: "receivable" | "payable" | null;
 }
 
 /** Only a sale can be owed to the business and only an expense by it. */
@@ -112,6 +128,10 @@ function coerceEntry(parsed: Record<string, unknown>, today: string, validCatego
     notes: str(parsed.notes),
     paymentTerm: coerceTerm(type, parsed.paymentTerm),
     dueDate: coerceDay(parsed.dueDate),
+    paymentMethod: VALID_METHODS.includes(parsed.paymentMethod as string) ? (parsed.paymentMethod as string) : null,
+    bankName: str(parsed.bankName),
+    paymentTerms: VALID_AGREEMENTS.includes(parsed.paymentTerms as string) ? (parsed.paymentTerms as string) : null,
+    settles: parsed.settles === "receivable" || parsed.settles === "payable" ? parsed.settles : null,
   };
 }
 
@@ -133,6 +153,8 @@ function coercePatch(parsed: Record<string, unknown>, validCategories: string[])
   }
   if ("paymentTerm" in parsed) patch.paymentTerm = coerceTerm(patch.type ?? (VALID_TYPES.includes(parsed.type as string) ? (parsed.type as Entry["type"]) : undefined), parsed.paymentTerm) ?? undefined;
   if ("dueDate" in parsed) patch.dueDate = coerceDay(parsed.dueDate);
+  if ("paymentMethod" in parsed && VALID_METHODS.includes(parsed.paymentMethod as string)) patch.paymentMethod = parsed.paymentMethod as string;
+  if ("bankName" in parsed) patch.bankName = str(parsed.bankName);
   if ("notes" in parsed) patch.notes = str(parsed.notes);
   return patch;
 }

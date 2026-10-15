@@ -17,8 +17,12 @@ import { addPayment, outstanding, paidSoFar } from "@/lib/transactions/ledger";
 import { describeOrder, lineSubtotal, orderQuantity, orderTotal } from "@/lib/transactions/order-lines";
 import { COMMON_BANKS, EXPENSE_CATEGORY_LABELS, describePaymentMethod, formatPeso } from "@/lib/format";
 import { PAYROLL_CATEGORIES } from "@/lib/auth/permissions";
-import type { Entry, OrderLine, PaymentMethod, PaymentRecord, PriceType, Product } from "@/lib/store/types";
+import { currentUser } from "@/lib/auth/current-user";
+import type { Entry, OrderLine, PaymentMethod, PriceType, Product } from "@/lib/store/types";
 import type { EntryDraft } from "@/lib/home/describe-entry";
+
+/** A payment the ledger refused (more than is owed, a future date…), shown to the person as is. */
+class PaymentRefused extends Error {}
 
 /**
  * Add or change a transaction — one compact form, laid out by what kind of transaction it is:
@@ -309,11 +313,18 @@ export function TransactionDialog({
       });
       const pay = num(payAmount);
       if (pay > 0) {
-        const record: PaymentRecord = { date: payDate || today(), amount: pay, method: payMethod, bankName: payMethod === "bank_transfer" ? payBank.trim() || null : null };
-        Object.assign(d, addPayment({ ...(d as Entry), id: e?.id ?? "new" }, record, new Date()));
+        const who = currentUser();
+        const r = addPayment(
+          { ...(d as Entry), id: e?.id ?? "new" },
+          { date: payDate || today(), amount: pay, method: payMethod, bankName: payMethod === "bank_transfer" ? payBank.trim() || null : null },
+          { id: who?.id, name: who?.name },
+          new Date(),
+        );
+        if (!r.ok) throw new PaymentRefused(r.reason);
+        Object.assign(d, r.patch);
       }
-      if (defaulted && d.paymentStatus !== "settled") d.paymentStatus = "defaulted";
-      else if (!defaulted && d.paymentStatus === "defaulted") d.paymentStatus = null;
+      if (defaulted && d.paymentStatus !== "settled") Object.assign(d, { paymentStatus: "defaulted", defaultedAt: e?.defaultedAt ?? new Date().toISOString() });
+      else if (!defaulted && d.paymentStatus === "defaulted") Object.assign(d, { paymentStatus: null, defaultedAt: null });
     }
     return d;
   }
@@ -329,8 +340,8 @@ export function TransactionDialog({
     try {
       onSave(build());
       onOpenChange(false);
-    } catch {
-      setError("That didn't save. Check your connection and try again.");
+    } catch (err) {
+      setError(err instanceof PaymentRefused ? err.message : "That didn't save. Check your connection and try again.");
       setSaving(false);
     }
   }

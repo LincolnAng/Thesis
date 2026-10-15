@@ -1,5 +1,5 @@
 import { createSheetCollection } from "./collection";
-import type { Entry } from "@/lib/store/types";
+import type { DueDateChange, Entry, PaymentRecord } from "@/lib/store/types";
 
 const HEADER = [
   "id",
@@ -36,6 +36,11 @@ const HEADER = [
   "paymentMethod",
   "bankName",
   "payments",
+  // Credit terms, deadline changes and confirmed default — appended last, as always.
+  // dueDateHistory is a JSON list of every time the deadline moved.
+  "paymentTerms",
+  "dueDateHistory",
+  "defaultedAt",
 ];
 
 function json<T>(raw: string | undefined): T | null {
@@ -45,6 +50,21 @@ function json<T>(raw: string | undefined): T | null {
   } catch {
     return null;
   }
+}
+
+/** Payments saved before they had ids and notes get them on the way in, so every reader sees one shape. */
+function normalizePayments(entryId: string, list: Partial<PaymentRecord>[] | null): PaymentRecord[] | null {
+  if (!list?.length) return null;
+  return list.map((p, i) => ({
+    id: p.id ?? `pay-${entryId.slice(-6)}-${i + 1}`,
+    date: p.date ?? "",
+    amount: Number(p.amount) || 0,
+    method: p.method ?? null,
+    bankName: p.bankName ?? null,
+    note: p.note ?? null,
+    recordedById: p.recordedById ?? null,
+    recordedByName: p.recordedByName ?? null,
+  }));
 }
 
 function toRow(e: Entry): string[] {
@@ -76,12 +96,15 @@ function toRow(e: Entry): string[] {
     e.paymentMethod ?? "",
     e.bankName ?? "",
     e.payments?.length ? JSON.stringify(e.payments) : "",
+    e.paymentTerms ?? "",
+    e.dueDateHistory?.length ? JSON.stringify(e.dueDateHistory) : "",
+    e.defaultedAt ?? "",
   ];
 }
 
 function fromRow(row: string[]): Entry | null {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [id, timestamp, type, amount, quantity, unit, sku, counterparty, location, priceType, category, rawText, confidence, notes, _deletedAt, eventId, loggedById, loggedByName, paymentTerm, dueDate, amountPaid, paymentStatus, settledAt, lineItems, paymentMethod, bankName, payments] =
+  const [id, timestamp, type, amount, quantity, unit, sku, counterparty, location, priceType, category, rawText, confidence, notes, _deletedAt, eventId, loggedById, loggedByName, paymentTerm, dueDate, amountPaid, paymentStatus, settledAt, lineItems, paymentMethod, bankName, payments, paymentTerms, dueDateHistory, defaultedAt] =
     row;
   if (!id) return null;
   return {
@@ -110,7 +133,10 @@ function fromRow(row: string[]): Entry | null {
     lineItems: json<Entry["lineItems"]>(lineItems),
     paymentMethod: (["cash", "bank_transfer"].includes(paymentMethod) ? paymentMethod : null) as Entry["paymentMethod"],
     bankName: bankName || null,
-    payments: json<Entry["payments"]>(payments),
+    payments: normalizePayments(id, json<Partial<PaymentRecord>[]>(payments)),
+    paymentTerms: paymentTerms || null,
+    dueDateHistory: json<DueDateChange[]>(dueDateHistory),
+    defaultedAt: defaultedAt || null,
   };
 }
 

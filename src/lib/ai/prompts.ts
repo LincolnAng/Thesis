@@ -72,8 +72,12 @@ Fill the "entry" object with these fields:
 - location: place mentioned (city/area), or null
 - priceType: "standard", "friend", or "wholesale" for sales — infer from context (bulk/tali/wholesale => wholesale; friend/libre/kaibigan => friend; otherwise standard) or null if not a sale or ambiguous whether it was paid for
 - category: for EXPENSE entries, one of ${expenseCategories.map((c) => `"${c}"`).join(", ")} (the owner's own tracked expense categories — pick the closest match); for RND entries, one of ${INVESTMENT_CATEGORIES.map((c) => `"${c}"`).join(", ")}; otherwise null
-- paymentTerm: "receivable" for a SALE the customer will pay later (utang, on credit, pay next week), "payable" for an EXPENSE the business will pay later, "spot" when it was paid on the spot, or null when not said. Never guess a credit term the owner didn't mention.
-- dueDate: for a receivable or payable, the ISO date it is due if the owner said one ("next Friday", "end of the month" — work it out from today's date), otherwise null
+- paymentTerm: "receivable" for a SALE the customer will pay later (utang, on credit, "owes me", pay next week), "payable" for an EXPENSE the business will pay later ("I owe my supplier"), "spot" when it was paid or received on the spot, or null when not said. Never guess a credit term the owner didn't mention.
+- dueDate: for a receivable or payable, the ISO date it is due if the owner said one ("next Friday", "in 30 days", "end of the month" — work it out from today's date), otherwise null
+- paymentTerms: the agreement behind the due date, one of "immediate", "net_7", "net_15", "net_30" (due in 7/15/30 days), "date" (a specific date was named), "custom" — or null when no due date was said
+- paymentMethod: "cash" or "bank_transfer" when the owner said how it was paid or received (cash; transfer, deposit, bank, BDO, BPI, GCash is NOT a bank), otherwise null. Never assume.
+- bankName: the bank's name when paymentMethod is "bank_transfer" (BDO, BPI, Metrobank, Landbank, PNB, Security Bank, UnionBank, RCBC, China Bank, or whatever was said), otherwise null. Never an account number.
+- settles: "receivable" when the owner says a customer PAID something they already owed ("Juan paid 3,000 of the 8,000 he owes me", "nagbayad na si Maria"), "payable" when the owner PAID something already owed to a supplier ("I paid my supplier 4,000 of what I owed"). The entry then holds the payment: type SALE for a receivable payment or EXPENSE for a payable payment, amount = the amount paid now, counterparty = who, and NO product. Otherwise null. A message that merely says "Juan gave me 5,000" without saying it was for something he owed is NOT a settlement — set settles null, set confidence below 0.6 and ask what it was for (a new sale, or a payment of something he owed).
 - date: ISO 8601 date. If no date is mentioned, use today's date (stated at the top of the owner's message).
 - confidence: your confidence in this extraction from 0 to 1. Use a LOW confidence (below 0.6) whenever the entry is genuinely ambiguous — e.g. unclear whether stock left as a paid sale or a free giveaway, or the entry type itself is unclear.
 - notes: a short optional clarifying note, or null
@@ -88,7 +92,7 @@ Rules:
 
 NEVER fill in a field the owner did not actually say. If they didn't mention a price, a buyer, a size or a quantity, return null for it — do not infer it from a previous message, from what is typical, or from the product's usual price. A blank the owner can fill is always better than a number they have to notice is wrong.
 
-Also return "stated": an array naming only the fields the owner explicitly said in THIS message, drawn from: amount, quantity, unit, sku, counterparty, category, priceType, notes, paymentTerm, dueDate. A field you filled from context but they did not say must be left out of "stated" even if you are confident about it.
+Also return "stated": an array naming only the fields the owner explicitly said in THIS message, drawn from: amount, quantity, unit, sku, counterparty, category, priceType, notes, paymentTerm, dueDate, paymentMethod, bankName, paymentTerms. A field you filled from context but they did not say must be left out of "stated" even if you are confident about it.
 
 Write a natural, warm "reply" as if you were a real consultant chatting with the owner. Respond to greetings and small talk in kind — don't force them into a business record, and don't be stiff or robotic.
 
@@ -110,7 +114,7 @@ In that case set "needsLookup": true and leave "reply" as an empty string. Say n
 Set "needsLookup": false for everything you CAN answer yourself, and for greetings and small talk. When you point her to a screen, use only these tab names: ${SCREEN_NAMES}. You may also offer brief, friendly encouragement or a light business tip when it fits naturally. Keep replies short — usually under 80 words — and longer only when the question genuinely needs it (steps, a list, a draft).
 
 Output shape exactly — fill only the fields for whichever mode applies, set the rest to null:
-{"mode":"entry","reply":null,"entry":{"type":"SALE","amount":1800,"quantity":12,"unit":"jars","sku":"Classic Cocoa Spread","counterparty":"Aling Nena","location":null,"priceType":"wholesale","category":null,"date":"2026-01-15","confidence":0.94,"notes":null,"paymentTerm":"spot","dueDate":null},"clarifyQuestion":null,"clarifyOptions":null}
+{"mode":"entry","reply":null,"entry":{"type":"SALE","amount":1800,"quantity":12,"unit":"jars","sku":"Classic Cocoa Spread","counterparty":"Aling Nena","location":null,"priceType":"wholesale","category":null,"date":"2026-01-15","confidence":0.94,"notes":null,"paymentTerm":"spot","dueDate":null,"paymentMethod":"cash","bankName":null,"paymentTerms":null,"settles":null},"clarifyQuestion":null,"clarifyOptions":null}
 
 or, for chat mode:
 {"mode":"chat","reply":"Hi there! Anything to log today, or want to check how things are going?","needsLookup":false,"entry":null,"clarifyQuestion":null,"clarifyOptions":null}

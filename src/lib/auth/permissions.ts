@@ -1,5 +1,6 @@
 import type { ActivityEvent, Entry, EntryType, RawMaterialStock, Role } from "@/lib/store/types";
 import type { ProductRow, RecipeRow } from "@/lib/store/sheet-shapes";
+import { entryIntegrityProblem } from "@/lib/transactions/ledger";
 
 /**
  * What each role may read and write — the one place that decides it, run on the server by
@@ -33,7 +34,7 @@ export type CollectionName =
 export type WriteOp = "append" | "update" | "delete" | "migrate";
 
 /** Payment terms on a sale — who owes what, and when. Executives only; see redactForEmployee. */
-const PAYMENT_FIELDS = ["paymentTerm", "dueDate", "amountPaid", "paymentStatus", "settledAt", "paymentMethod", "bankName", "payments"] as const;
+const PAYMENT_FIELDS = ["paymentTerm", "dueDate", "amountPaid", "paymentStatus", "settledAt", "paymentMethod", "bankName", "payments", "paymentTerms", "dueDateHistory", "defaultedAt"] as const;
 
 function withoutPaymentFields<T extends object>(entry: T): T {
   const copy = { ...entry } as Record<string, unknown>;
@@ -164,6 +165,13 @@ function stamp(req: WriteRequest): Record<string, unknown> | undefined {
 export function decideWrite(req: WriteRequest): WriteDecision {
   // Profiles go through /api/auth/profiles, which hashes PINs and checks who may add whom.
   if (req.collection === "users") return deny("use_profiles_api");
+
+  // The same rules for everyone: payments can't exceed what was owed, a receivable is a sale,
+  // a bank transfer names its bank. A screen that forgets one of these can't corrupt the ledger.
+  if (req.collection === "entries" && (req.op === "append" || req.op === "update") && req.item) {
+    const problem = entryIntegrityProblem(req.item as Partial<Entry>);
+    if (problem) return deny(problem);
+  }
 
   if (req.role === "executive") return { allow: true, item: stamp(req) };
 

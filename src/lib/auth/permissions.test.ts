@@ -185,3 +185,22 @@ test("employees keep in-house component rows (production needs them), without co
   assert.equal(component.cost, null);
   assert.ok(!recipes.some((r) => r.rowType === "labor"));
 });
+
+test("every role is held to the ledger's integrity rules on the server", () => {
+  const bad = { id: "s9", type: "SALE", amount: 1000, paymentTerm: "receivable", payments: [{ id: "p", date: "2026-10-10", amount: 1500, method: "cash", bankName: null, note: null }] };
+  for (const role of ["executive", "employee"] as const) {
+    const decision = decideWrite({ role, user: me, collection: "entries", op: "append", item: bad });
+    assert.equal(decision.allow, false, role);
+  }
+  const ok = decideWrite({ role: "executive", user: me, collection: "entries", op: "append", item: { id: "s10", type: "SALE", amount: 1000, paymentTerm: "receivable" } });
+  assert.equal(ok.allow, true);
+});
+
+test("employees never receive payment history, defaults or deadline changes", () => {
+  const data = sample();
+  data.entries = [
+    { id: "s3", type: "SALE", amount: 900, paymentTerm: "receivable", paymentTerms: "net_30", payments: [{ id: "p", date: "2026-10-10", amount: 100, method: "cash", bankName: null, note: null }], defaultedAt: "2026-10-12T00:00:00Z", dueDateHistory: [{ from: null, to: "2026-10-30", changedAt: "2026-10-01T00:00:00Z" }] },
+  ] as never;
+  const [sale] = redactForEmployee(data, () => 100).entries as unknown as Record<string, unknown>[];
+  for (const f of ["payments", "defaultedAt", "dueDateHistory", "paymentTerms"]) assert.ok(!(f in sale), f);
+});

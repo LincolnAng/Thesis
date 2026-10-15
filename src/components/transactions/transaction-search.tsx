@@ -6,12 +6,10 @@ export interface TransactionFilters {
   text: string;
   product: string;
   person: string;
-  type: string;
-  status: string;
   recordedBy: string;
 }
 
-export const EMPTY_FILTERS: TransactionFilters = { text: "", product: "", person: "", type: "", status: "", recordedBy: "" };
+export const EMPTY_FILTERS: TransactionFilters = { text: "", product: "", person: "", recordedBy: "" };
 
 export const STATUS_FILTERS: [string, string][] = [
   ["spot", "Paid on the spot"],
@@ -33,16 +31,12 @@ export function TransactionSearch({
   products,
   people,
   recorders,
-  showType,
-  showStatus,
 }: {
   value: TransactionFilters;
   onChange: (next: TransactionFilters) => void;
   products: string[];
   people: string[];
   recorders: string[];
-  showType: boolean;
-  showStatus: boolean;
 }) {
   const set = (key: keyof TransactionFilters) => (v: string) => onChange({ ...value, [key]: v });
   const active = Object.values(value).some(Boolean);
@@ -60,21 +54,7 @@ export function TransactionSearch({
         />
       </label>
       <Segment label="Product" value={value.product} onChange={set("product")} options={products.map((p) => [p, p])} />
-      <Segment label="Customer / supplier" value={value.person} onChange={set("person")} options={people.map((p) => [p, p])} />
-      {showType && (
-        <Segment
-          label="Type"
-          value={value.type}
-          onChange={set("type")}
-          options={[
-            ["SALE", "Sales"],
-            ["EXPENSE", "Expenses"],
-            ["RND", "Investments"],
-            ["WASTE", "Spoilage"],
-          ]}
-        />
-      )}
-      {showStatus && <Segment label="Payment" value={value.status} onChange={set("status")} options={STATUS_FILTERS} />}
+      <Segment label="Customer or supplier" value={value.person} onChange={set("person")} options={people.map((p) => [p, p])} />
       <Segment label="Recorded by" value={value.recordedBy} onChange={set("recordedBy")} options={recorders.map((p) => [p, p])} />
       {active && (
         <button

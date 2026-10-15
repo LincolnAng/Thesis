@@ -484,7 +484,9 @@ function preparePayment(input: Record<string, unknown>, view: AgentView): ToolOu
   const method: PaymentMethod = input.method === "bank_transfer" ? "bank_transfer" : "cash";
   if (method === "bank_transfer" && !String(input.bank ?? "").trim()) return { result: json({ error: "Which bank?" }), isError: true };
   const date = /^\d{4}-\d{2}-\d{2}$/.test(String(input.date ?? "")) ? String(input.date) : today(view.now);
-  const patch = addPayment(e, { date, amount: Math.min(amount, owed), method, bankName: method === "bank_transfer" ? String(input.bank).trim() : null }, view.now);
+  const change = addPayment(e, { date, amount: Math.min(amount, owed), method, bankName: method === "bank_transfer" ? String(input.bank).trim() : null }, {}, view.now);
+  if (!change.ok) return { result: json({ error: change.reason }), isError: true };
+  const patch = change.patch;
   const who = e.counterparty ?? (e.type === "SALE" ? "the customer" : "the supplier");
   const summary = `${e.type === "SALE" ? `₱${Math.min(amount, owed).toLocaleString()} received from ${who}` : `₱${Math.min(amount, owed).toLocaleString()} paid to ${who}`} on ${date} for ${e.sku ?? "this transaction"} — ₱${r2(owed - Math.min(amount, owed)).toLocaleString()} still owed after this.`;
   return { result: json({ ok: true, shown_for_confirmation: true, summary }), proposal: { kind: "payment", entryId: e.id, summary, patch } };

@@ -15,9 +15,10 @@ import { CustomerNameInput } from "@/components/customers/customer-name-input";
 import { SupplierNameInput } from "@/components/suppliers/supplier-name-input";
 import { ConfirmDeleteButton } from "@/components/data-table/confirm-delete-button";
 import { useStore } from "@/lib/store/use-store";
-import { COMMON_BANKS, EXPENSE_CATEGORY_LABELS, ENTRY_TYPE_LABELS, INVESTMENT_CATEGORIES, PRICE_TYPE_LABELS, formatPeso } from "@/lib/format";
+import { EXPENSE_CATEGORY_LABELS, ENTRY_TYPE_LABELS, INVESTMENT_CATEGORIES, PRICE_TYPE_LABELS, formatPeso } from "@/lib/format";
 import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
-import { recordPayment } from "@/lib/transactions/ledger";
+import { MethodFields } from "@/components/transactions/method-fields";
+import { PAYMENT_TERMS, dueFromTerms, paidSoFar, termsLabel, todayOf } from "@/lib/transactions/ledger";
 import { spoiledValue } from "@/lib/summary/spoilage";
 import { productUnit } from "@/lib/units";
 import { bulkUnitFor } from "@/lib/summary/business-config";
@@ -25,7 +26,7 @@ import { useCostContext } from "@/lib/summary/use-cost-context";
 import { effectiveProductPrice, productCostPerJar } from "@/lib/summary/recipe-cost";
 import { allExpenseCategories } from "@/lib/summary/expenses-summary";
 import type { EntryDraft } from "@/lib/home/describe-entry";
-import type { EntryType, PaymentMethod, PaymentStatus, PriceType, Product } from "@/lib/store/types";
+import type { EntryType, PriceType, Product } from "@/lib/store/types";
 import type { CostContext } from "@/lib/summary/recipe-cost";
 import { cn } from "@/lib/utils";
 
@@ -108,12 +109,22 @@ export function QuickEditForm({
 
   // A sale has to name a product or it can't come off stock, can't reach best sellers, and
   // shows up in Customers as "Unspecified item".
-  const productRequired = draft.type === "SALE";
+  // A sale the customer still owes for can be recorded before it is tied to a product — the
+  // debt is real either way — but then no stock comes off the shelf.
+  const productRequired = draft.type === "SALE" && draft.paymentTerm !== "receivable";
   const missingProduct = productRequired && !draft.sku;
   // Every sale names its buyer and every expense whom it was paid to.
   const missingParty = (draft.type === "SALE" || draft.type === "EXPENSE") && !(draft.counterparty ?? "").trim();
   // A bank transfer names its bank.
   const missingBank = draft.paymentMethod === "bank_transfer" && !(draft.bankName ?? "").trim();
+  // What was already paid on something owed can't exceed it, and a transfer names its bank.
+  const firstPaid = (draft.payments ?? []).reduce((sum, p) => sum + p.amount, 0);
+  const problem =
+    firstPaid > (draft.amount ?? 0) + 0.005
+      ? `What was already ${draft.type === "SALE" ? "received" : "paid"} can't be more than the total.`
+      : draft.payments?.some((p) => p.method === "bank_transfer" && !p.bankName?.trim())
+        ? "Name the bank that payment went through."
+        : null;
 
   function createProduct(name: string) {
     const trimmed = name.trim();
@@ -525,9 +536,10 @@ export function QuickEditForm({
         />
       </div>
 
-      {exec && (draft.type === "SALE" || draft.type === "EXPENSE") && (
-        <PaymentFields draft={draft} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} />
+      {(draft.type === "SALE" || draft.type === "EXPENSE") && (
+        <PaymentFields draft={draft} canOweLater={exec} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} />
       )}
+      {problem && <p className="text-xs font-medium text-danger">{problem}</p>}
 
       {draft.type === "EXPENSE" && (
         <div className="space-y-1.5">
@@ -546,9 +558,9 @@ export function QuickEditForm({
         <Button
           size="sm"
           className={wide ? "px-8" : "flex-1"}
-          disabled={missingProduct || missingParty || missingBank}
+          disabled={missingProduct || missingParty || missingBank || !!problem}
           onClick={() => {
-            const saved = { ...draft, unit: itemUnit ?? draft.unit };
+            const saved = normalizePayment({ ...draft, unit: itemUnit ?? draft.unit });
             registerNewSupplier(saved);
             onSave(saved);
           }}
@@ -563,6 +575,27 @@ export function QuickEditForm({
   );
 }
 
+/**
+ * Makes the stored summary of an obligation agree with its payments before it is saved: what has
+ * been paid, whether that settles it, and nothing at all for a spot sale or expense.
+ */
+function normalizePayment(d: EntryDraft): EntryDraft {
+  const owed = (d.type === "SALE" && d.paymentTerm === "receivable") || (d.type === "EXPENSE" && d.paymentTerm === "payable");
+  if (!owed) {
+    return { ...d, paymentTerm: d.paymentTerm === "spot" ? "spot" : null, paymentTerms: null, dueDate: null, payments: null, amountPaid: null, paymentStatus: null, settledAt: null };
+  }
+  const paid = Math.round((d.payments ?? []).reduce((s, p) => s + p.amount, 0) * 100) / 100;
+  const settled = paid > 0 && paid >= (d.amount ?? 0) - 0.005;
+  return {
+    ...d,
+    paymentMethod: null,
+    bankName: null,
+    amountPaid: paid > 0 ? paid : null,
+    paymentStatus: settled ? "settled" : paid > 0 ? "partial" : "pending",
+    settledAt: settled ? (d.settledAt ?? new Date().toISOString()) : null,
+  };
+}
+
 function dayOf(timestamp: string): string {
   const d = new Date(timestamp);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -575,91 +608,125 @@ function withDay(timestamp: string, day: string): string {
   return new Date(y, m - 1, d, t.getHours(), t.getMinutes(), t.getSeconds()).toISOString();
 }
 
-const STATUS_LABELS: Record<PaymentStatus, string> = { pending: "Not paid yet", partial: "Partly paid", settled: "Fully paid", defaulted: "Defaulted" };
-
 /**
- * Spot, or owed — and if owed, by when and how much is paid so far. A receivable is a sale the
- * customer still owes (utang); a payable is something bought that the business still owes.
+ * Paid now, or owed: and for each, what the record needs. A sale or expense paid on the spot
+ * says how (cash, or a named bank). One that is owed says when it is due; any part already
+ * paid is entered here once, and every later payment is recorded from the Still Owed list,
+ * where it is added to this obligation's history instead of making a second one.
  */
-function PaymentFields({ draft, onChange }: { draft: EntryDraft; onChange: (patch: Partial<EntryDraft>) => void }) {
+function PaymentFields({
+  draft,
+  onChange,
+  canOweLater,
+}: {
+  draft: EntryDraft;
+  onChange: (patch: Partial<EntryDraft>) => void;
+  canOweLater: boolean;
+}) {
   const owedTerm = draft.type === "SALE" ? "receivable" : "payable";
-  const term = draft.paymentTerm === owedTerm ? owedTerm : "spot";
-  const paidText = draft.amountPaid == null ? "" : String(draft.amountPaid);
+  const owed = draft.paymentTerm === owedTerm;
+  const existingPayments = draft.payments ?? [];
+  const alreadyRecorded = existingPayments.length > 0;
+  const first = existingPayments[0];
+  const [paidText, setPaidText] = useState(first ? String(first.amount) : "");
+
+  const baseDay = dayOf(draft.timestamp);
+
+  function chooseTerms(terms: string) {
+    const implied = dueFromTerms(terms, baseDay);
+    onChange({ paymentTerms: terms, dueDate: implied ?? (terms === draft.paymentTerms ? draft.dueDate : null) });
+  }
+
+  function setFirstPayment(text: string, method: string | null, bankName: string | null) {
+    setPaidText(text);
+    const n = Number(text.replace(/[^0-9.]/g, ""));
+    if (!(n > 0)) return onChange({ payments: null, amountPaid: null, paymentStatus: null });
+    onChange({
+      payments: [
+        {
+          id: first?.id ?? `pay-new-${Math.random().toString(36).slice(2, 8)}`,
+          date: todayOf(new Date()) < baseDay ? baseDay : todayOf(new Date()),
+          amount: n,
+          method,
+          bankName: method === "bank_transfer" ? bankName : null,
+          note: null,
+        },
+      ],
+      amountPaid: n,
+      paymentStatus: n >= (draft.amount ?? 0) ? "settled" : "partial",
+    });
+  }
 
   return (
     <div className="space-y-2 rounded-xl border border-line/15 p-2.5">
       <Label className="text-xs text-muted-foreground">Payment</Label>
-      <ChipGroup
-        options={["cash", "bank_transfer"] as PaymentMethod[]}
-        value={draft.paymentMethod ?? "cash"}
-        labels={{ cash: "Cash", bank_transfer: "Bank transfer" }}
-        onChange={(v) => onChange({ paymentMethod: v, bankName: v === "bank_transfer" ? (draft.bankName ?? null) : null })}
-      />
-      {draft.paymentMethod === "bank_transfer" && (
-        <div className="space-y-1">
-          <Label className="text-[11px] text-muted-foreground">
-            Bank <span className="text-destructive">*</span>
-          </Label>
-          <Input
-            list="quick-edit-banks"
-            value={draft.bankName ?? ""}
-            placeholder="e.g. BDO or BPI"
-            onChange={(e) => onChange({ bankName: e.target.value || null })}
-            className="h-9"
-          />
-          <datalist id="quick-edit-banks">
-            {COMMON_BANKS.map((b) => (
-              <option key={b} value={b} />
-            ))}
-          </datalist>
-        </div>
+      {(canOweLater || owed) && (
+        <ChipGroup
+          options={["spot", owedTerm]}
+          value={owed ? owedTerm : "spot"}
+          labels={{ spot: "Paid on the spot", receivable: "Customer will pay later", payable: "We'll pay later" }}
+          onChange={(v) =>
+            onChange(
+              v === "spot"
+                ? { paymentTerm: "spot", paymentTerms: null, dueDate: null, payments: null, amountPaid: null, paymentStatus: null, settledAt: null }
+                : { paymentTerm: owedTerm, paymentMethod: null, bankName: null, paymentStatus: draft.paymentStatus ?? "pending" },
+            )
+          }
+        />
       )}
-      <ChipGroup
-        options={["spot", owedTerm]}
-        value={term}
-        labels={{ spot: "Paid on the spot", receivable: "Customer will pay later", payable: "We'll pay later" }}
-        onChange={(v) =>
-          onChange(
-            v === "spot"
-              ? { paymentTerm: "spot", dueDate: null, amountPaid: null, paymentStatus: null, settledAt: null }
-              : { paymentTerm: owedTerm, paymentStatus: draft.paymentStatus ?? "pending" },
-          )
-        }
-      />
-      {term !== "spot" && (
-        <div className="grid grid-cols-2 gap-2">
+
+      {!owed && (
+        <MethodFields
+          method={draft.paymentMethod ?? "cash"}
+          bankName={draft.bankName ?? null}
+          onChange={(n) => onChange({ paymentMethod: n.method === "bank_transfer" ? "bank_transfer" : "cash", bankName: n.method === "bank_transfer" ? n.bankName : null })}
+        />
+      )}
+
+      {owed && (
+        <div className="space-y-3">
           <div className="space-y-1">
-            <Label className="text-[11px] text-muted-foreground">Due on</Label>
-            <Input type="date" value={draft.dueDate ?? ""} onChange={(e) => onChange({ dueDate: e.target.value || null })} className="h-9" />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-[11px] text-muted-foreground">Paid so far (₱)</Label>
-            <Input
-              inputMode="decimal"
-              value={paidText}
-              placeholder="0"
-              onChange={(e) => {
-                const n = Number(e.target.value.replace(/[^0-9.]/g, ""));
-                onChange(recordPayment({ ...draft, id: "" }, Number.isFinite(n) ? n : 0, new Date()));
-              }}
-              className="h-9"
-            />
-          </div>
-          <div className="col-span-2 space-y-1">
-            <Label className="text-[11px] text-muted-foreground">Status</Label>
+            <Label className="text-xs text-muted-foreground">When it is due</Label>
             <ChipGroup
-              options={["pending", "partial", "settled"] as PaymentStatus[]}
-              value={draft.paymentStatus ?? "pending"}
-              labels={STATUS_LABELS}
-              onChange={(v) =>
-                onChange(
-                  v === "settled"
-                    ? { paymentStatus: "settled", amountPaid: draft.amount ?? draft.amountPaid ?? null, settledAt: new Date().toISOString() }
-                    : { paymentStatus: v, settledAt: null },
-                )
-              }
+              options={PAYMENT_TERMS.map(([k]) => k)}
+              value={draft.paymentTerms ?? ""}
+              labels={Object.fromEntries(PAYMENT_TERMS)}
+              onChange={chooseTerms}
             />
           </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">
+              Due date{draft.paymentTerms && draft.paymentTerms !== "date" && draft.paymentTerms !== "custom" ? ` (${termsLabel(draft.paymentTerms).toLowerCase()})` : ""}
+            </Label>
+            <Input type="date" value={draft.dueDate ?? ""} onChange={(e) => onChange({ dueDate: e.target.value || null })} className="h-10" />
+          </div>
+
+          {alreadyRecorded && existingPayments.length > 1 ? (
+            <p className="text-xs text-muted-foreground">
+              {formatPeso(paidSoFar(draft))} has been paid so far. Add more from the Still Owed list.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Already {draft.type === "SALE" ? "received" : "paid"} (₱, if any)</Label>
+                <Input
+                  inputMode="decimal"
+                  value={paidText}
+                  placeholder="0"
+                  onChange={(e) => setFirstPayment(e.target.value, first?.method ?? "cash", first?.bankName ?? null)}
+                  className="h-10"
+                />
+              </div>
+              {first && (
+                <MethodFields
+                  method={first.method}
+                  bankName={first.bankName}
+                  label="How was that paid?"
+                  onChange={(n) => setFirstPayment(paidText, n.method, n.bankName)}
+                />
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

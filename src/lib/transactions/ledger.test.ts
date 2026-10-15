@@ -1,90 +1,277 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { carriedOver, dueInfo, outstanding, recordPayment, statusOf, summarize } from "./ledger.ts";
+import {
+  addPayment,
+  cashMovements,
+  changeDueDate,
+  confirmDefault,
+  dueFromTerms,
+  entryIntegrityProblem,
+  inView,
+  obligationInfo,
+  obligations,
+  outstanding,
+  paidSoFar,
+  summarize,
+} from "./ledger.ts";
+import type { Entry } from "@/lib/store/types";
 
-// The Transactions page's money: cash, what's owed, and earnings. Run with `npm test`.
+// The Transactions page's money: cash received/paid versus what is still owed. Each test
+// below is one of the acceptance scenarios for the payment-tracking work. Run with `npm test`.
 
 const now = new Date(2026, 9, 15, 12, 0); // 15 Oct 2026
 const at = (m: number, d: number) => new Date(2026, m, d, 10, 0).toISOString();
+const me = { id: "u1", name: "Ate" };
 
-const entries = [
-  { id: "s-spot", type: "SALE", amount: 1000, timestamp: at(9, 3) },
-  { id: "s-credit", type: "SALE", amount: 2000, paymentTerm: "receivable", amountPaid: 500, dueDate: "2026-10-10", timestamp: at(9, 5) },
-  { id: "s-old", type: "SALE", amount: 800, paymentTerm: "receivable", dueDate: "2026-10-20", timestamp: at(8, 20) },
-  { id: "x-spot", type: "EXPENSE", amount: 300, timestamp: at(9, 4) },
-  { id: "x-credit", type: "EXPENSE", amount: 1200, paymentTerm: "payable", timestamp: at(9, 6) },
-  { id: "x-paid-old", type: "EXPENSE", amount: 400, paymentTerm: "payable", paymentStatus: "settled", timestamp: at(8, 2) },
-  { id: "w", type: "WASTE", amount: 100, timestamp: at(9, 7) },
-  { id: "inv", type: "RND", amount: 5000, category: "equipment", timestamp: at(9, 8) },
-] as never;
+function sale(over: Partial<Entry> = {}): Entry {
+  return { id: "s1", type: "SALE", amount: 5000, timestamp: at(9, 1), counterparty: "Juan", sku: null, quantity: null, unit: null, location: null, priceType: null, category: null, rawText: "", confidence: 1, ...over } as Entry;
+}
+function expense(over: Partial<Entry> = {}): Entry {
+  return sale({ id: "x1", type: "EXPENSE", counterparty: "Supplier", ...over });
+}
+function pay(e: Entry, amount: number, date: string, method = "cash", bankName: string | null = null): Entry {
+  const r = addPayment(e, { amount, date, method, bankName }, me, now);
+  assert.ok(r.ok, r.ok ? "" : r.reason);
+  return { ...e, ...(r as { patch: Partial<Entry> }).patch } as Entry;
+}
 
-test("money in counts only cash received: spot sales, and what was paid on credit sales", () => {
-  const s = summarize(entries, "2026-10", now);
-  assert.equal(s.moneyIn, 1000 + 500);
+// ── Test 1: cash received ─────────────────────────────────────────────────
+
+test("1. cash received appears as money received, with its method, and no receivable", () => {
+  const e = sale({ amount: 2000, paymentMethod: "cash" });
+  const [m] = cashMovements([e]);
+  assert.equal(m.direction, "in");
+  assert.equal(m.amount, 2000);
+  assert.equal(m.method, "cash");
+  assert.equal(m.against, null);
+  assert.equal(obligations([e], "receivable", now).length, 0);
+  assert.equal(summarize([e], "2026-10", now).moneyIn, 2000);
 });
 
-test("money out counts only cash paid, and never investments", () => {
-  const s = summarize(entries, "2026-10", now);
-  assert.equal(s.moneyOut, 300); // the payable is unpaid; the ₱5,000 investment is the owners'
+// ── Test 2: unpaid receivable ─────────────────────────────────────────────
+
+test("2. an unpaid receivable is owed, not received", () => {
+  const e = sale({ paymentTerm: "receivable", dueDate: "2026-11-01", paymentTerms: "net_30" });
+  const s = summarize([e], "2026-10", now);
+  assert.equal(s.moneyIn, 0);
+  assert.equal(s.receivables, 5000);
+  assert.equal(cashMovements([e]).length, 0);
+  assert.equal(obligationInfo(e, now).status, "unpaid");
 });
 
-test("earned is sales less expenses and spoilage, paid or not, without investments", () => {
-  const s = summarize(entries, "2026-10", now);
-  assert.equal(s.earned, 3000 - 1500 - 100);
-  assert.equal(s.invested, 5000);
+// ── Test 3: partial receipt ───────────────────────────────────────────────
+
+test("3. a partial receipt reduces the balance and is the only cash counted", () => {
+  const e = pay(sale({ paymentTerm: "receivable", dueDate: "2026-11-01" }), 2000, "2026-10-10");
+  const s = summarize([e], "2026-10", now);
+  assert.equal(s.moneyIn, 2000); // not 5,000
+  assert.equal(s.receivables, 3000);
+  assert.equal(outstanding(e), 3000);
+  assert.equal(e.amount, 5000); // the original is untouched
+  assert.equal(obligationInfo(e, now).status, "partial");
+  assert.equal(e.payments?.length, 1);
+  assert.equal(obligations([e], "receivable", now).length, 1); // not duplicated
 });
 
-test("receivables and payables include what is still owed from earlier months", () => {
-  const s = summarize(entries, "2026-10", now);
-  assert.equal(s.receivables, 1500 + 800); // October's ₱1,500 still owed + September's ₱800
-  assert.equal(s.payables, 1200); // September's payable was settled
+// ── Tests 4 and 5: payments and payables ──────────────────────────────────
+
+test("4. a cash payment is money paid, with its method", () => {
+  const e = expense({ amount: 1500, paymentMethod: "cash" });
+  const [m] = cashMovements([e]);
+  assert.equal(m.direction, "out");
+  assert.equal(summarize([e], "2026-10", now).moneyOut, 1500);
 });
 
-test("an earlier month's view doesn't count debts that came later", () => {
-  const s = summarize(entries, "2026-09", now);
-  assert.equal(s.receivables, 800);
-  assert.equal(s.payables, 0);
+test("5. an unpaid payable is owed, not paid", () => {
+  const e = expense({ amount: 8000, paymentTerm: "payable", dueDate: "2026-11-14", paymentTerms: "net_30" });
+  const s = summarize([e], "2026-10", now);
+  assert.equal(s.moneyOut, 0);
+  assert.equal(s.payables, 8000);
 });
 
-test("overdue is counted from the due date", () => {
-  const s = summarize(entries, "2026-10", now);
-  assert.equal(s.overdueReceivables, 1); // due 10 Oct, still ₱1,500 owed
-  const due = dueInfo({ amount: 800, paymentTerm: "receivable", dueDate: "2026-10-20" } as never, now);
-  assert.deepEqual(due, { daysLeft: 5, overdue: false });
+// ── Test 6: bank transfer ─────────────────────────────────────────────────
+
+test("6. a bank transfer carries the bank name and nothing about accounts", () => {
+  const e = sale({ amount: 3000, paymentMethod: "bank_transfer", bankName: "BDO" });
+  const [m] = cashMovements([e]);
+  assert.equal(m.method, "bank_transfer");
+  assert.equal(m.bankName, "BDO");
+  assert.equal(entryIntegrityProblem(e), null);
+  assert.equal(entryIntegrityProblem({ ...e, bankName: null }), "bank_name_required");
 });
 
-test("carried over: earlier months' unsettled payables and receivables, not copies", () => {
-  const list = carriedOver(entries, "2026-10").map((e: { id: string }) => e.id);
-  assert.deepEqual(list, ["s-old"]);
+// ── Test 7: overdue is not default ────────────────────────────────────────
+
+test("7. past its due date with a balance, a receivable is overdue — not defaulted, not received", () => {
+  const e = sale({ paymentTerm: "receivable", dueDate: "2026-10-05" });
+  const info = obligationInfo(e, now);
+  assert.equal(info.status, "overdue");
+  assert.equal(info.daysLeft, -10);
+  assert.equal(summarize([e], "2026-10", now).moneyIn, 0);
+  assert.equal(summarize([e], "2026-10", now).overdueReceivables, 1);
+  assert.ok(inView(obligations([e], "receivable", now)[0], "overdue"));
 });
 
-test("status follows the amount paid unless noted by hand", () => {
-  assert.equal(statusOf({ amount: 100, paymentTerm: "receivable", amountPaid: 0 } as never), "pending");
-  assert.equal(statusOf({ amount: 100, paymentTerm: "receivable", amountPaid: 40 } as never), "partial");
-  assert.equal(statusOf({ amount: 100, paymentTerm: "receivable", amountPaid: 100 } as never), "settled");
-  assert.equal(statusOf({ amount: 100, paymentTerm: "receivable", paymentStatus: "settled" } as never), "settled");
-  assert.equal(statusOf({ amount: 100 } as never), null); // spot
-  assert.equal(outstanding({ amount: 100, paymentTerm: "payable", paymentStatus: "settled", amountPaid: 0 } as never), 0);
+test("7b. due today is its own state, and a future date is not overdue", () => {
+  assert.equal(obligationInfo(sale({ paymentTerm: "receivable", dueDate: "2026-10-15" }), now).status, "due_today");
+  assert.equal(obligationInfo(sale({ paymentTerm: "receivable", dueDate: "2026-10-16" }), now).status, "unpaid");
 });
 
-test("recording a payment settles it once it covers what is owed", () => {
-  const e = { id: "r", type: "SALE", amount: 900, paymentTerm: "receivable", timestamp: at(9, 1) } as never;
-  assert.deepEqual(recordPayment(e, 300, now), { amountPaid: 300, paymentStatus: "partial", settledAt: null });
-  const full = recordPayment(e, 900, now);
-  assert.equal(full.paymentStatus, "settled");
-  assert.equal(full.amountPaid, 900);
+// ── Test 8: confirmed default ─────────────────────────────────────────────
+
+test("8. default is confirmed by the owner; the balance and history stay", () => {
+  const overdue = pay(sale({ paymentTerm: "receivable", dueDate: "2026-10-05" }), 1000, "2026-10-02");
+  const r = confirmDefault(overdue, now);
+  assert.ok(r.ok);
+  const defaulted = { ...overdue, ...(r as { patch: Partial<Entry> }).patch } as Entry;
+  const info = obligationInfo(defaulted, now);
+  assert.equal(info.status, "defaulted");
+  assert.equal(info.partlyPaid, true); // earlier payments stay visible
+  assert.equal(info.remaining, 4000);
+  assert.equal(summarize([defaulted], "2026-10", now).receivables, 4000);
+  assert.equal(summarize([defaulted], "2026-10", now).defaultedReceivables, 1);
+  assert.equal(summarize([defaulted], "2026-10", now).moneyIn, 1000);
+});
+
+test("8b. the same holds for a payable, and only an overdue one can be defaulted", () => {
+  const notYet = expense({ paymentTerm: "payable", dueDate: "2026-11-01" });
+  assert.equal(confirmDefault(notYet, now).ok, false);
+  const late = expense({ paymentTerm: "payable", dueDate: "2026-10-01", amount: 8000 });
+  const r = confirmDefault(late, now);
+  assert.ok(r.ok);
+  const d = { ...late, ...(r as { patch: Partial<Entry> }).patch } as Entry;
+  assert.equal(obligationInfo(d, now).status, "defaulted");
+  assert.equal(summarize([d], "2026-10", now).moneyOut, 0);
+  assert.equal(summarize([d], "2026-10", now).payables, 8000);
+});
+
+// ── Test 9: payment after default ─────────────────────────────────────────
+
+test("9. a payment after default is cash, reduces the balance, and keeps the default", () => {
+  const overdue = sale({ paymentTerm: "receivable", dueDate: "2026-10-01" });
+  const defaulted = { ...overdue, defaultedAt: at(9, 10) } as Entry;
+  const after = pay(defaulted, 1000, "2026-10-12");
+  const info = obligationInfo(after, now);
+  assert.equal(info.status, "defaulted");
+  assert.equal(info.remaining, 4000);
+  assert.equal(info.wasDefaulted, true);
+  assert.equal(summarize([after], "2026-10", now).moneyIn, 1000);
+  assert.equal(obligations([after], "receivable", now).length, 1);
+});
+
+// ── Test 10: full settlement ──────────────────────────────────────────────
+
+test("10. paying the rest settles it once, keeps every payment, and leaves outstanding totals", () => {
+  let e = sale({ paymentTerm: "receivable", dueDate: "2026-11-01" });
+  e = pay(e, 4000, "2026-10-05");
+  e = pay(e, 1000, "2026-10-12", "bank_transfer", "BPI");
+  const info = obligationInfo(e, now);
+  assert.equal(info.status, "settled");
+  assert.equal(info.remaining, 0);
+  assert.equal(e.payments?.length, 2);
+  assert.equal(e.paymentStatus, "settled");
+  const s = summarize([e], "2026-10", now);
+  assert.equal(s.receivables, 0);
+  assert.equal(s.moneyIn, 5000); // counted once
+});
+
+test("10b. a defaulted obligation paid in full keeps the default in its history", () => {
+  const e = pay({ ...sale({ paymentTerm: "receivable", dueDate: "2026-10-01" }), defaultedAt: at(9, 10) } as Entry, 5000, "2026-10-14");
+  const info = obligationInfo(e, now);
+  assert.equal(info.status, "settled");
+  assert.equal(info.wasDefaulted, true);
+});
+
+// ── Safeguards ────────────────────────────────────────────────────────────
+
+test("an overpayment is refused, never silently trimmed or misfiled", () => {
+  const e = sale({ paymentTerm: "receivable" });
+  const r = addPayment(e, { amount: 6000, date: "2026-10-10", method: "cash" }, me, now);
+  assert.equal(r.ok, false);
+});
+
+test("a bank transfer without a bank, a future date and a zero amount are refused", () => {
+  const e = sale({ paymentTerm: "receivable" });
+  assert.equal(addPayment(e, { amount: 100, date: "2026-10-10", method: "bank_transfer" }, me, now).ok, false);
+  assert.equal(addPayment(e, { amount: 100, date: "2026-12-01", method: "cash" }, me, now).ok, false);
+  assert.equal(addPayment(e, { amount: 0, date: "2026-10-10", method: "cash" }, me, now).ok, false);
+});
+
+test("paying a spot sale or an already settled obligation is refused", () => {
+  assert.equal(addPayment(sale(), { amount: 100, date: "2026-10-10", method: "cash" }, me, now).ok, false);
+  const done = pay(sale({ paymentTerm: "receivable" }), 5000, "2026-10-10");
+  assert.equal(addPayment(done, { amount: 1, date: "2026-10-11", method: "cash" }, me, now).ok, false);
+});
+
+test("the server rule: payments can't exceed the amount, and a payable can't sit on a sale", () => {
+  const base = sale({ paymentTerm: "receivable" });
+  const over = { ...base, payments: [{ id: "p", date: "2026-10-10", amount: 6000, method: "cash", bankName: null, note: null }] };
+  assert.equal(entryIntegrityProblem(over), "payments_exceed_amount");
+  assert.equal(entryIntegrityProblem({ ...base, paymentTerm: "payable" }), "payable_must_be_an_expense");
+  assert.equal(entryIntegrityProblem({ ...base, amount: -5 }), "invalid_amount");
+  assert.equal(entryIntegrityProblem(base), null);
+});
+
+// ── Dates and terms ───────────────────────────────────────────────────────
+
+test("terms give a due date from the transaction's day; changing it keeps the old one", () => {
+  assert.equal(dueFromTerms("net_30", "2026-10-15"), "2026-11-14");
+  assert.equal(dueFromTerms("immediate", "2026-10-15"), "2026-10-15");
+  assert.equal(dueFromTerms("date", "2026-10-15"), null);
+
+  const e = sale({ paymentTerm: "receivable", dueDate: "2026-10-20", paymentTerms: "net_7" });
+  const r = changeDueDate(e, { dueDate: "2026-11-05", terms: "date", reason: "Asked for more time" }, me, now);
+  assert.ok(r.ok);
+  const next = { ...e, ...(r as { patch: Partial<Entry> }).patch } as Entry;
+  assert.equal(next.dueDate, "2026-11-05");
+  assert.equal(next.dueDateHistory?.[0].from, "2026-10-20");
+  assert.equal(next.amount, 5000);
+});
+
+// ── Older records ─────────────────────────────────────────────────────────
+
+test("older rows with only a running total or a settled flag still add up, and aren't duplicated", () => {
+  const partlyPaid = sale({ paymentTerm: "receivable", amountPaid: 1500, paymentStatus: "partial" });
+  assert.equal(paidSoFar(partlyPaid), 1500);
+  assert.equal(outstanding(partlyPaid), 3500);
+  assert.equal(cashMovements([partlyPaid]).length, 1);
+
+  const settled = sale({ paymentTerm: "receivable", paymentStatus: "settled" });
+  assert.equal(outstanding(settled), 0);
+  assert.equal(obligationInfo(settled, now).status, "settled");
+
+  // A row with no payment fields at all is an ordinary spot sale.
+  const plain = sale();
+  assert.equal(obligationInfo(plain, now).status, "settled");
+  assert.equal(summarize([plain], "2026-10", now).moneyIn, 5000);
+});
+
+test("cash is counted in the month it was paid, not the month of the sale", () => {
+  const e = pay(sale({ paymentTerm: "receivable", timestamp: at(8, 20) }), 2000, "2026-10-03");
+  assert.equal(summarize([e], "2026-09", now).moneyIn, 0);
+  assert.equal(summarize([e], "2026-10", now).moneyIn, 2000);
+  // Looking back at September, the whole amount was still owed at the end of that month.
+  assert.equal(summarize([e], "2026-09", now).receivables, 5000);
+  assert.equal(summarize([e], "2026-10", now).receivables, 3000);
+});
+
+test("investments are owner-funded: not cash in or out, not earnings", () => {
+  const inv = { ...expense({ type: "RND", amount: 9000 }) } as Entry;
+  const s = summarize([inv], "2026-10", now);
+  assert.equal(s.moneyOut, 0);
+  assert.equal(s.earned, 0);
+  assert.equal(s.invested, 9000);
 });
 
 // --- Dated payments, capital and long-term assets -------------------------------------------
 
-import { addPayment as addPaymentFn, cashInPeriod, summarize as summarizeFn } from "./ledger.ts";
-import type { Entry } from "@/lib/store/types";
+import { cashInPeriod, summarize as summarizeFn } from "./ledger.ts";
 
 const e = (over: Partial<Entry>): Entry =>
   ({ id: "x", timestamp: "2026-09-10T10:00:00", type: "SALE", amount: 1000, quantity: 1, unit: null, sku: "Tablea", counterparty: null, location: null, priceType: "standard", category: null, rawText: "", confidence: 1, ...over }) as Entry;
 
 test("a payment on a receivable counts as money in the month it was paid, not the month of the sale", () => {
-  const sale = e({ paymentTerm: "receivable", payments: [{ date: "2026-10-05", amount: 600, method: "cash" }] });
+  const sale = e({ paymentTerm: "receivable", payments: [{ id: "p1", date: "2026-10-05", amount: 600, method: "cash", bankName: null, note: null }] });
   assert.equal(cashInPeriod(sale, "2026-09"), 0);
   assert.equal(cashInPeriod(sale, "2026-10"), 600);
   const oct = summarizeFn([sale], "2026-10", new Date(2026, 9, 15));
@@ -108,7 +295,7 @@ test("capital is money in, but not a sale and not earned", () => {
 });
 
 test("an asset bought on credit is a payable, money out only as it is paid, and never an expense", () => {
-  const freezer = e({ type: "ASSET", amount: 30000, paymentTerm: "payable", payments: [{ date: "2026-09-12", amount: 10000, method: "bank_transfer", bankName: "BDO" }] });
+  const freezer = e({ type: "ASSET", amount: 30000, paymentTerm: "payable", payments: [{ id: "p2", date: "2026-09-12", amount: 10000, method: "bank_transfer", bankName: "BDO", note: null }] });
   const s = summarizeFn([freezer], "2026-09", new Date(2026, 8, 20));
   assert.equal(s.moneyOut, 10000);
   assert.equal(s.assetsOut, 10000);
@@ -126,7 +313,7 @@ test("an unpaid payable paid by bank transfer later is not money out until paid"
 });
 
 test("defaulted receivables stay owed", () => {
-  const sale = e({ paymentTerm: "receivable", paymentStatus: "defaulted", payments: [{ date: "2026-09-11", amount: 200, method: "cash" }] });
+  const sale = e({ paymentTerm: "receivable", paymentStatus: "defaulted", payments: [{ id: "p3", date: "2026-09-11", amount: 200, method: "cash", bankName: null, note: null }] });
   const s = summarizeFn([sale], "2026-09", new Date(2026, 8, 20));
   assert.equal(s.receivables, 800);
   assert.equal(s.moneyIn, 200);
@@ -134,7 +321,9 @@ test("defaulted receivables stay owed", () => {
 
 test("adding a payment carries an older running total in as a first payment, and settles at the full amount", () => {
   const sale = e({ paymentTerm: "receivable", amountPaid: 300, paymentStatus: "partial" });
-  const patch = addPaymentFn(sale, { date: "2026-10-01", amount: 700, method: "bank_transfer", bankName: "BDO" }, new Date(2026, 9, 1));
+  const r = addPayment(sale, { date: "2026-10-01", amount: 700, method: "bank_transfer", bankName: "BDO" }, me, new Date(2026, 9, 1));
+  assert.ok(r.ok);
+  const patch = (r as { patch: Partial<Entry> }).patch;
   assert.equal(patch.payments?.length, 2);
   assert.equal(patch.payments?.[0].date, "2026-09-10");
   assert.equal(patch.paymentStatus, "settled");
@@ -142,6 +331,6 @@ test("adding a payment carries an older running total in as a first payment, and
 });
 
 test("overpaying never counts more cash than was owed", () => {
-  const sale = e({ paymentTerm: "receivable", payments: [{ date: "2026-10-01", amount: 900, method: "cash" }, { date: "2026-10-02", amount: 900, method: "cash" }] });
+  const sale = e({ paymentTerm: "receivable", payments: [{ id: "p4", date: "2026-10-01", amount: 900, method: "cash", bankName: null, note: null }, { id: "p5", date: "2026-10-02", amount: 900, method: "cash", bankName: null, note: null }] });
   assert.equal(cashInPeriod(sale, "2026-10"), 1000);
 });
