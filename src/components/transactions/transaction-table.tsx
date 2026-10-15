@@ -2,8 +2,8 @@
 
 import { Fragment, useMemo, useState } from "react";
 import { Banknote, ChevronDown, ChevronRight, Pencil } from "lucide-react";
-import { EXPENSE_CATEGORY_LABELS, ENTRY_TYPE_LABELS, PRICE_TYPE_LABELS, describePaymentMethod, formatDate, formatPeso, formatTime } from "@/lib/format";
-import { dueInfo, obligationInfo, obligationKind, outstanding, paidSoFar, paymentsOf, termOf, canBeOwed } from "@/lib/transactions/ledger";
+import { EXPENSE_CATEGORY_LABELS, ENTRY_TYPE_LABELS, PRICE_TYPE_LABELS, describePaymentMethod, formatDate, formatPeso } from "@/lib/format";
+import { dueInfo, obligationInfo, obligationKind, outstanding, paymentsOf } from "@/lib/transactions/ledger";
 import { lineSubtotal, quantitySold } from "@/lib/transactions/order-lines";
 import type { Entry } from "@/lib/store/types";
 
@@ -77,129 +77,111 @@ function Deadline({ e }: { e: Entry }) {
   );
 }
 
-/** The receipt of one transaction: what it was, in what quantity and at what price, and who recorded it. */
-function Receipt({ e }: { e: Entry }) {
-  const sale = e.type === "SALE";
-  const qty = e.quantity && e.quantity > 0 ? e.quantity : null;
-  // A single-product sale has no lines of its own: its product, quantity and amount are the receipt.
-  const items =
-    e.lineItems?.length
-      ? e.lineItems.map((l) => ({ name: l.name, qty: l.quantity, price: l.unitPrice, sub: lineSubtotal(l) }))
-      : e.sku && (sale || e.type === "WASTE")
-        ? [{ name: e.sku, qty, price: qty && e.amount != null ? Math.round((e.amount / qty) * 100) / 100 : null, sub: e.amount }]
-        : [];
-  const th = "py-1 pr-2 text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground";
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Receipt</div>
-      <span className="text-muted-foreground">
-        {formatDate(e.timestamp)} · {formatTime(e.timestamp)}
-      </span>
-      {items.length > 0 ? (
-        <table className="mt-1 w-full">
-          <thead>
-            <tr>
-              <th className={`${th} text-left`}>{e.type === "WASTE" ? "Lost" : "Product"}</th>
-              <th className={th}>Qty</th>
-              <th className={th}>{e.type === "WASTE" ? "Cost" : "Price"}</th>
-              <th className={`${th} pr-0`}>Subtotal</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((l, i) => (
-              <tr key={i} className="border-b border-line/5">
-                <td className="py-1 pr-2">{l.name}</td>
-                <td className="py-1 pr-2 text-right tabular-nums">{l.qty ?? "—"}</td>
-                <td className="py-1 pr-2 text-right tabular-nums">{l.price != null ? formatPeso(l.price) : "—"}</td>
-                <td className="py-1 text-right font-semibold tabular-nums">{l.sub != null ? formatPeso(l.sub) : "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : (
-        <>
-          {e.sku && <span>{e.type === "EXPENSE" ? "For" : e.type === "ASSET" ? "Bought" : "Item"}: {e.sku}</span>}
-          {e.type === "EXPENSE" && e.category && <span>Category: {EXPENSE_CATEGORY_LABELS[e.category] ?? e.category}</span>}
-        </>
-      )}
-      {sale && e.priceType && <span>Price type: {PRICE_TYPE_LABELS[e.priceType] ?? e.priceType} price</span>}
-      {sale && <span>Total quantity sold: {quantitySold(e) ?? "—"}</span>}
-      {e.counterparty && <span>{sale ? "Customer" : e.type === "CAPITAL" ? "Put in by" : "Paid to"}: {e.counterparty}</span>}
-      <span className="mt-1 flex justify-between border-t border-line/15 pt-1.5 font-semibold">
-        <span>Total</span>
-        <span className="tabular-nums">{e.amount != null ? formatPeso(e.amount) : "—"}</span>
-      </span>
-      {e.loggedByName && <span className="text-muted-foreground">Recorded by {e.loggedByName}</span>}
-    </div>
-  );
+/**
+ * What a row can't show on its own. The row already carries the date, who, how much, how it was
+ * paid and the deadline, so the receipt adds only: the products and their prices (when there is
+ * more than one, or a price other than the regular one), the payments made on something owed, and
+ * a note. A plain single-product sale has nothing to add, and its row has no arrow.
+ */
+interface ReceiptItem {
+  name: string;
+  qty: number | null;
+  price: number | null;
+  sub: number | null;
 }
 
-/** What opens under a row: its receipt, and — for executives — everything about its payment. */
+function receiptItems(e: Entry): ReceiptItem[] {
+  if (e.lineItems?.length) return e.lineItems.map((l) => ({ name: l.name, qty: l.quantity, price: l.unitPrice, sub: lineSubtotal(l) }));
+  if (e.type === "SALE" && e.priceType && e.priceType !== "standard" && e.sku) {
+    const qty = e.quantity && e.quantity > 0 ? e.quantity : null;
+    return [{ name: e.sku, qty, price: qty && e.amount != null ? Math.round((e.amount / qty) * 100) / 100 : null, sub: e.amount }];
+  }
+  return [];
+}
+
+const hasDetails = (e: Entry, showPayment: boolean) =>
+  receiptItems(e).length > 0 || Boolean(e.notes) || (showPayment && obligationKind(e) !== null);
+
 function Details({ e, showPayment, owed }: { e: Entry; showPayment: boolean; owed?: OwedActions }) {
-  const payments = paymentsOf(e);
-  const info = obligationKind(e) ? obligationInfo(e, new Date()) : null;
+  const items = receiptItems(e);
+  const kind = showPayment ? obligationKind(e) : null;
+  const info = kind ? obligationInfo(e, new Date()) : null;
+  const payments = kind ? paymentsOf(e) : [];
+  const priceType = e.type === "SALE" && e.priceType && e.priceType !== "standard" ? PRICE_TYPE_LABELS[e.priceType] : null;
+  const faint = "text-muted-foreground";
+
   return (
-    <div className="grid grid-cols-1 gap-4 px-4 py-3 text-[13px] min-[800px]:grid-cols-2">
-      <Receipt e={e} />
-      {showPayment && (canBeOwed(e) || e.type === "CAPITAL") && (
-        <div className="flex flex-col gap-1">
-          <div className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Payment</div>
-          {e.paymentMethod && <span>Method: {describePaymentMethod(e.paymentMethod, e.bankName)}</span>}
-          {termOf(e) !== "spot" && (
-            <>
-              {e.dueDate && <span>Due: {formatDate(e.dueDate)}</span>}
-              <span>
-                Paid so far: {formatPeso(paidSoFar(e))} of {formatPeso(e.amount)} · {formatPeso(outstanding(e))} left
-              </span>
-              {payments.length > 0 ? (
-                <ul className="mt-1 flex flex-col gap-0.5">
-                  {payments.map((p, i) => (
-                    <li key={i} className="text-muted-foreground">
-                      {formatDate(p.date)} — {formatPeso(p.amount)} · {describePaymentMethod(p.method, p.bankName)}
-                      {p.note ? ` · ${p.note}` : ""}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <span className="text-muted-foreground">No payments recorded yet.</span>
-              )}
-              {e.dueDateHistory?.map((c, i) => (
-                <span key={`due-${i}`} className="text-muted-foreground">
-                  Due date moved {c.from ? `from ${formatDate(c.from)} ` : ""}to {c.to ? formatDate(c.to) : "none"}
-                  {c.reason ? ` — ${c.reason}` : ""}
+    <div className="flex flex-col gap-3 px-4 py-3 text-[13px] min-[800px]:flex-row min-[800px]:flex-wrap min-[800px]:gap-x-12">
+      {items.length > 0 && (
+        <div className="flex min-w-[260px] flex-col gap-1">
+          {priceType && (
+            <span className="w-fit rounded-full bg-cacao/10 px-2 py-0.5 text-[11.5px] font-semibold text-cacao">{priceType} price</span>
+          )}
+          <ul className="flex flex-col gap-0.5">
+            {items.map((l, i) => (
+              <li key={i} className="flex items-baseline justify-between gap-6">
+                <span>
+                  {l.name}
+                  <span className={faint}>
+                    {l.qty != null ? ` × ${l.qty}` : ""}
+                    {l.price != null ? ` at ${formatPeso(l.price)}` : ""}
+                  </span>
                 </span>
+                <span className="font-semibold tabular-nums">{l.sub != null ? formatPeso(l.sub) : ""}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {kind && info && (
+        <div className="flex min-w-[260px] flex-col gap-1">
+          {payments.length > 0 ? (
+            <ul className="flex flex-col gap-0.5">
+              {payments.map((p, i) => (
+                <li key={i} className="flex items-baseline justify-between gap-6">
+                  <span className={faint}>
+                    {formatDate(p.date)} · {describePaymentMethod(p.method, p.bankName) || "Not recorded"}
+                    {p.note ? ` · ${p.note}` : ""}
+                  </span>
+                  <span className="font-semibold tabular-nums">{formatPeso(p.amount)}</span>
+                </li>
               ))}
-              {info?.wasDefaulted && (
-                <span className="font-semibold text-danger">
-                  Marked as defaulted{e.defaultedAt ? ` on ${formatDate(e.defaultedAt)}` : ""}
-                  {info.status === "settled" ? " — since paid in full" : ""}
-                </span>
+            </ul>
+          ) : (
+            <span className={faint}>No payments yet.</span>
+          )}
+          {e.dueDateHistory?.map((c, i) => (
+            <span key={`due-${i}`} className={faint}>
+              Due date moved {c.from ? `from ${formatDate(c.from)} ` : ""}to {c.to ? formatDate(c.to) : "none"}
+              {c.reason ? ` — ${c.reason}` : ""}
+            </span>
+          ))}
+          {info.wasDefaulted && (
+            <span className="font-semibold text-danger">
+              Marked as defaulted{e.defaultedAt ? ` on ${formatDate(e.defaultedAt)}` : ""}
+              {info.status === "settled" ? " — since paid in full" : ""}
+            </span>
+          )}
+          {owed && info.status !== "settled" && (
+            <div className="mt-1 flex flex-wrap gap-2">
+              <button type="button" onClick={() => owed.onPay(e)} className="min-h-10 rounded-lg bg-cacao px-4 text-[13px] font-semibold text-ivory">
+                Record a payment
+              </button>
+              <button type="button" onClick={() => owed.onMoveDue(e)} className="min-h-10 rounded-lg border border-line/25 px-4 text-[13px] font-semibold">
+                Change due date
+              </button>
+              {info.status === "overdue" && (
+                <button type="button" onClick={() => owed.onDefault(e)} className="min-h-10 rounded-lg border border-danger/50 px-4 text-[13px] font-semibold text-danger">
+                  Mark as defaulted
+                </button>
               )}
-              {owed && info && info.status !== "settled" && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <button type="button" onClick={() => owed.onPay(e)} className="min-h-10 rounded-lg bg-cacao px-4 text-[13px] font-semibold text-ivory">
-                    Record a payment
-                  </button>
-                  <button type="button" onClick={() => owed.onMoveDue(e)} className="min-h-10 rounded-lg border border-line/25 px-4 text-[13px] font-semibold">
-                    Change due date
-                  </button>
-                  {info.status === "overdue" && (
-                    <button type="button" onClick={() => owed.onDefault(e)} className="min-h-10 rounded-lg border border-danger/50 px-4 text-[13px] font-semibold text-danger">
-                      Mark as defaulted
-                    </button>
-                  )}
-                </div>
-              )}
-            </>
+            </div>
           )}
         </div>
       )}
-      {e.notes && (
-        <div>
-          <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Notes</div>
-          <p>{e.notes}</p>
-        </div>
-      )}
+
+      {e.notes && <p className={`min-w-[260px] ${faint}`}>{e.notes}</p>}
     </div>
   );
 }
@@ -351,22 +333,24 @@ export function TransactionTable({
                   <td className={`${td} whitespace-nowrap text-muted-foreground`}>{e.loggedByName ?? "—"}</td>
                   <td className="px-1 py-1 text-center align-middle">
                     <div className="flex items-center justify-center gap-0.5">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setOpen((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(e.id)) next.delete(e.id);
-                            else next.add(e.id);
-                            return next;
-                          })
-                        }
-                        aria-expanded={isOpen}
-                        aria-label={isOpen ? "Hide receipt" : "Show receipt"}
-                        className="flex h-11 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
-                      >
-                        {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                      </button>
+                      {hasDetails(e, showPayment) && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setOpen((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(e.id)) next.delete(e.id);
+                              else next.add(e.id);
+                              return next;
+                            })
+                          }
+                          aria-expanded={isOpen}
+                          aria-label={isOpen ? "Hide details" : "Show details"}
+                          className="flex h-11 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
+                        >
+                          {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        </button>
+                      )}
                       {owed && kind && outstanding(e) > 0 && (
                         <button
                           type="button"
