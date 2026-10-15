@@ -42,7 +42,7 @@ export function CostBreakdownLines({ cost }: { cost: ProductCostBreakdown }) {
       </div>
       {cost.laborPerJar === 0 && !cost.laborIsOverride && (
         <p className="text-xs text-[var(--status-warning)]">
-          Labor is ₱0 — set an hourly rate in Settings and the minutes a batch takes, and it&apos;ll be counted here.
+          Labor is ₱0 — set the minutes a batch takes and your hourly rate in the recipe, and it&apos;ll be counted here.
         </p>
       )}
       {cost.unconvertible.length > 0 && (

@@ -14,7 +14,6 @@ import { Switch } from "@/components/ui/switch";
 import { getSnapshot, resetAllData, restoreLocalCollections, setApiKeyMissing } from "@/lib/store/store";
 import { useStore } from "@/lib/store/use-store";
 import type { BotLanguage } from "@/lib/sheets/settings";
-import { LaborRateCard } from "@/components/settings/labor-rate-card";
 import { OwnerNameCard } from "@/components/settings/owner-name-card";
 import { ActivityCard, PeopleCard } from "@/components/settings/people-card";
 import { SpreadsheetButton } from "@/components/settings/spreadsheet-button";
@@ -379,7 +378,6 @@ export default function SettingsPageInner() {
 
       <ExpiryWarningCard />
 
-      <LaborRateCard />
       <UnitsCard />
         </div>
       )}
