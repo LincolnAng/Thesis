@@ -631,6 +631,7 @@ async function loadAllFromServer() {
         machines: machinesMigration.items,
         supplierPrices: supplierPricesMigration.items,
         users: Array.isArray(json.users) ? (json.users as AppUser[]) : prev.users,
+        serverLoad: "ok",
         activity: Array.isArray(json.activity) ? (json.activity as ActivityEvent[]) : prev.activity,
         businessSettings: businessSettingRowsToRecord(businessSettingsMigration.items),
         loadedFromServer: true,
@@ -638,7 +639,20 @@ async function loadAllFromServer() {
     });
   } catch {
     // network/parse error — keep local/paint-cache state
+    markServerLoadFailed();
   }
+}
+
+/** Only the first load can fail visibly: once the sheet has answered, a later poll that
+ * misses keeps what is already on screen rather than flipping the page to an error. */
+function markServerLoadFailed() {
+  if (state.serverLoad === "pending") setState((prev) => ({ ...prev, serverLoad: "failed" }));
+}
+
+/** Try the sheet again after a failed first load (the sign-in screen's Retry). */
+export function retryServerLoad() {
+  setState((prev) => ({ ...prev, serverLoad: "pending" }));
+  void loadAllFromServer();
 }
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;

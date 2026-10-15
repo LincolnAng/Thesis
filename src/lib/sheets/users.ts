@@ -23,6 +23,9 @@ import type { AppUser, Role } from "@/lib/store/types";
  * A hand-typed row has no id, so one is derived from the name. That means renaming someone in
  * the sheet creates a new profile rather than renaming the old one — the trade for being able
  * to add a person by typing two cells.
+ *
+ * The photo column holds a small JPEG as a data URL (about 10 KB, well under a cell's 50,000
+ * characters), so a face set on one device shows on every device.
  */
 const USER_HEADER = ["id", "name", "pinHash", "role", "createdAt", "deletedAt", "pin", "color", "pinSecure"];
 
