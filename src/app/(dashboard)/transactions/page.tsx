@@ -376,9 +376,9 @@ function TransactionsPageInner() {
             }
           />
           <div className="flex flex-wrap justify-between gap-2 border-t border-line/10 px-4 py-2.5 text-xs text-muted-foreground">
-            <span>Press the arrow on a row for its details, or the pencil to change it.</span>
+            <span>One row per product. Press the arrow for payments and notes, or the pencil to change the order.</span>
             <span>
-              Showing {rows.length} {rows.length === 1 ? "row" : "rows"}
+              Showing {rows.length} {rows.length === 1 ? "transaction" : "transactions"}
               {carriedFrom.size > 0 ? ` · ${carriedFrom.size} from earlier months` : ""}
             </span>
           </div>
