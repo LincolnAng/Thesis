@@ -211,8 +211,10 @@ export function TransactionDialog({
     () => [...products].map((p) => ({ product: p, name: fullName(p, products) })).sort((a, b) => a.name.localeCompare(b.name)),
     [products],
   );
-  // A product and its sizes are one row: pick the size inside it. Search keeps whatever is already ticked in view.
+  // Products are added only through the search bar: type, then pick. A product and its sizes are
+  // one result, with the size picked inside it. What's in the order is listed under the bar.
   const [productSearch, setProductSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const families = useMemo(
     () => familiesOf(products).sort((a, b) => a.head.name.localeCompare(b.head.name)),
     [products],
@@ -220,8 +222,8 @@ export function TransactionDialog({
   const shownFamilies = useMemo(() => {
     const q = productSearch.trim().toLowerCase();
     if (!q) return families;
-    return families.filter((f) => f.all.some((p) => lines.some((l) => l.key === p.id)) || f.all.some((p) => fullName(p, products).toLowerCase().includes(q)));
-  }, [families, productSearch, lines, products]);
+    return families.filter((f) => f.all.some((p) => fullName(p, products).toLowerCase().includes(q)));
+  }, [families, productSearch, products]);
   const lineFor = (id: string) => lines.find((l) => l.key === id);
   function lineControls(p: Product, line: Line, name: string) {
     return (
@@ -265,12 +267,15 @@ export function TransactionDialog({
       </div>
     );
   }
-  function toggle(p: Product) {
+  /** Adds a product to the order, or — if it's already there — one more of it. */
+  function addProduct(p: Product) {
     setLines((prev) =>
       prev.some((l) => l.key === p.id)
-        ? prev.filter((l) => l.key !== p.id)
+        ? prev.map((l) => (l.key === p.id ? { ...l, qty: String(num(l.qty) + 1) } : l))
         : [...prev, { key: p.id, productId: p.id, name: fullName(p, products), qty: "1", price: String(priceOf(p, priceType)) }],
     );
+    setProductSearch("");
+    setSearchOpen(false);
   }
   function patchLine(key: string, patch: Partial<Line>) {
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
@@ -553,103 +558,122 @@ export function TransactionDialog({
                 {catalog.length === 0 && lines.length === 0 && (
                   <p className="text-[13px] text-muted-foreground">No products yet — add them in Costing first.</p>
                 )}
-                <label className="flex items-center gap-2 rounded-xl border border-line/20 px-3 focus-within:border-cacao">
-                  <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span className="sr-only">Search products</span>
-                  <input
-                    value={productSearch}
-                    onChange={(ev) => setProductSearch(ev.target.value)}
-                    placeholder="Search products"
-                    className="h-10 w-full bg-transparent text-[14px] outline-none placeholder:text-muted-foreground"
-                  />
-                  {productSearch && (
-                    <button type="button" onClick={() => setProductSearch("")} aria-label="Clear search" className="text-muted-foreground hover:text-foreground">
-                      <X className="h-4 w-4" />
-                    </button>
-                  )}
-                </label>
-                <ul className="flex flex-col divide-y divide-line/10 rounded-xl border border-line/15">
-                  {/* Lines whose product has since been removed stay as they were sold. */}
-                  {lines
-                    .filter((l) => !l.productId || !products.some((p) => p.id === l.productId))
-                    .map((l) => (
-                      <li key={l.key} className="flex flex-wrap items-center gap-2 px-3 py-2">
-                        <input type="checkbox" checked readOnly className="h-5 w-5 accent-[#7B4B2A]" aria-label={l.name} />
-                        <span className="min-w-0 flex-1 text-[14px]">
-                          {l.name} <span className="text-[12px] text-muted-foreground">(no longer in Costing)</span>
-                        </span>
-                        <span className="text-[13px] tabular-nums">
-                          {l.qty} × {formatPeso(num(l.price))}
-                        </span>
-                        <button type="button" onClick={() => setLines((prev) => prev.filter((x) => x.key !== l.key))} className="text-[12px] font-semibold text-danger">
-                          Remove
-                        </button>
-                      </li>
-                    ))}
-                  {shownFamilies.map(({ head, all }) => {
-                    const multiSize = all.length > 1;
-                    return (
-                      <li key={head.id} className="flex flex-col gap-2 px-3 py-2">
-                        {multiSize ? (
-                          <>
-                            <div className="flex min-h-9 items-center gap-3 pt-1">
-                              <span className="min-w-0 flex-1 text-[14px] font-medium">{head.name}</span>
-                              <span className="shrink-0 text-[12px] text-muted-foreground">Pick size</span>
-                            </div>
-                            <div className="flex flex-wrap gap-1.5" role="group" aria-label={`Sizes of ${head.name}`}>
-                              {all.map((p) => {
-                                const on = Boolean(lineFor(p.id));
-                                return (
+                {/* The only way in: search, then pick */}
+                <div className="relative">
+                  <label className="flex items-center gap-2 rounded-xl border border-line/20 px-3 focus-within:border-cacao">
+                    <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="sr-only">Search products to add</span>
+                    <input
+                      value={productSearch}
+                      onChange={(ev) => {
+                        setProductSearch(ev.target.value);
+                        setSearchOpen(true);
+                      }}
+                      onFocus={() => setSearchOpen(true)}
+                      onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
+                      onKeyDown={(ev) => {
+                        if (ev.key === "Escape") setSearchOpen(false);
+                        if (ev.key === "Enter") {
+                          ev.preventDefault();
+                          const only = shownFamilies.length === 1 && shownFamilies[0].all.length === 1 ? shownFamilies[0].head : null;
+                          if (only) addProduct(only);
+                        }
+                      }}
+                      placeholder={lines.length ? "Add another product" : "Search products to add"}
+                      className="h-11 w-full bg-transparent text-[14px] outline-none placeholder:text-muted-foreground"
+                    />
+                    {productSearch && (
+                      <button type="button" onClick={() => setProductSearch("")} aria-label="Clear search" className="text-muted-foreground hover:text-foreground">
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </label>
+                  {searchOpen && (
+                    <ul className="absolute left-0 right-0 top-12 z-30 max-h-72 overflow-y-auto rounded-xl border border-line/20 bg-card py-1 shadow-lg">
+                      {shownFamilies.length === 0 ? (
+                        <li className="px-3 py-2.5 text-[13px] text-muted-foreground">No product matches “{productSearch.trim()}”.</li>
+                      ) : (
+                        shownFamilies.map(({ head, all }) =>
+                          all.length === 1 ? (
+                            <li key={head.id}>
+                              <button
+                                type="button"
+                                onMouseDown={(ev) => ev.preventDefault()}
+                                onClick={() => addProduct(head)}
+                                className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-[14px] hover:bg-secondary"
+                              >
+                                <span className="font-medium">{fullName(head, products)}</span>
+                                <span className="flex shrink-0 items-center gap-2 text-[13px] text-muted-foreground tabular-nums">
+                                  {lineFor(head.id) && <Check className="h-3.5 w-3.5 text-cacao" strokeWidth={3} />}
+                                  {formatPeso(priceOf(head, priceType))}
+                                </span>
+                              </button>
+                            </li>
+                          ) : (
+                            <li key={head.id} className="flex flex-col gap-1.5 px-3 py-2">
+                              <span className="text-[14px] font-medium">{head.name}</span>
+                              <div className="flex flex-wrap gap-1.5" role="group" aria-label={`Sizes of ${head.name}`}>
+                                {all.map((p) => (
                                   <button
                                     key={p.id}
                                     type="button"
-                                    aria-pressed={on}
-                                    onClick={() => toggle(p)}
+                                    onMouseDown={(ev) => ev.preventDefault()}
+                                    onClick={() => addProduct(p)}
                                     className={`inline-flex min-h-9 items-center gap-1.5 rounded-lg border px-2.5 text-[13px] transition active:scale-95 ${
-                                      on ? "border-cacao bg-cacao/10 font-semibold text-cacao" : "border-line/25 text-foreground hover:border-cacao"
+                                      lineFor(p.id) ? "border-cacao bg-cacao/10 font-semibold text-cacao" : "border-line/25 hover:border-cacao"
                                     }`}
                                   >
-                                    {on && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
+                                    {lineFor(p.id) && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
                                     {sizeName(p)}
-                                    <span className={on ? "text-cacao/70" : "text-muted-foreground"}>{formatPeso(priceOf(p, priceType))}</span>
+                                    <span className="text-muted-foreground">{formatPeso(priceOf(p, priceType))}</span>
                                   </button>
-                                );
-                              })}
-                            </div>
-                            {all.map((p) => {
-                              const line = lineFor(p.id);
-                              return line ? (
-                                <div key={p.id} className="flex flex-col gap-1.5 rounded-lg bg-secondary/50 px-2.5 py-2">
-                                  <span className="text-[12px] font-semibold text-muted-foreground">{sizeName(p)}</span>
-                                  {lineControls(p, line, `${head.name} ${sizeName(p)}`)}
-                                </div>
-                              ) : null;
-                            })}
-                          </>
-                        ) : (
-                          (() => {
-                            const p = head;
-                            const line = lineFor(p.id);
-                            const name = fullName(p, products);
-                            return (
-                              <>
-                                <label className="flex min-h-11 cursor-pointer items-center gap-3">
-                                  <input type="checkbox" checked={Boolean(line)} onChange={() => toggle(p)} className="h-5 w-5 shrink-0 accent-[#7B4B2A]" />
-                                  <span className="min-w-0 flex-1 text-[14px] font-medium">{name}</span>
-                                  <span className="shrink-0 text-[13px] text-muted-foreground tabular-nums">{formatPeso(priceOf(p, priceType))}</span>
-                                </label>
-                                {line && <div className="pl-8">{lineControls(p, line, name)}</div>}
-                              </>
-                            );
-                          })()
-                        )}
-                      </li>
-                    );
-                  })}
-                  {shownFamilies.length === 0 && lines.length === 0 && (
-                    <li className="px-3 py-3 text-[13px] text-muted-foreground">No product matches “{productSearch.trim()}”.</li>
+                                ))}
+                              </div>
+                            </li>
+                          ),
+                        )
+                      )}
+                    </ul>
                   )}
-                </ul>
+                </div>
+
+                {/* What's in the order */}
+                {lines.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-line/25 px-3 py-3 text-[13px] text-muted-foreground">
+                    Nothing in this order yet — search above and pick a product.
+                  </p>
+                ) : (
+                  <ul className="flex flex-col divide-y divide-line/10 rounded-xl border border-line/15">
+                    {lines.map((l) => {
+                      const p = l.productId ? products.find((x) => x.id === l.productId) : undefined;
+                      return (
+                        <li key={l.key} className="flex flex-col gap-2 px-3 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className="min-w-0 flex-1 text-[14px] font-medium">
+                              {l.name}
+                              {!p && <span className="ml-1 text-[12px] font-normal text-muted-foreground">(no longer in Costing)</span>}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setLines((prev) => prev.filter((x) => x.key !== l.key))}
+                              aria-label={`Remove ${l.name}`}
+                              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-danger"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                          {p ? (
+                            lineControls(p, l, l.name)
+                          ) : (
+                            <span className="text-[13px] tabular-nums">
+                              {l.qty} × {formatPeso(num(l.price))}
+                            </span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
                 <div className="flex items-baseline justify-between rounded-xl bg-secondary px-3 py-2.5">
                   <span className="text-[14px] font-semibold">
                     Total · {orderQuantity(orderLines)} {orderQuantity(orderLines) === 1 ? "unit" : "units"}

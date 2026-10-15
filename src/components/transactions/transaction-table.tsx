@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, HandCoins, History as HistoryIcon, Pencil } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Banknote, HandCoins, History as HistoryIcon, Landmark, Pencil } from "lucide-react";
 import { EXPENSE_CATEGORY_LABELS, PRICE_TYPE_LABELS, formatDate, formatPeso } from "@/lib/format";
 import { dueInfo, methodOf, obligationInfo, obligationKind, outstanding, paymentsOf } from "@/lib/transactions/ledger";
 import { lineSubtotal, orderTotal } from "@/lib/transactions/order-lines";
@@ -12,7 +12,9 @@ import type { Entry } from "@/lib/store/types";
  * Every recorded transaction, one row each, in one fixed set of columns — the same for sales,
  * expenses, receivables and payables:
  *
- *   Date · Customer / Supplier · Product · Qty · Amount · Status · Recorded by
+ *   Date · Customer / Supplier · Product · Qty · Amount · Paid by · Status · Recorded by
+ *
+ * Paid by is how the money moved — Cash, or a bank transfer and which bank.
  *
  * Status is one pill: green Paid, yellow Partially Paid (or Unpaid, Due today) with what is left
  * written small beneath it, soft red Overdue or Defaulted. Amounts stay plain dark text — the pill
@@ -65,6 +67,20 @@ function dueLine(e: Entry): string {
       ? "due today"
       : `in ${due.daysLeft} day${due.daysLeft === 1 ? "" : "s"}`;
   return `Due ${formatDate(e.dueDate)} · ${when}`;
+}
+
+/**
+ * How the money actually moved: cash, or a bank transfer and which bank. A receivable or payable
+ * lists each way its payments came in (nothing until one has); anything else, how it was paid.
+ */
+function paidBy(e: Entry, showPayment: boolean): { method: string; bank: string | null }[] {
+  if (!showPayment || !hasPayment(e)) return [];
+  if (obligationKind(e)) {
+    const seen = new Map<string, { method: string; bank: string | null }>();
+    for (const p of paymentsOf(e)) if (p.method) seen.set(`${p.method}|${p.bankName ?? ""}`, { method: p.method, bank: p.bankName ?? null });
+    return [...seen.values()];
+  }
+  return e.paymentMethod ? [{ method: e.paymentMethod, bank: e.bankName ?? null }] : [];
 }
 
 type Tone = "good" | "warn" | "bad";
@@ -230,7 +246,7 @@ export function TransactionTable({
   // name text wraps within a sensible width instead of stretching the table.
   const th = "whitespace-nowrap px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wide text-muted-foreground";
   const td = "px-3 py-3 text-left align-middle";
-  const colCount = showPayment ? 8 : 7;
+  const colCount = showPayment ? 9 : 7;
 
   const head = (label: string, key?: SortKey, right?: boolean) => (
     <th scope="col" className={`${th} ${right ? "!text-right" : ""}`}>
@@ -264,6 +280,7 @@ export function TransactionTable({
             {head("Product")}
             {head("Qty", undefined, true)}
             {head("Amount", "amount", true)}
+            {showPayment && head("Paid by")}
             {showPayment && head("Status")}
             {head("Recorded by")}
             <th scope="col" className={th}>
@@ -322,6 +339,16 @@ export function TransactionTable({
                   <td className={`${td} whitespace-nowrap text-right tabular-nums ${e.type === "WASTE" ? "text-muted-foreground" : "text-foreground"}`}>
                     {e.amount != null ? formatPeso(e.amount) : null}
                   </td>
+                  {showPayment && (
+                    <td className={`${td} whitespace-nowrap text-[12.5px]`}>
+                      {paidBy(e, showPayment).map((m) => (
+                        <span key={`${m.method}${m.bank}`} className="flex items-center gap-1.5 leading-6">
+                          {m.method === "bank_transfer" ? <Landmark className="h-3.5 w-3.5 text-muted-foreground" /> : <Banknote className="h-3.5 w-3.5 text-muted-foreground" />}
+                          {m.method === "bank_transfer" ? (m.bank ? `${m.bank} transfer` : "Bank transfer") : "Cash"}
+                        </span>
+                      ))}
+                    </td>
+                  )}
                   {showPayment && (
                     <td className={td}>
                       {status && (
