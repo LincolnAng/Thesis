@@ -120,3 +120,19 @@ test("day-offs and shipments come straight from their records", () => {
   assert.equal(ship.date, "2026-10-23");
   assert.match(ship.title, /Sent: 12 packs/);
 });
+
+test("event products link to their card in Costing, and alerts to the right Production table", () => {
+  const out = buildCalendarEntries(
+    input({
+      products: [product({ stockQty: 2 })],
+      events: [{ id: "ev1", name: "Bazaar", kind: "event", startDate: "2026-10-24", endDate: null, status: "open", notes: "", createdAt: "" }],
+      eventPlans: { ev1: { p1: 30, gone: 5 } },
+      ingredientShortages: [{ name: "Jars", short: 40, unit: "pcs" }],
+    }),
+  );
+  const ev = out.find((e) => e.category === "events")!;
+  assert.equal(ev.details.find((d) => d.value === "30 packs")?.href, "/costing?view=pricing&product=p1");
+  assert.equal(ev.details.find((d) => d.value === "5 jars")?.href, "/costing");
+  assert.equal(out.find((e) => e.id === "alert:short:Jars")?.href, "/production#what-to-buy");
+  assert.equal(out.find((e) => e.id === "alert:low:p1")?.href, "/production#what-to-make");
+});

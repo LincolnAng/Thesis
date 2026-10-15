@@ -261,13 +261,19 @@ export function CalendarScreen() {
                     return next;
                   })
                 }
-                className={`flex min-h-11 items-center gap-2 rounded-full border px-3.5 text-[13px] font-medium transition ${
-                  shown ? "border-line/25 bg-card" : "border-dashed border-line/20 text-muted-foreground opacity-60"
+                // Same colours as the entries on the calendar, so a chip doubles as its legend.
+                style={
+                  shown
+                    ? { background: `${CATEGORY_COLOR[c]}1A`, borderColor: `${CATEGORY_COLOR[c]}66`, color: CATEGORY_COLOR[c] }
+                    : undefined
+                }
+                className={`flex min-h-11 items-center gap-2 rounded-full border px-3.5 text-[13px] font-semibold transition ${
+                  shown ? "" : "border-dashed border-line/25 bg-card text-muted-foreground"
                 }`}
               >
                 <Dot category={c} />
                 {CATEGORY_LABELS[c]}
-                <span className="text-[11px] text-muted-foreground">{countIn(c)}</span>
+                <span className="rounded-full bg-card/80 px-1.5 text-[11px] font-semibold">{countIn(c)}</span>
               </button>
             );
           })}
@@ -435,7 +441,15 @@ export function CalendarScreen() {
               <dl className="flex flex-col gap-1.5 text-[14px]">
                 {open.details.map((d, i) => (
                   <div key={`${d.label}-${i}`} className="flex justify-between gap-4 border-b border-line/10 py-1.5 last:border-0">
-                    <dt className="text-muted-foreground">{d.label}</dt>
+                    <dt className="text-muted-foreground">
+                      {d.href ? (
+                        <Link href={d.href} onClick={() => setOpen(null)} className="font-medium text-cacao underline decoration-dotted underline-offset-2">
+                          {d.label}
+                        </Link>
+                      ) : (
+                        d.label
+                      )}
+                    </dt>
                     <dd className="text-right font-medium">{d.value}</dd>
                   </div>
                 ))}

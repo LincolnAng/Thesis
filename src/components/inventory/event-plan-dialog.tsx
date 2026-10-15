@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { fullName } from "@/lib/summary/product-sizes";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -73,11 +75,17 @@ export function EventPlanDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">How many jars will you bring?</Label>
+            <div className="flex items-baseline justify-between gap-2">
+              <Label className="text-xs text-muted-foreground">How many of each will you bring?</Label>
+              {/* The list is the product list from Costing; new or renamed products are made there. */}
+              <Link href="/costing" onClick={onClose} className="text-xs font-semibold text-cacao">
+                Edit products in Costing
+              </Link>
+            </div>
             <ul className="divide-y divide-border rounded-[var(--radius-panel)] border border-border">
               {products.map((p) => (
                 <li key={p.id} className="flex items-center gap-3 px-3 py-2">
-                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">{p.name}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">{fullName(p, products)}</span>
                   <Input
                     type="number"
                     placeholder="0"

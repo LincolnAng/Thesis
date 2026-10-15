@@ -40,8 +40,8 @@ export interface CalendarEntry {
   endDate?: string;
   title: string;
   subtitle?: string;
-  /** Label/value lines for the detail sheet. */
-  details: { label: string; value: string }[];
+  /** Label/value lines for the detail sheet; a line with an href opens that record. */
+  details: { label: string; value: string; href?: string }[];
   tone: EntryTone;
   /** Where the record lives, for "Open in …". */
   href?: string;
@@ -70,7 +70,7 @@ const peso = (n: number) => `₱${n.toLocaleString("en-US", { maximumFractionDig
 
 export function nameOf(products: Product[], productId: string): string {
   const p = products.find((x) => x.id === productId);
-  if (!p) return "A product that was removed";
+  if (!p) return "A product no longer in Costing";
   const head = p.sizeOfId ? products.find((x) => x.id === p.sizeOfId) : undefined;
   const family = head?.name ?? p.name;
   return p.sizeLabel ? `${family} · ${p.sizeLabel}` : family;
@@ -98,8 +98,8 @@ export function buildCalendarEntries(input: CalendarInput): CalendarEntry[] {
           { label: "Status", value: "Suggested by the production plan — not yet scheduled" },
         ],
         tone: "neutral",
-        href: "/production",
-        hrefLabel: "Open Production",
+        href: "/production#what-to-make",
+        hrefLabel: "See what to make in Production",
       });
     }
   }
@@ -121,7 +121,13 @@ export function buildCalendarEntries(input: CalendarInput): CalendarEntry[] {
         { label: "Type", value: event.kind === "distributor" ? "Distributor" : "Event" },
         { label: "Dates", value: end > start ? `${start} to ${end}` : start },
         { label: "Status", value: event.status === "open" ? "Open" : "Closed" },
-        ...plan.map(([productId, qty]) => ({ label: nameOf(products, productId), value: plural(qty, unitOf(products, productId)) })),
+        // Each product links to its card in Costing, which is the product list — an event never
+        // keeps its own copy of a product's name or size.
+        ...plan.map(([productId, qty]) => ({
+          label: nameOf(products, productId),
+          value: plural(qty, unitOf(products, productId)),
+          href: products.some((p) => p.id === productId) ? `/costing?view=pricing&product=${productId}` : "/costing",
+        })),
         ...(event.notes ? [{ label: "Notes", value: event.notes }] : []),
       ],
       tone: event.status === "open" ? "good" : "neutral",
@@ -207,8 +213,8 @@ export function buildCalendarEntries(input: CalendarInput): CalendarEntry[] {
           { label: "Warning level", value: String(p.lowStockThreshold) },
         ],
         tone: p.stockQty <= 0 ? "bad" : "warn",
-        href: "/production",
-        hrefLabel: "Open Production",
+        href: "/production#what-to-make",
+        hrefLabel: "See what to make in Production",
       });
     }
     for (const lot of input.lotsByProduct[p.id] ?? []) {
@@ -242,8 +248,8 @@ export function buildCalendarEntries(input: CalendarInput): CalendarEntry[] {
       subtitle: `${s.short} ${s.unit} short for the plan`,
       details: [{ label: "Short by", value: `${s.short} ${s.unit}` }],
       tone: "warn",
-      href: "/production",
-      hrefLabel: "Open Production",
+      href: "/production#what-to-buy",
+      hrefLabel: "See what to buy in Production",
     });
   }
   for (const late of input.lateBatches) {
@@ -256,8 +262,8 @@ export function buildCalendarEntries(input: CalendarInput): CalendarEntry[] {
       subtitle: `${plural(late.batches, "batch", "batches")} late`,
       details: [{ label: "Why", value: "Not enough production days before it's needed. Free up days or add equipment." }],
       tone: "bad",
-      href: "/production",
-      hrefLabel: "Open Production",
+      href: "/production#what-to-make",
+      hrefLabel: "See what to make in Production",
     });
   }
 

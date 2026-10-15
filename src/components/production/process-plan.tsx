@@ -126,7 +126,7 @@ export function ProcessPlan() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 min-[1500px]:grid-cols-[3fr_2fr]">
-        <div className="overflow-hidden rounded-2xl border border-line/15 bg-card">
+        <div id="what-to-make" className="scroll-mt-24 overflow-hidden rounded-2xl border border-line/15 bg-card">
           <div className="px-5 pt-4">
             <h3 className="text-sm font-semibold">What to make</h3>
             <p className="text-xs text-muted-foreground">
@@ -184,7 +184,7 @@ export function ProcessPlan() {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-2xl border border-line/15 bg-card">
+        <div id="what-to-buy" className="scroll-mt-24 overflow-hidden rounded-2xl border border-line/15 bg-card">
           <div className="px-5 pt-4">
             <h3 className="text-sm font-semibold">What to buy</h3>
             <p className="text-xs text-muted-foreground">Raw materials and packaging the plan draws on.</p>
