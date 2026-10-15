@@ -25,7 +25,6 @@ import {
   coversDay,
   type CalendarCategory,
   type CalendarEntry,
-  type EntryTone,
 } from "@/lib/calendar/entries";
 
 /**
@@ -54,12 +53,6 @@ const CATEGORY_COLOR: Record<CalendarCategory, string> = {
   alerts: "#B3261E",
 };
 
-const TONE_TEXT: Record<EntryTone, string> = {
-  neutral: "text-foreground",
-  good: "text-success",
-  warn: "text-[#9A6B12]",
-  bad: "text-danger",
-};
 
 function fromIso(iso: string): Date {
   const [y, m, d] = iso.split("-").map(Number);
@@ -94,22 +87,26 @@ function Chip({ entry }: { entry: CalendarEntry }) {
   );
 }
 
-/** A full row in the week and day lists; opens the detail sheet. */
+/**
+ * A full row in the week and day lists; opens the detail sheet. Tinted in its category's
+ * colour, with a solid edge, so a day's list reads at a glance the same way the month does.
+ */
 function EntryRow({ entry, onOpen }: { entry: CalendarEntry; onOpen: (e: CalendarEntry) => void }) {
+  const color = CATEGORY_COLOR[entry.category];
   return (
     <button
       type="button"
       onClick={() => onOpen(entry)}
-      className="flex min-h-11 w-full items-start gap-2.5 rounded-xl border border-line/10 bg-card px-3 py-2.5 text-left transition hover:border-cacao/40"
+      style={{ background: `${color}14`, borderColor: `${color}40`, borderLeftColor: color }}
+      className="flex min-h-11 w-full items-start gap-2.5 rounded-xl border border-l-4 px-3 py-2.5 text-left transition hover:brightness-95"
     >
-      <span className="mt-1.5">
-        <Dot category={entry.category} />
-      </span>
       <span className="min-w-0 flex-1">
-        <span className={`block text-[14px] font-semibold ${TONE_TEXT[entry.tone]}`}>{entry.title}</span>
+        <span className={`block text-[14px] font-semibold ${entry.tone === "bad" ? "text-danger" : "text-foreground"}`}>{entry.title}</span>
         {entry.subtitle && <span className="block text-[12px] text-muted-foreground">{entry.subtitle}</span>}
       </span>
-      <span className="shrink-0 text-[11px] font-semibold text-muted-foreground">{CATEGORY_LABELS[entry.category]}</span>
+      <span className="shrink-0 text-[11px] font-semibold" style={{ color }}>
+        {CATEGORY_LABELS[entry.category]}
+      </span>
     </button>
   );
 }
