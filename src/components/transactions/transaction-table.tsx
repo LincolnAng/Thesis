@@ -300,9 +300,9 @@ export function TransactionTable({
             // The Owed cell: what is left on top; beneath it, which kind of debt it is and the way to log a payment.
             const owedNode =
               kind && info ? (
-                <div className="flex flex-col items-center gap-1">
+                <div className="flex flex-col items-center gap-0.5">
                   <span
-                    className={`text-[13px] font-semibold tabular-nums ${
+                    className={`text-[13px] leading-tight font-semibold tabular-nums ${
                       info.remaining > 0 ? (info.status === "overdue" || info.status === "defaulted" ? "text-danger" : "text-[var(--status-warning)]") : "text-success"
                     }`}
                   >
@@ -327,7 +327,7 @@ export function TransactionTable({
                         }}
                         aria-label={kind === "receivable" ? "Log a payment received" : "Log a payment made"}
                         title={kind === "receivable" ? "Log a payment received" : "Log a payment made"}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
+                        className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-cacao"
                       >
                         <HandCoins className="h-4 w-4" />
                       </button>
