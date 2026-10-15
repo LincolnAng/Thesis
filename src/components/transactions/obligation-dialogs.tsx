@@ -27,8 +27,9 @@ function ErrorLine({ text }: { text: string }) {
 }
 
 /**
- * A payment against something already owed, as a single line under its row: the amount (starting
- * at the whole balance, the common case), cash or bank, and Save. The date is today. It never
+ * A payment against something already owed, under its row: the amount (starting at the whole
+ * balance, the common case), cash or bank, and Save — then the day it was paid (today unless
+ * changed) and an optional note. The day can't be in the future or before the transaction. It never
  * creates a second receivable or payable: the amount is added to that one's history and the
  * balance drops by exactly that much.
  */
@@ -52,6 +53,8 @@ export function QuickPay({
   const [amount, setAmount] = useState(String(remaining));
   const [method, setMethod] = useState<"cash" | "bank_transfer">("cash");
   const [bank, setBank] = useState("");
+  const [date, setDate] = useState(today);
+  const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -62,15 +65,19 @@ export function QuickPay({
     ? null
     : typed > remaining + 0.005
       ? `More than the ${formatPeso(remaining)} still owed.`
-      : today < dayOf(entry.timestamp)
-        ? "This transaction is dated in the future."
-        : method === "bank_transfer" && !bank.trim()
+      : !date
+        ? "Pick the day it was paid."
+        : date > today
+          ? "That day hasn't happened yet."
+          : date < dayOf(entry.timestamp)
+            ? "That's before the transaction itself."
+            : method === "bank_transfer" && !bank.trim()
           ? "Which bank?"
           : null;
 
   async function save() {
     setError(null);
-    const result = recordPaymentOn(entry.id, { amount: typed, date: today, method, bankName: method === "bank_transfer" ? bank.trim() : null, note: "" });
+    const result = recordPaymentOn(entry.id, { amount: typed, date, method, bankName: method === "bank_transfer" ? bank.trim() : null, note: note.trim() });
     if (!result.ok) return setError(result.reason);
     setSaving(true);
     const confirmed = await result.saved;
@@ -141,6 +148,28 @@ export function QuickPay({
         <button type="button" onClick={onClose} aria-label="Cancel" className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary">
           <X className="h-4 w-4" />
         </button>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="flex items-center gap-2">
+          <span className="text-[12px] font-semibold text-muted-foreground">On</span>
+          <Input
+            type="date"
+            value={date}
+            max={today}
+            min={dayOf(entry.timestamp)}
+            onChange={(e) => setDate(e.target.value)}
+            aria-label="Day it was paid"
+            className="h-9 w-40 text-[13px]"
+          />
+        </label>
+        <Input
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && valid && !problem && !saving && void save()}
+          placeholder="Note (optional) — e.g. paid half, rest on Friday"
+          aria-label="Note"
+          className="h-9 min-w-[200px] flex-1 text-[13px]"
+        />
       </div>
       {error && <ErrorLine text={error} />}
     </div>
