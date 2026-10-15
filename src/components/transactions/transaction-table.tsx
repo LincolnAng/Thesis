@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import { HandCoins, History as HistoryIcon, Pencil } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, HandCoins, History as HistoryIcon, Pencil } from "lucide-react";
 import { EXPENSE_CATEGORY_LABELS, PRICE_TYPE_LABELS, formatDate, formatPeso } from "@/lib/format";
 import { dueInfo, methodOf, obligationInfo, obligationKind, outstanding, paymentsOf } from "@/lib/transactions/ledger";
 import { lineSubtotal, orderTotal } from "@/lib/transactions/order-lines";
@@ -328,7 +328,22 @@ export function TransactionTable({
                           >
                             {status.label}
                           </span>
-                          {status.left > 0 && <span className="whitespace-nowrap text-[11.5px] tabular-nums text-muted-foreground">{formatPeso(status.left)} left</span>}
+                          {kind && (
+                            <span
+                              title={kind === "receivable" ? "A receivable: a customer owes us" : "A payable: we owe a supplier"}
+                              className="flex items-center gap-1 whitespace-nowrap text-[11.5px] tabular-nums text-muted-foreground"
+                            >
+                              {kind === "receivable" ? (
+                                <ArrowDownLeft className="h-3 w-3 text-success" strokeWidth={2.6} />
+                              ) : (
+                                <ArrowUpRight className="h-3 w-3 text-danger" strokeWidth={2.6} />
+                              )}
+                              {status.left > 0 && <span>{formatPeso(status.left)}</span>}
+                              <span className={`font-medium ${kind === "receivable" ? "text-success" : "text-danger"}`}>
+                                {status.left > 0 ? (kind === "receivable" ? "to collect" : "to pay") : kind === "receivable" ? "collected" : "paid out"}
+                              </span>
+                            </span>
+                          )}
                         </div>
                       )}
                     </td>
