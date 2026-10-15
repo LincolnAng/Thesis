@@ -326,9 +326,7 @@ export function TransactionTable({
             {showPayment && head("Mode of payment")}
             {showPayment && head("Status")}
             {head("Recorded by")}
-            <th scope="col" className={th}>
-              <span className="sr-only">Actions</span>
-            </th>
+            {head("Actions")}
           </tr>
         </thead>
         <tbody>
