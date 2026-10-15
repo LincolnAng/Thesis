@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogOut, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useViewMode } from "@/lib/summary/view-mode";
 import { NAV_ITEMS, SECONDARY_ITEMS } from "@/lib/nav-items";
 import { signOut, useCurrentUser } from "@/lib/auth/current-user";
 import {
@@ -24,7 +23,6 @@ const TAB = "flex min-w-16 flex-1 shrink-0 flex-col items-center gap-1 px-1 py-3
  */
 export function BottomTabBar() {
   const pathname = usePathname();
-  const [mode] = useViewMode();
   const me = useCurrentUser();
   const secondary = SECONDARY_ITEMS;
   const inSecondary = secondary.some((item) => pathname.startsWith(item.href));
@@ -37,7 +35,7 @@ export function BottomTabBar() {
         return (
           <Link key={item.href} href={item.href} className={cn(TAB, active ? "font-semibold text-cacao" : "text-muted-foreground")}>
             <Icon className="h-6 w-6" />
-            {mode === "simple" ? (item.simpleLabel ?? item.label) : item.label}
+            {item.label}
           </Link>
         );
       })}

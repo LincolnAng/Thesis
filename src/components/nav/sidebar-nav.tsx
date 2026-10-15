@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChocolateBarLogo } from "@/components/ui/chocolate-bar-logo";
 import { cn } from "@/lib/utils";
-import { useViewMode } from "@/lib/summary/view-mode";
 import { NAV_ITEMS, SECONDARY_ITEMS, type NavItem } from "@/lib/nav-items";
 import { profileColor } from "@/lib/auth/profile-colors";
 import { useStore } from "@/lib/store/use-store";
@@ -16,8 +15,7 @@ function isActive(pathname: string, href: string) {
 
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   const Icon = item.icon;
-  const [mode] = useViewMode();
-  const label = mode === "simple" ? (item.simpleLabel ?? item.label) : item.label;
+  const label = item.label;
   return (
     <Link
       href={item.href}

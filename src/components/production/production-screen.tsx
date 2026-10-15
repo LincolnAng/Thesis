@@ -4,8 +4,6 @@ import Link from "next/link";
 
 import { useMemo, useState } from "react";
 import { Page } from "@/components/layout/page";
-import { SimpleStock } from "@/components/simple/simple-stock";
-import { useViewMode } from "@/lib/summary/view-mode";
 import { ProcessPlan } from "@/components/production/process-plan";
 import { EventPlanDialog } from "@/components/inventory/event-plan-dialog";
 import { PlanSettingsDialog } from "@/components/inventory/plan-settings-dialog";
@@ -30,8 +28,6 @@ import {
 } from "@/lib/summary/production-schedule";
 import {
   eventPlan,
-  expiringWithinDays,
-  shelfLifeDays,
   toggleUnavailableDay,
   unavailableDays,
 } from "@/lib/summary/business-config";
@@ -240,9 +236,7 @@ function StockVsForecast({
  * to sit behind Advanced; as its own tab it shows for everyone.
  */
 export function ProductionScreen({ section }: { section: "production" | "calendar" }) {
-  const { products, entries, machines, events, businessSettings } = useStore();
-  const [viewMode] = useViewMode();
-  const simple = section === "production" && viewMode === "simple";
+  const { products, machines, events, businessSettings } = useStore();
   const [strategy, setStrategy] = useState<ScheduleStrategy>("fastest");
   const tab = section === "calendar" ? "plan" : "stock";
   const [addStockOpen, setAddStockOpen] = useState(false);
@@ -328,9 +322,7 @@ export function ProductionScreen({ section }: { section: "production" | "calenda
   return (
     <Page
       title={section === "calendar" ? "Calendar" : "Production"}
-      hideModeToggle={section === "calendar"}
       right={
-        simple ? undefined : (
         <>
           <button type="button" onClick={() => setAddStockOpen(true)} className="rounded-[10px] border border-line/20 bg-card px-4 py-2.5 text-[13px] font-semibold">
             Add stock
@@ -339,22 +331,8 @@ export function ProductionScreen({ section }: { section: "production" | "calenda
             + Add product
           </button>
         </>
-        )
       }
     >
-      {simple ? (
-        <SimpleStock
-          products={products}
-          plan={plan}
-          onMade={() => setAddStockOpen(true)}
-          onAddProduct={() => setAddProductOpen(true)}
-          onEditProduct={(id) => setEditingProductId(id)}
-          shelfLifeOf={(id) => shelfLifeDays(businessSettings, id)}
-          entries={entries}
-          expiringWithin={expiringWithinDays(businessSettings)}
-          fixes={fixes}
-        />
-      ) : (
       <div className="flex flex-col gap-5">
         {/* Without a machine every day has zero capacity, so nothing is ever placed on the
             calendar — which looks like the plan is broken rather than unconfigured. */}
@@ -563,7 +541,6 @@ export function ProductionScreen({ section }: { section: "production" | "calenda
           </div>
         )}
       </div>
-      )}
 
       {addStockOpen && (
         <AddStockDialog

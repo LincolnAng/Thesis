@@ -13,13 +13,11 @@ import { StockCalendar } from "@/components/summary/stock-calendar";
 import { ActionCard } from "@/components/layout/action-card";
 import { BatchPlannerButton } from "@/components/inventory/batch-planner";
 import { ReorderCard } from "@/components/inventory/reorder-card";
-import { useViewMode } from "@/lib/summary/view-mode";
 
 export function StockDetail() {
   const { products, rawMaterials, entries } = useStore();
   const summary = useMemo(() => computeStockSummary(products, rawMaterials, entries), [products, rawMaterials, entries]);
   const trend = useMemo(() => stockMonthlyTrend(entries), [entries]);
-  const [viewMode] = useViewMode();
   const reaches = useMemo(
     () => computeIngredientReach(rawMaterials, products, entries),
     [rawMaterials, products, entries],
@@ -28,7 +26,7 @@ export function StockDetail() {
 
   // 4.5 — Simple gets the status list and the action, not the trend charts. The
   // ingredient calendar is a chart in all but name and belongs to Advanced too.
-  const analytics = viewMode === "advanced";
+  const analytics = true;
 
   return (
     <div className="space-y-6">

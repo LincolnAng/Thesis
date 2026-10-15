@@ -12,11 +12,9 @@ import { formatPeso } from "@/lib/format";
 import { updateSupplier } from "@/lib/store/store";
 import type { Supplier } from "@/lib/store/types";
 import { PriceHistoryChart } from "@/components/suppliers/price-history-chart";
-import { useViewMode } from "@/lib/summary/view-mode";
 
 export function SupplierCard({ supplier }: { supplier: Supplier }) {
   const [newPrice, setNewPrice] = useState("");
-  const [viewMode] = useViewMode();
   const history = supplier.priceHistory;
   const priceRose = history.length >= 2 && history[history.length - 1].price > history[history.length - 2].price;
   const previousPrice = history.length >= 2 ? history[history.length - 2].price : null;
@@ -72,7 +70,7 @@ export function SupplierCard({ supplier }: { supplier: Supplier }) {
           </Link>
         </div>
 
-        {viewMode === "advanced" && <PriceHistoryChart history={history} />}
+        <PriceHistoryChart history={history} />
 
         {/* Pinned to the bottom so every card's input row lines up across the grid. */}
         <div className="mt-auto flex gap-2 border-t border-border pt-4">

@@ -3,8 +3,6 @@ import { ArrowLeftRight, CalendarDays, Factory, Home, Settings, Tag, Users, type
 export interface NavItem {
   href: string;
   label: string;
-  /** Plain-words name shown in Simple mode, when it differs. */
-  simpleLabel?: string;
   icon: LucideIcon;
 }
 

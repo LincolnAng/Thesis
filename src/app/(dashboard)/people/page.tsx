@@ -7,8 +7,6 @@ import { Page, PageTabs } from "@/components/layout/page";
 import { CustomersTab } from "@/components/people/customers-tab";
 import { SuppliersTab } from "@/components/people/suppliers-tab";
 import { EventsTab } from "@/components/people/events-tab";
-import { SimplePeople } from "@/components/simple/simple-people";
-import { useViewMode } from "@/lib/summary/view-mode";
 
 type Tab = "customers" | "suppliers" | "events";
 
@@ -16,11 +14,9 @@ function PeoplePageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const [chosenMode] = useViewMode();
   // Suppliers are prices paid — owners' business. Employees see customers and events, in the
   // plain table view (the Simple summary leads with supplier spending).
   const exec = isExecutive(useCurrentUser());
-  const viewMode = exec ? chosenMode : "advanced";
   // Kept in the URL so a link (or the old /suppliers and /events addresses) opens the right tab.
   const param = searchParams.get("tab");
   const tab: Tab = (param === "suppliers" && exec) || param === "events" ? param : "customers";
@@ -29,16 +25,8 @@ function PeoplePageInner() {
     router.replace(next === "customers" ? pathname : `${pathname}?tab=${next}`, { scroll: false });
   }
 
-  if (viewMode === "simple") {
-    return (
-      <Page title="People">
-        <SimplePeople />
-      </Page>
-    );
-  }
-
   return (
-    <Page title="People" hideModeToggle={!exec}>
+    <Page title="People">
       <div className="mb-6">
         <PageTabs
           tabs={

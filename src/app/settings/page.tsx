@@ -22,8 +22,6 @@ import { UnitsCard } from "@/components/settings/units-card";
 import { SeasonalityCard } from "@/components/settings/seasonality-card";
 import { cn } from "@/lib/utils";
 import { Page, PageTabs } from "@/components/layout/page";
-import { SimpleSettings } from "@/components/simple/simple-settings";
-import { useViewMode } from "@/lib/summary/view-mode";
 
 /** Turns Anthropic's wording into something the owner can act on. */
 function readableAiError(detail: unknown): string {
@@ -110,7 +108,6 @@ function ExpiryWarningCard() {
 }
 
 export default function SettingsPageInner() {
-  const [viewMode] = useViewMode();
   const exec = isExecutive(useCurrentUser());
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -310,18 +307,10 @@ export default function SettingsPageInner() {
   // reset — is the owners', and the server refuses those requests from an employee anyway.
   if (!exec) {
     return (
-      <Page title="Settings" hideModeToggle>
+      <Page title="Settings">
         <div className="w-full max-w-4xl">
           <PeopleCard />
         </div>
-      </Page>
-    );
-  }
-
-  if (viewMode === "simple") {
-    return (
-      <Page title="Settings">
-        <SimpleSettings />
       </Page>
     );
   }
