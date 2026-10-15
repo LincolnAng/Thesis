@@ -311,30 +311,30 @@ export function TransactionTable({
                     <span className="line-clamp-2">{e.counterparty ?? <span className="text-muted-foreground">—</span>}</span>
                   </td>
                   <td
-                    className={`${td} max-w-[220px]`}
+                    className={`${td} max-w-[240px] ${items.length > 1 ? "py-1" : ""}`}
                     title={items.map((l) => l.name).join(", ") + (e.type === "EXPENSE" && e.category ? ` · ${EXPENSE_CATEGORY_LABELS[e.category] ?? e.category}` : "")}
                   >
                     {items.length === 1 ? (
                       <span className="line-clamp-2">{items[0].name || <span className="text-muted-foreground">—</span>}</span>
                     ) : (
-                      // Several products: one per line, in step with their quantities beside them.
-                      <ul>
+                      // Several products: each in its own ruled slot, level with its quantity in the next column.
+                      <ul className="divide-y divide-line/20">
                         {items.map((l, j) => (
-                          <li key={j} className="h-5 truncate leading-5">
+                          <li key={j} className="h-8 truncate text-left leading-8">
                             {l.name}
                           </li>
                         ))}
                       </ul>
                     )}
                   </td>
-                  <td className={`${td} tabular-nums`}>
+                  <td className={`${td} tabular-nums ${items.length > 1 ? "py-1" : ""}`}>
                     {items.length === 1 ? (
                       items[0].qty != null ? items[0].qty : <span className="text-muted-foreground">—</span>
                     ) : (
-                      <ul>
+                      <ul className="divide-y divide-line/20">
                         {items.map((l, j) => (
-                          <li key={j} className="h-5 leading-5">
-                            {l.qty ?? "—"}
+                          <li key={j} className="h-8 font-semibold leading-8">
+                            {l.qty != null ? `× ${l.qty}` : "—"}
                           </li>
                         ))}
                       </ul>
