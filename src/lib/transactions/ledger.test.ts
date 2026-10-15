@@ -197,6 +197,12 @@ test("a bank transfer without a bank, a future date and a zero amount are refuse
   assert.equal(addPayment(e, { amount: 0, date: "2026-10-10", method: "cash" }, me, now).ok, false);
 });
 
+test("a payment can't be dated before the transaction it pays", () => {
+  const e = sale({ paymentTerm: "receivable" }); // made on 1 Oct
+  assert.equal(addPayment(e, { amount: 100, date: "2026-09-30", method: "cash" }, me, now).ok, false);
+  assert.equal(addPayment(e, { amount: 100, date: "2026-10-01", method: "cash" }, me, now).ok, true);
+});
+
 test("paying a spot sale or an already settled obligation is refused", () => {
   assert.equal(addPayment(sale(), { amount: 100, date: "2026-10-10", method: "cash" }, me, now).ok, false);
   const done = pay(sale({ paymentTerm: "receivable" }), 5000, "2026-10-10");

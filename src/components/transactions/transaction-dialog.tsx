@@ -15,7 +15,7 @@ import { fullName } from "@/lib/summary/product-sizes";
 import { findProduct } from "@/lib/summary/product-match";
 import { addPayment, outstanding, paidSoFar } from "@/lib/transactions/ledger";
 import { describeOrder, lineSubtotal, orderQuantity, orderTotal } from "@/lib/transactions/order-lines";
-import { COMMON_BANKS, EXPENSE_CATEGORY_LABELS, describePaymentMethod, formatPeso } from "@/lib/format";
+import { COMMON_BANKS, EXPENSE_CATEGORY_LABELS, describePaymentMethod, formatDate, formatPeso } from "@/lib/format";
 import { PAYROLL_CATEGORIES } from "@/lib/auth/permissions";
 import { currentUser } from "@/lib/auth/current-user";
 import type { Entry, OrderLine, PaymentMethod, PriceType, Product } from "@/lib/store/types";
@@ -219,6 +219,10 @@ export function TransactionDialog({
   const [payDate, setPayDate] = useState(today());
   const [payMethod, setPayMethod] = useState<PaymentMethod>("cash");
   const [payBank, setPayBank] = useState("");
+  // Until someone picks otherwise, a payment made now is made the way the order said it would be.
+  const [payMethodPicked, setPayMethodPicked] = useState(false);
+  const effPayMethod: PaymentMethod = payMethodPicked ? payMethod : method;
+  const effPayBank = payMethodPicked ? payBank : bank;
 
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -268,8 +272,16 @@ export function TransactionDialog({
     return p ? spoiledValue(p.name, num(lostQty), products, costCtx) : null;
   })();
 
+  // --- what has been paid, and what this payment leaves ----------------------------------
+  const total = kind === "sale" ? saleTotal : num(amount);
+  const wasOwed = !!e && (e.paymentTerm === "receivable" || e.paymentTerm === "payable");
+  const paidBefore = wasOwed && e ? paidSoFar(e) : 0;
+  const leftBefore = Math.max(0, Math.round((total - paidBefore) * 100) / 100);
+  const payNum = num(payAmount);
+  const leftAfter = Math.max(0, Math.round((leftBefore - payNum) * 100) / 100);
+
   // --- saving ----------------------------------------------------------------------------
-  const snapshot = JSON.stringify([kind, invKind, date, notes, priceType, lines, customer, what, category, amount, party, lostProduct, lostQty, when, method, bank, dueDate, defaulted, payAmount]);
+  const snapshot = JSON.stringify([kind, invKind, date, notes, priceType, lines, customer, what, category, amount, party, lostProduct, lostQty, when, method, bank, dueDate, defaulted, payAmount, payDate, payMethodPicked, payMethod, payBank]);
   const [initialSnapshot] = useState(snapshot);
   const dirty = snapshot !== initialSnapshot;
 
@@ -291,7 +303,14 @@ export function TransactionDialog({
       if (!(num(lostQty) > 0)) return "How many were lost?";
     }
     if (showPayment && method === "bank_transfer" && !bank.trim()) return "Which bank? Pick or type the bank name.";
-    if (payAmount && num(payAmount) > 0 && payMethod === "bank_transfer" && !payBank.trim()) return "Which bank was the payment sent through?";
+    if (showPayment && when === "later" && owedKind && payNum > 0) {
+      if (!(total > 0)) return "Enter the amount first, so we know how much is left after this payment.";
+      if (payNum > leftBefore + 0.005) return `That payment is more than the ${formatPeso(leftBefore)} still owed.`;
+      if (!payDate) return "Pick the day the payment was made.";
+      if (payDate > today()) return "The payment date can't be in the future.";
+      if (payDate < date) return `The payment can't be dated before the transaction (${formatDate(date)}).`;
+      if (effPayMethod === "bank_transfer" && !effPayBank.trim()) return "Which bank was the payment sent through?";
+    }
     return null;
   }
 
@@ -385,7 +404,7 @@ export function TransactionDialog({
         const who = currentUser();
         const r = addPayment(
           { ...(d as Entry), id: e?.id ?? "new" },
-          { date: payDate || today(), amount: pay, method: payMethod, bankName: payMethod === "bank_transfer" ? payBank.trim() || null : null },
+          { date: payDate || today(), amount: pay, method: effPayMethod, bankName: effPayMethod === "bank_transfer" ? effPayBank.trim() || null : null },
           { id: who?.id, name: who?.name },
           new Date(),
         );
@@ -731,7 +750,7 @@ export function TransactionDialog({
                       <span className="font-semibold">{formatPeso(owedSoFar)}</span>
                     </p>
                   )}
-                  <div className="flex flex-col gap-2 rounded-lg bg-secondary/60 p-3">
+                  <div className="flex flex-col gap-2.5 rounded-lg bg-secondary/60 p-3">
                     <span className="text-[13px] font-semibold">{e ? "Record a payment" : "Paid anything already?"}</span>
                     <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2">
                       <label className="flex flex-col gap-1">
@@ -740,13 +759,66 @@ export function TransactionDialog({
                       </label>
                       <label className="flex flex-col gap-1">
                         <span className={label}>Paid on</span>
-                        <input type="date" value={payDate} onChange={(ev) => setPayDate(ev.target.value)} className={field} />
+                        <input type="date" value={payDate} max={today()} min={date || undefined} onChange={(ev) => setPayDate(ev.target.value)} className={field} />
                       </label>
                     </div>
-                    {num(payAmount) > 0 && (
+                    {leftBefore > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {(
+                          [
+                            ["Full amount", leftBefore],
+                            ["Half", Math.round((leftBefore / 2) * 100) / 100],
+                          ] as const
+                        ).map(([text, v]) => (
+                          <button
+                            key={text}
+                            type="button"
+                            onClick={() => setPayAmount(String(v))}
+                            className="min-h-8 rounded-lg border border-line/25 bg-card px-3 text-[12.5px] font-semibold transition hover:border-cacao hover:text-cacao active:scale-95"
+                          >
+                            {text} · {formatPeso(v)}
+                          </button>
+                        ))}
+                        {payAmount && (
+                          <button type="button" onClick={() => setPayAmount("")} className="min-h-8 px-2 text-[12.5px] font-semibold text-muted-foreground hover:text-danger">
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {payNum > 0 && (
                       <>
-                        {methodPicker(payMethod, setPayMethod)}
-                        {payMethod === "bank_transfer" && bankPicker(payBank, setPayBank)}
+                        <div className="flex flex-col gap-1">
+                          <span className={label}>How was it paid?</span>
+                          <Segmented
+                            ariaLabel="How the payment was made"
+                            value={effPayMethod}
+                            onChange={(m) => {
+                              setPayMethod(m);
+                              setPayMethodPicked(true);
+                            }}
+                            choices={METHOD_CHOICES}
+                          />
+                        </div>
+                        {effPayMethod === "bank_transfer" &&
+                          bankPicker(effPayBank, (b) => {
+                            setPayBank(b);
+                            setPayMethod(effPayMethod);
+                            setPayMethodPicked(true);
+                          })}
+                        {total > 0 && (
+                          <p className={`text-[13px] ${payNum > leftBefore + 0.005 ? "font-semibold text-danger" : ""}`}>
+                            {payNum > leftBefore + 0.005
+                              ? `More than the ${formatPeso(leftBefore)} still owed.`
+                              : leftAfter === 0
+                                ? "This covers everything — it will be marked paid in full."
+                                : (
+                                    <>
+                                      <span className="font-semibold">{formatPeso(leftAfter)}</span> will still be {kind === "sale" ? "owed to you" : "owed by you"} after this.
+                                    </>
+                                  )}
+                          </p>
+                        )}
                       </>
                     )}
                   </div>
@@ -754,7 +826,7 @@ export function TransactionDialog({
                     <ul className="flex flex-col gap-0.5 text-[13px] text-muted-foreground">
                       {e.payments.map((p, i) => (
                         <li key={i}>
-                          {p.date} — {formatPeso(p.amount)} · {describePaymentMethod(p.method, p.bankName)}
+                          {formatDate(p.date)} — {formatPeso(p.amount)} · {describePaymentMethod(p.method, p.bankName) || "Not recorded"}
                         </li>
                       ))}
                     </ul>

@@ -516,6 +516,7 @@ export function addPayment(e: Entry, input: PaymentInput, who: { id?: string | n
   if (!Number.isFinite(input.amount) || input.amount <= 0) return fail("Enter an amount above zero.");
   if (!DAY_RE.test(input.date)) return fail("Pick the day the money changed hands.");
   if (input.date > todayOf(now)) return fail("The payment date can't be in the future.");
+  if (input.date < dayOf(e.timestamp)) return fail("The payment can't be dated before the transaction it pays.");
   if (input.method !== "cash" && input.method !== "bank_transfer") return fail("Say whether it was cash or a bank transfer.");
   const bankName = input.method === "bank_transfer" ? input.bankName?.trim() || null : null;
   if (input.method === "bank_transfer" && !bankName) return fail("Name the bank the transfer went through.");
