@@ -15,8 +15,9 @@ import type { Entry } from "@/lib/store/types";
  *
  * One row per product. An order of several products is several rows, each with its own product,
  * quantity and share of the amount, and the customer's name on every one. The deadline (and what
- * is left to pay) is written once, on the order's first row, so a balance isn't counted per
- * product. Rows of one order are striped together so they read as one block.
+ * is left to pay) and the action buttons are one cell spanning the order's rows, centred, so a
+ * balance isn't counted per product. Rows of one order are striped together so they read as
+ * one block.
  *
  * Only executives see the payment columns; an employee's copy has no payment data at all. The
  * arrow opens what the row can't show (payments on something owed, the price type, a note) and
@@ -298,13 +299,17 @@ export function TransactionTable({
                       </td>
                     )}
                     {showPayment && <td className={`${td} text-[12.5px]`}>{method === "bank_transfer" ? (bank ?? "—") : <NA />}</td>}
-                    {showPayment && (
-                      <td className={`${td} text-[12.5px]`}>{!first ? null : kind ? <Deadline e={origin} /> : <NA />}</td>
+                    {/* The deadline and the actions belong to the whole order: one cell spanning its rows, centred. */}
+                    {showPayment && first && (
+                      <td rowSpan={group.length} className={`${td} text-[12.5px]`}>
+                        {kind ? <Deadline e={origin} /> : <NA />}
+                      </td>
                     )}
                     <td className={`${td} whitespace-nowrap text-muted-foreground`}>{row.loggedByName ?? "—"}</td>
-                    <td className="px-1 py-1 text-center align-middle">
+                    {first && (
+                    <td rowSpan={group.length} className="px-1 py-1 text-center align-middle">
                       <div className="flex items-center justify-center gap-0.5">
-                        {first && hasDetails(origin, showPayment) && (
+                        {hasDetails(origin, showPayment) && (
                           <button
                             type="button"
                             onClick={() =>
@@ -322,7 +327,7 @@ export function TransactionTable({
                             {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                           </button>
                         )}
-                        {first && owed && kind && outstanding(origin) > 0 && (
+                        {owed && kind && outstanding(origin) > 0 && (
                           <button
                             type="button"
                             onClick={() => owed.onPay(origin)}
@@ -333,18 +338,17 @@ export function TransactionTable({
                             <Banknote className="h-4 w-4" />
                           </button>
                         )}
-                        {first && (
-                          <button
-                            type="button"
-                            onClick={() => onEdit(origin)}
-                            aria-label="Change this transaction"
-                            className="flex h-11 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => onEdit(origin)}
+                          aria-label="Change this transaction"
+                          className="flex h-11 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
                       </div>
                     </td>
+                    )}
                   </tr>
                 ))}
                 {isOpen && (
