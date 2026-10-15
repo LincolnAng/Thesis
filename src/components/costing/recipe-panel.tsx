@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, Plus, Search, Trash2 } from "lucide-react";
 import { updateProduct } from "@/lib/store/store";
 import { perBatch, perUnit, unitsPerBatch } from "@/lib/costing/per-unit";
 import { useStore } from "@/lib/store/use-store";
 import { useCostContext } from "@/lib/summary/use-cost-context";
 import { ingredientRowCost, productCostPerJar } from "@/lib/summary/recipe-cost";
 import { groupOf } from "@/lib/summary/material-stock";
+import { getUnitCost } from "@/lib/summary/cost-engine";
 import { useNumericDraft } from "@/lib/use-numeric-draft";
 import { formatPeso } from "@/lib/format";
 import type { Product, RawMaterialStock, RecipeComponentRow, RecipeExtraRow, RecipeIngredientRow } from "@/lib/store/types";
@@ -21,6 +22,11 @@ import type { Product, RawMaterialStock, RecipeComponentRow, RecipeExtraRow, Rec
  *   Other costs — anything else one costs
  *
  * Your time isn't a cost here (see batchLaborCost in lib/summary/cost-engine).
+ *
+ * Ingredients and packaging are only ever picked, never priced here: type in the search bar,
+ * pick the raw material, say how much one takes. Its price is the one on the Raw materials /
+ * Packaging tab — the same figure, from the same purchases — so there is one price per material
+ * and nothing to type twice.
  *
  * Each shows its cost per unit beside its heading, and what one costs to make sits at the
  * bottom — this is the whole cost, so there is no separate cost page. Below it, a planner for
@@ -62,51 +68,37 @@ export function RecipePanel({ product }: { product: Product }) {
   const patchRow = (id: string, patch: Partial<RecipeIngredientRow>) => saveRows(rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   const patchComponent = (id: string, patch: Partial<RecipeComponentRow>) => saveComponents(components.map((r) => (r.id === id ? { ...r, ...patch } : r)));
 
-  /** Ingredient rows pick from bought ingredients and things you make; switching between the two moves the row. */
-  function pickIngredient(kind: "m" | "p", rowId: string, value: string) {
-    const [nextKind, id] = value.split(":") as ["m" | "p", string];
-    if (nextKind === kind) {
-      if (kind === "m") patchRow(rowId, { materialId: id });
-      else patchComponent(rowId, { productId: id });
-      return;
-    }
-    if (kind === "m") {
-      const row = rows.find((r) => r.id === rowId);
-      save({
-        recipeIngredients: rows.filter((r) => r.id !== rowId),
-        recipeComponents: [...components, { id: newId("cmp"), productId: id, quantity: row?.quantity ?? 0 }],
-      });
-    } else {
-      const row = components.find((r) => r.id === rowId);
-      save({
-        recipeComponents: components.filter((r) => r.id !== rowId),
-        recipeIngredients: [...rows, { id: newId("ing"), materialId: id, quantity: row?.quantity ?? 0 }],
-      });
-    }
-  }
+  // The price per unit of each material — the same figure the Raw materials and Packaging tabs show.
+  const priceOf = (materialId: string) => {
+    const u = getUnitCost(materialId, ctx.rawMaterials, ctx.supplierPrices, ctx.entries, ctx.products, ctx.cacaoUtilization);
+    return u.source === "none" ? null : u.cost;
+  };
+  const inRecipe = new Set([...rows.map((r) => r.materialId), ...components.map((c) => c.productId)]);
+  const materialOption = (m: RawMaterialStock, group?: string): Option => {
+    const price = priceOf(m.id);
+    return { key: `m:${m.id}`, label: m.name, hint: price != null ? `${formatPeso(price)}/${m.unit}` : "no price yet", group };
+  };
+  const ingredientOptions: Option[] = [
+    ...ingredientsList.filter((m) => !inRecipe.has(m.id)).map((m) => materialOption(m, "Raw materials")),
+    ...madeByYou
+      .filter((p) => !inRecipe.has(p.id))
+      .map((p) => {
+        const each = productCostPerJar(p, ctx).costPerJar;
+        return { key: `p:${p.id}`, label: p.name, hint: each > 0 ? `${formatPeso(each)} each` : "no cost yet", group: "Made by you" };
+      }),
+  ];
+  const packagingOptions: Option[] = packagingList.filter((m) => !inRecipe.has(m.id)).map((m) => materialOption(m));
 
-  const ingredientOptions = (
-    <>
-      {ingredientsList.length > 0 && (
-        <optgroup label="Bought">
-          {ingredientsList.map((m) => (
-            <option key={m.id} value={`m:${m.id}`}>
-              {m.name}
-            </option>
-          ))}
-        </optgroup>
-      )}
-      {madeByYou.length > 0 && (
-        <optgroup label="Made by you">
-          {madeByYou.map((p) => (
-            <option key={p.id} value={`p:${p.id}`}>
-              {p.name}
-            </option>
-          ))}
-        </optgroup>
-      )}
-    </>
-  );
+  function addIngredient(key: string) {
+    const [kind, id] = key.split(":");
+    if (kind === "p") saveComponents([...components, { id: newId("cmp"), productId: id, quantity: 0 }]);
+    else saveRows([...rows, { id: newId("ing"), materialId: id, quantity: 0 }]);
+  }
+  const materialPrice = (r: RecipeIngredientRow) => {
+    const m = rawMaterials.find((x) => x.id === r.materialId);
+    const price = priceOf(r.materialId);
+    return price != null && m ? `at ${formatPeso(price)}/${m.unit}` : "no price yet";
+  };
 
   const qtyProps = (batchQty: number, onBatch: (n: number) => void) => ({
     qty: perUnit(product, batchQty),
@@ -123,47 +115,40 @@ export function RecipePanel({ product }: { product: Product }) {
         title="Ingredients"
         total={one(cost.ingredientTotal)}
         unit={unit}
-        addLabel="Add ingredient"
-        onAdd={() => {
-          if (ingredientsList[0]) saveRows([...rows, { id: newId("ing"), materialId: ingredientsList[0].id, quantity: 0 }]);
-          else if (madeByYou[0]) saveComponents([...components, { id: newId("cmp"), productId: madeByYou[0].id, quantity: 0 }]);
-        }}
-        canAdd={ingredientsList.length > 0 || madeByYou.length > 0}
         emptyText={
           ingredientsList.length === 0 && madeByYou.length === 0
-            ? "No ingredients to pick from yet — add them under Raw materials first."
-            : `Nothing yet. Add each thing that goes into one ${unit}.`
+            ? "No raw materials yet — add them on the Raw materials tab first."
+            : `Nothing yet. Search for each raw material that goes into one ${unit}.`
         }
         count={ingredientRows.length + components.length}
         note={componentCost > 0 ? `Includes ${formatPeso(one(componentCost))} of things you make yourself.` : undefined}
+        search={<SearchAdd placeholder="Search raw materials to add…" options={ingredientOptions} onPick={addIngredient} />}
       >
-        {ingredientRows.map((r) => (
-          <Line
-            key={r.id}
-            select={
-              <select value={`m:${r.materialId}`} onChange={(e) => pickIngredient("m", r.id, e.target.value)} aria-label="Ingredient" className={`${input} min-w-0 flex-1`}>
-                {ingredientOptions}
-              </select>
-            }
-            {...qtyProps(r.quantity, (n) => patchRow(r.id, { quantity: n }))}
-            unit={rawMaterials.find((m) => m.id === r.materialId)?.unit ?? ""}
-            cost={priceText(one(ingredientRowCost(r, ctx)), cost.unpriced, rawMaterials.find((m) => m.id === r.materialId)?.name)}
-            onRemove={() => saveRows(rows.filter((x) => x.id !== r.id))}
-          />
-        ))}
+        {ingredientRows.map((r) => {
+          const m = rawMaterials.find((x) => x.id === r.materialId);
+          return (
+            <Line
+              key={r.id}
+              name={m?.name ?? "Removed ingredient"}
+              {...qtyProps(r.quantity, (n) => patchRow(r.id, { quantity: n }))}
+              unit={m?.unit ?? ""}
+              price={materialPrice(r)}
+              cost={priceText(one(ingredientRowCost(r, ctx)), cost.unpriced, m?.name)}
+              onRemove={() => saveRows(rows.filter((x) => x.id !== r.id))}
+            />
+          );
+        })}
         {components.map((r) => {
           const made = products.find((p) => p.id === r.productId);
           const each = made ? productCostPerJar(made, ctx).costPerJar : 0;
           return (
             <Line
               key={r.id}
-              select={
-                <select value={`p:${r.productId}`} onChange={(e) => pickIngredient("p", r.id, e.target.value)} aria-label="Ingredient" className={`${input} min-w-0 flex-1`}>
-                  {ingredientOptions}
-                </select>
-              }
+              name={made?.name ?? "Removed product"}
+              tag="made by you"
               {...qtyProps(r.quantity, (n) => patchComponent(r.id, { quantity: n }))}
               unit={made?.unit || "pcs"}
+              price={each > 0 ? `at ${formatPeso(each)} each` : "no cost yet"}
               cost={each > 0 ? formatPeso(one(each * r.quantity)) : "No cost yet"}
               onRemove={() => saveComponents(components.filter((x) => x.id !== r.id))}
             />
@@ -175,30 +160,30 @@ export function RecipePanel({ product }: { product: Product }) {
         title="Packaging"
         total={one(cost.packagingTotal)}
         unit={unit}
-        addLabel="Add packaging"
-        onAdd={() => packagingList[0] && saveRows([...rows, { id: newId("ing"), materialId: packagingList[0].id, quantity: 1 * unitsPerBatch(product) }])}
-        canAdd={packagingList.length > 0}
-        emptyText={packagingList.length === 0 ? "No packaging to pick from yet — add jars, lids or labels under Packaging first." : `None yet. Add the jar, lid or label one ${unit} uses.`}
+        emptyText={packagingList.length === 0 ? "No packaging yet — add jars, lids or labels on the Packaging tab first." : `None yet. Search for the jar, lid or label one ${unit} uses.`}
         count={packagingRows.length}
-      >
-        {packagingRows.map((r) => (
-          <Line
-            key={r.id}
-            select={
-              <select value={r.materialId} onChange={(e) => patchRow(r.id, { materialId: e.target.value })} aria-label="Packaging" className={`${input} min-w-0 flex-1`}>
-                {packagingList.map((m: RawMaterialStock) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-            }
-            {...qtyProps(r.quantity, (n) => patchRow(r.id, { quantity: n }))}
-            unit={rawMaterials.find((m) => m.id === r.materialId)?.unit ?? ""}
-            cost={priceText(one(ingredientRowCost(r, ctx)), cost.unpriced, rawMaterials.find((m) => m.id === r.materialId)?.name)}
-            onRemove={() => saveRows(rows.filter((x) => x.id !== r.id))}
+        search={
+          <SearchAdd
+            placeholder="Search packaging to add…"
+            options={packagingOptions}
+            onPick={(key) => saveRows([...rows, { id: newId("ing"), materialId: key.slice(2), quantity: perBatch(product, 1) }])}
           />
-        ))}
+        }
+      >
+        {packagingRows.map((r) => {
+          const m = rawMaterials.find((x) => x.id === r.materialId);
+          return (
+            <Line
+              key={r.id}
+              name={m?.name ?? "Removed packaging"}
+              {...qtyProps(r.quantity, (n) => patchRow(r.id, { quantity: n }))}
+              unit={m?.unit ?? ""}
+              price={materialPrice(r)}
+              cost={priceText(one(ingredientRowCost(r, ctx)), cost.unpriced, m?.name)}
+              onRemove={() => saveRows(rows.filter((x) => x.id !== r.id))}
+            />
+          );
+        })}
       </Section>
 
       <Section
@@ -304,6 +289,7 @@ function Section({
   emptyText,
   count,
   note,
+  search,
   children,
 }: {
   title: string;
@@ -316,6 +302,8 @@ function Section({
   emptyText?: string;
   count: number;
   note?: string;
+  /** A search bar for adding, shown under the list. */
+  search?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -329,6 +317,7 @@ function Section({
       {hint && <p className="-mt-1.5 text-[12.5px] text-muted-foreground">{hint}</p>}
       {count === 0 && emptyText ? <p className="text-[13px] text-muted-foreground">{emptyText}</p> : children}
       {note && <p className="text-[12.5px] text-muted-foreground">{note}</p>}
+      {search}
       {addLabel && onAdd && (
         <button
           type="button"
@@ -343,38 +332,119 @@ function Section({
   );
 }
 
-/** One recipe line: what, how much, in what, what it costs a batch. */
+/** One recipe line: what (picked, not typed), how much goes into one, its price, and what that comes to. */
 function Line({
-  select,
+  name,
+  tag,
   qty,
   onQty,
   unit,
+  price,
   cost,
   onRemove,
 }: {
-  select: React.ReactNode;
+  name: string;
+  tag?: string;
   qty: number;
   onQty: (n: number) => void;
   unit: string;
+  /** The material's price per unit, as the Raw materials tab has it — read-only. */
+  price: string;
   cost: string;
   onRemove: () => void;
 }) {
   const field = useNumericDraft(qty, onQty);
   return (
-    <div className="flex items-center gap-2">
-      {select}
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <span className="min-w-[140px] flex-1 text-[14px] font-medium">
+        {name}
+        {tag && <span className="ml-1.5 rounded-full bg-secondary px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground">{tag}</span>}
+      </span>
       <input
         inputMode="decimal"
-        aria-label="How much"
+        aria-label={`How much ${name} goes into one`}
         value={field.value}
         onChange={(e) => field.onChange(e.target.value.replace(/[^0-9.]/g, ""))}
         className={`${input} w-20 shrink-0 text-right`}
       />
       <span className="w-10 shrink-0 text-[12.5px] text-muted-foreground">{unit}</span>
-      <span className="hidden w-24 shrink-0 text-right text-[13px] tabular-nums min-[480px]:block">{cost}</span>
-      <button type="button" onClick={onRemove} aria-label="Remove" className="flex h-10 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-danger">
+      <span className="w-28 shrink-0 text-[12.5px] text-muted-foreground tabular-nums">{price}</span>
+      <span className="w-20 shrink-0 text-right text-[13.5px] font-semibold tabular-nums">{cost}</span>
+      <button type="button" onClick={onRemove} aria-label={`Remove ${name}`} className="flex h-10 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-danger">
         <Trash2 className="h-4 w-4" />
       </button>
+    </div>
+  );
+}
+
+interface Option {
+  key: string;
+  label: string;
+  hint: string;
+  group?: string;
+}
+
+/** Type to find a material; pick one to add it. The price comes with it — nothing to type but the name. */
+function SearchAdd({ placeholder, options, onPick }: { placeholder: string; options: Option[]; onPick: (key: string) => void }) {
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const needle = q.trim().toLowerCase();
+  const matches = options.filter((o) => !needle || o.label.toLowerCase().includes(needle)).slice(0, 8);
+
+  function pick(key: string) {
+    onPick(key);
+    setQ("");
+    setOpen(false);
+  }
+
+  return (
+    <div className="relative">
+      <label className="flex h-10 items-center gap-2 rounded-lg border border-dashed border-line/30 px-3 focus-within:border-solid focus-within:border-cacao">
+        <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <input
+          value={q}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && matches[0]) {
+              e.preventDefault();
+              pick(matches[0].key);
+            }
+            if (e.key === "Escape") setOpen(false);
+          }}
+          placeholder={placeholder}
+          aria-label={placeholder}
+          className="w-full bg-transparent text-[14px] outline-none placeholder:text-muted-foreground"
+        />
+      </label>
+      {open && (
+        <ul className="absolute left-0 right-0 top-11 z-20 max-h-72 overflow-y-auto rounded-lg border border-line/20 bg-card py-1 shadow-lg">
+          {matches.length === 0 ? (
+            <li className="px-3 py-2 text-[13px] text-muted-foreground">{options.length === 0 ? "Everything is already in the recipe." : "Nothing matches — add it on the Raw materials or Packaging tab first."}</li>
+          ) : (
+            matches.map((o, i) => (
+              <li key={o.key}>
+                {o.group && o.group !== matches[i - 1]?.group && (
+                  <div className="px-3 pb-0.5 pt-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{o.group}</div>
+                )}
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => pick(o.key)}
+                  className="flex w-full items-baseline justify-between gap-3 px-3 py-2 text-left text-[14px] hover:bg-secondary"
+                >
+                  <span className="font-medium">{o.label}</span>
+                  <span className="shrink-0 text-[12.5px] text-muted-foreground tabular-nums">{o.hint}</span>
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
+      )}
     </div>
   );
 }

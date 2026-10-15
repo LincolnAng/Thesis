@@ -8,6 +8,8 @@ import { allStandings, kindForGroup, usedBy, type MaterialGroup } from "@/lib/su
 import { isRawCacao } from "@/lib/summary/cacao";
 import { CARD_GRADIENTS, ItemIcon } from "@/lib/summary/item-icons";
 import { formatNumber, formatPrice } from "@/lib/format";
+import { useCostContext } from "@/lib/summary/use-cost-context";
+import { getUnitCost } from "@/lib/summary/cost-engine";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -19,6 +21,9 @@ import { Button } from "@/components/ui/button";
  * itself to roasting, and drives the cost of the recipe; the other is counted in pieces and
  * loses nothing. Splitting them is not tidying — it is what lets roasting loss apply to the
  * things it actually applies to.
+ *
+ * The price on each card is the one every recipe is costed at — Costing's recipes only pick a
+ * material, never price it.
  *
  * Both lists are read from her purchases. On hand is what she bought minus what her batches
  * used; the price is the average of what is still on the shelf. Neither is a number anybody has
@@ -101,6 +106,12 @@ export function MaterialsPanel({ group }: { group: MaterialGroup }) {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const utilization = cacaoUtilizationPct(businessSettings) / 100;
+  // The one price per material — exactly what every recipe is costed at (cost-engine).
+  const ctx = useCostContext();
+  const priceOf = (id: string) => {
+    const u = getUnitCost(id, ctx.rawMaterials, ctx.supplierPrices, ctx.entries, ctx.products, ctx.cacaoUtilization);
+    return u.source === "none" ? null : u.cost;
+  };
 
   const rows = useMemo(
     () => allStandings(entries, products, rawMaterials, utilization).filter((r) => r.group === group),
@@ -142,9 +153,9 @@ export function MaterialsPanel({ group }: { group: MaterialGroup }) {
 
                 <div className="flex w-full items-center justify-between gap-2 text-[13px]">
                   <span className="font-bold">
-                    {r.avgCost !== null ? (
+                    {priceOf(r.material.id) !== null ? (
                       <>
-                        {formatPrice(r.avgCost)}
+                        {formatPrice(priceOf(r.material.id) ?? 0)}
                         <span className="text-[11px] font-normal text-muted-foreground">{` / ${r.material.unit}`}</span>
                       </>
                     ) : (
