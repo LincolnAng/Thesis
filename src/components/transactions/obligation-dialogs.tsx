@@ -198,6 +198,7 @@ export function PaymentLine({
   const [date, setDate] = useState(payment.date);
   const [method, setMethod] = useState<"cash" | "bank_transfer">(payment.method === "bank_transfer" ? "bank_transfer" : "cash");
   const [bank, setBank] = useState(payment.bankName ?? "");
+  const [note, setNote] = useState(payment.note ?? "");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -250,7 +251,7 @@ export function PaymentLine({
             disabled={saving || !(typed > 0)}
             onClick={() =>
               void finish(
-                editPaymentOn(entry.id, payment.id, { amount: typed, date, method, bankName: method === "bank_transfer" ? bank.trim() : null, note: payment.note ?? "" }),
+                editPaymentOn(entry.id, payment.id, { amount: typed, date, method, bankName: method === "bank_transfer" ? bank.trim() : null, note: note.trim() }),
                 `Corrected the payment to ${formatPeso(typed)}.`,
               )
             }
@@ -261,20 +262,19 @@ export function PaymentLine({
             <X className="h-4 w-4" />
           </button>
         </div>
+        <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" aria-label="Note" className="h-8 text-[13px]" />
         {error && <ErrorLine text={error} />}
       </li>
     );
   }
 
   return (
-    <li className="flex flex-col gap-1" onClick={(e) => mode !== "view" && e.stopPropagation()}>
-      <div className="flex items-center justify-between gap-4">
-        <span className="text-muted-foreground">
-          {day} · {how}
-          {payment.note ? ` · ${payment.note}` : ""}
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="font-semibold tabular-nums">{formatPeso(payment.amount)}</span>
+    <li className="flex flex-col gap-0.5 py-1" onClick={(e) => mode !== "view" && e.stopPropagation()}>
+      <div className="grid grid-cols-[96px_minmax(0,1fr)_auto_68px] items-center gap-x-4">
+        <span className="text-muted-foreground tabular-nums">{day}</span>
+        <span className="truncate">{how}</span>
+        <span className="text-right font-semibold tabular-nums">{formatPeso(payment.amount)}</span>
+        <span className="flex items-center justify-end gap-0.5">
           {canChange && mode === "view" && (
             <>
               <button type="button" onClick={(e) => (e.stopPropagation(), setMode("edit"))} aria-label="Correct this payment" title="Correct this payment" className={iconBtn}>
@@ -287,6 +287,7 @@ export function PaymentLine({
           )}
         </span>
       </div>
+      {payment.note && <p className="pl-[112px] text-[12.5px] italic text-muted-foreground">“{payment.note}”</p>}
       {mode === "remove" && (
         <div className="flex flex-wrap items-center justify-end gap-2 rounded-lg bg-danger/5 px-2 py-1.5">
           <span className="text-[12.5px]">Remove this {formatPeso(payment.amount)} payment? The balance goes back up by that much.</span>

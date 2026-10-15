@@ -138,7 +138,24 @@ const priceTypeOf = (e: Entry) => (e.type === "SALE" && e.priceType && e.priceTy
 const hasDetails = (e: Entry, showPayment: boolean) =>
   productLines(e).length > 1 || priceTypeOf(e) !== null || Boolean(e.notes) || (showPayment && hasPayment(e) && (obligationKind(e) !== null || methodOf(e).method !== null));
 
-/** What opens under an order: the price type, the payments on it, and a note. */
+/** A titled block in an opened row. */
+function Block({ title, aside, children }: { title: string; aside?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section className="flex min-w-0 flex-col gap-1.5">
+      <div className="flex items-baseline justify-between gap-3 border-b border-line/15 pb-1.5">
+        <h4 className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{title}</h4>
+        {aside}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/**
+ * What opens under an order, as two even columns: on the left the products (name, quantity, its
+ * share of the amount), the price type and the transaction's note; on the right the payments —
+ * the due date, each payment with its note, and what can be done next.
+ */
 function Details({ e, showPayment, owed, onPay }: { e: Entry; showPayment: boolean; owed?: OwedActions; onPay: () => void }) {
   const kind = showPayment ? obligationKind(e) : null;
   const info = kind ? obligationInfo(e, new Date()) : null;
@@ -146,65 +163,63 @@ function Details({ e, showPayment, owed, onPay }: { e: Entry; showPayment: boole
   const priceType = priceTypeOf(e);
   const faint = "text-muted-foreground";
   const items = productLines(e);
+  const spot = showPayment && !kind && hasPayment(e) ? methodOf(e) : null;
+  const button = "inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line/25 px-3 text-[13px] font-medium transition hover:border-cacao hover:text-cacao";
 
   return (
-    <div className="flex flex-col gap-3 px-4 py-3 text-[13px] min-[800px]:flex-row min-[800px]:flex-wrap min-[800px]:gap-x-12">
-      {items.length > 1 && (
-        <ul className="flex min-w-[260px] flex-col gap-0.5">
-          {items.map((l, i) => (
-            <li key={i} className="flex items-baseline justify-between gap-6">
-              <span>
-                {l.name}
-                <span className={faint}>{l.qty != null ? ` × ${l.qty}` : ""}</span>
-              </span>
-              <span className="font-semibold tabular-nums">{l.amount != null ? formatPeso(l.amount) : ""}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-      {priceType && (
-        <div>
-          <span className="rounded-full bg-cacao/10 px-2 py-0.5 text-[11.5px] font-semibold text-cacao">{priceType} price</span>
-        </div>
-      )}
+    <div className="grid grid-cols-1 gap-x-12 gap-y-5 px-5 py-4 text-[13px] min-[900px]:grid-cols-2">
+      <div className="flex flex-col gap-5">
+        <Block title={items.length > 1 ? `Products · ${items.length}` : "Product"} aside={priceType && <span className="rounded-full bg-cacao/10 px-2 py-0.5 text-[11px] font-semibold text-cacao">{priceType} price</span>}>
+          <ul className="flex flex-col">
+            {items.map((l, i) => (
+              <li key={i} className="grid grid-cols-[minmax(0,1fr)_48px_88px] items-center gap-x-4 py-1">
+                <span className="truncate">{l.name || "—"}</span>
+                <span className={`text-right tabular-nums ${faint}`}>{l.qty != null ? `× ${l.qty}` : ""}</span>
+                <span className="text-right font-semibold tabular-nums">{l.amount != null ? formatPeso(l.amount) : ""}</span>
+              </li>
+            ))}
+          </ul>
+        </Block>
+        {e.notes && (
+          <Block title="Note">
+            <p className="whitespace-pre-wrap">{e.notes}</p>
+          </Block>
+        )}
+      </div>
 
-      {showPayment && !kind && hasPayment(e) && methodOf(e).method && (
-        <div className={faint}>
-          Paid by {methodOf(e).method === "bank_transfer" ? `bank transfer${methodOf(e).bank ? ` · ${methodOf(e).bank}` : ""}` : "cash"}
-        </div>
-      )}
-
-      {kind && info && (
-        <div className="flex min-w-[260px] flex-col gap-1">
-          <span className={info.status === "overdue" || info.status === "defaulted" ? "font-semibold text-danger" : "font-medium"}>{dueLine(e)}</span>
+      {kind && info ? (
+        <Block
+          title="Payments"
+          aside={<span className={`text-[12.5px] ${info.status === "overdue" || info.status === "defaulted" ? "font-semibold text-danger" : faint}`}>{dueLine(e)}</span>}
+        >
           {payments.length > 0 ? (
-            <ul className="flex flex-col gap-0.5">
+            <ul className="flex flex-col">
               {payments.map((p) => (
                 <PaymentLine key={p.id} entry={e} payment={p} canChange={!!owed} onChanged={(m) => owed?.onSaved(m)} />
               ))}
             </ul>
           ) : (
-            <span className={faint}>No payments yet.</span>
+            <p className={`py-1 ${faint}`}>No payments yet.</p>
           )}
           {e.dueDateHistory?.map((c, i) => (
-            <span key={`due-${i}`} className={faint}>
+            <p key={`due-${i}`} className={faint}>
               Due date moved {c.from ? `from ${formatDate(c.from)} ` : ""}to {c.to ? formatDate(c.to) : "none"}
               {c.reason ? ` — ${c.reason}` : ""}
-            </span>
+            </p>
           ))}
           {info.wasDefaulted && (
-            <span className="font-semibold text-danger">
+            <p className="font-semibold text-danger">
               Marked as defaulted{e.defaultedAt ? ` on ${formatDate(e.defaultedAt)}` : ""}
               {info.status === "settled" ? " — since paid in full" : ""}
-            </span>
+            </p>
           )}
           {owed && info.status !== "settled" && (
-            <div className="mt-1 flex flex-wrap gap-2">
-              <button type="button" onClick={onPay} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line/25 px-3 text-[13px] font-medium transition hover:border-cacao hover:text-cacao">
+            <div className="mt-1.5 flex flex-wrap gap-2">
+              <button type="button" onClick={onPay} className={button}>
                 <HandCoins className="h-4 w-4" />
                 Log Payment
               </button>
-              <button type="button" onClick={() => owed.onMoveDue(e)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line/25 px-3 text-[13px] font-medium transition hover:border-cacao hover:text-cacao">
+              <button type="button" onClick={() => owed.onMoveDue(e)} className={button}>
                 Change due date
               </button>
               {info.status === "overdue" && (
@@ -214,10 +229,14 @@ function Details({ e, showPayment, owed, onPay }: { e: Entry; showPayment: boole
               )}
             </div>
           )}
-        </div>
-      )}
-
-      {e.notes && <p className={`min-w-[260px] ${faint}`}>{e.notes}</p>}
+        </Block>
+      ) : spot?.method ? (
+        <Block title="Payment">
+          <p className="py-1">
+            Paid on the spot · {spot.method === "bank_transfer" ? `Bank transfer${spot.bank ? ` · ${spot.bank}` : ""}` : "Cash"}
+          </p>
+        </Block>
+      ) : null}
     </div>
   );
 }

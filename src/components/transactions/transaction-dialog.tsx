@@ -893,6 +893,7 @@ export function TransactionDialog({
                       {e.payments.map((p, i) => (
                         <li key={i}>
                           {formatDate(p.date)} — {formatPeso(p.amount)} · {describePaymentMethod(p.method, p.bankName) || "Not recorded"}
+                          {p.note && <span className="block pl-3 italic">“{p.note}”</span>}
                         </li>
                       ))}
                     </ul>
