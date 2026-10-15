@@ -12,7 +12,10 @@ import type { Entry } from "@/lib/store/types";
  * Every recorded transaction, one row each, in one fixed set of columns — the same for sales,
  * expenses, receivables and payables, so what is owed reads exactly like what was paid:
  *
- *   Date · Customer / Supplier · Product · Qty · Amount · Payment (mode · bank) · Owed · Deadline · Recorded by
+ *   Date · Customer / Supplier · Product · Qty · Amount · Payment (mode · bank) · Deadline · Recorded by
+ *
+ * What is still owed on a receivable or payable sits under its Amount: the balance, the way to log a
+ * payment, and a short pill (Recv / Pay, with an arrow in or out) saying which it is.
  *
  * An order of several products is still one row: its products are listed top to bottom in the
  * Product cell with their quantities lined up beside them, and the Amount is the order's total.
@@ -232,7 +235,7 @@ export function TransactionTable({
   // name text wraps within a sensible width instead of stretching the table.
   const th = "whitespace-nowrap px-3 py-2.5 text-center text-[11px] font-bold uppercase tracking-wide text-muted-foreground";
   const td = "px-3 py-2 text-center align-middle";
-  const colCount = showPayment ? 10 : 7;
+  const colCount = showPayment ? 9 : 7;
 
   const head = (label: string, key?: SortKey) => (
     <th scope="col" className={th}>
@@ -267,7 +270,6 @@ export function TransactionTable({
             {head("Qty")}
             {head("Amount", "amount")}
             {showPayment && head("Payment")}
-            {showPayment && head("Owed")}
             {showPayment && head("Deadline", "due")}
             {head("Recorded by")}
             <th scope="col" className={th}>
@@ -295,20 +297,12 @@ export function TransactionTable({
             const blankSlot = more > 0 ? [<span key="blank" />] : [];
             const amountText = (v: number | null) =>
               v == null ? "—" : `${e.type === "WASTE" ? "" : moneyIn ? "+" : "−"}${formatPeso(v)}`;
+            // Under the amount: what is left, the way to log a payment, and which kind of debt this is.
             const owedNode =
               kind && info ? (
-                <div className="flex flex-col items-center gap-0.5">
+                <div className="mt-1 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 font-normal">
                   <span
-                    title={kind === "receivable" ? "A customer owes us this" : "We owe a supplier this"}
-                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide ${
-                      kind === "receivable" ? "bg-success/10 text-success" : "bg-[#9A6B12]/10 text-[#9A6B12]"
-                    }`}
-                  >
-                    {kind === "receivable" ? <ArrowDownLeft className="h-3 w-3" strokeWidth={2.6} /> : <ArrowUpRight className="h-3 w-3" strokeWidth={2.6} />}
-                    {kind === "receivable" ? "Receivable" : "Payable"}
-                  </span>
-                  <span
-                    className={`font-semibold tabular-nums ${
+                    className={`text-[12px] font-semibold tabular-nums ${
                       info.remaining > 0 ? (info.status === "overdue" || info.status === "defaulted" ? "text-danger" : "text-[var(--status-warning)]") : "text-success"
                     }`}
                   >
@@ -323,11 +317,20 @@ export function TransactionTable({
                       }}
                       aria-label={kind === "receivable" ? "Log a payment received" : "Log a payment made"}
                       title={kind === "receivable" ? "Log a payment received" : "Log a payment made"}
-                      className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
                     >
                       <HandCoins className="h-4 w-4" />
                     </button>
                   )}
+                  <span
+                    title={kind === "receivable" ? "Receivable: a customer owes us this" : "Payable: we owe a supplier this"}
+                    className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wide ${
+                      kind === "receivable" ? "bg-success/10 text-success" : "bg-[#9A6B12]/10 text-[#9A6B12]"
+                    }`}
+                  >
+                    {kind === "receivable" ? <ArrowDownLeft className="h-3 w-3" strokeWidth={2.6} /> : <ArrowUpRight className="h-3 w-3" strokeWidth={2.6} />}
+                    {kind === "receivable" ? "Recv" : "Pay"}
+                  </span>
                 </div>
               ) : null;
             const paymentNode = !hasPayment(e) ? (
@@ -408,10 +411,9 @@ export function TransactionTable({
                     ) : (
                       amountText(e.amount)
                     )}
+                    {owedNode}
                   </td>
                   {showPayment && <td className={`${td} whitespace-nowrap text-[12.5px]`}>{paymentNode}</td>}
-                  {/* What is still owed, one column for both directions, each labelled so it can't be misread */}
-                  {showPayment && <td className={`${td} text-[12.5px]`}>{owedNode ?? <NA />}</td>}
                   {showPayment && (
                     <td className={`${td} text-[12.5px]`}>
                       {kind ? (
