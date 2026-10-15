@@ -337,15 +337,19 @@ export function TransactionTable({
     });
   }, [rows, sort]);
 
-  // A real table, sized to its contents, every cell centred under its heading and ruled off from
-  // its neighbours. Long item and name text wraps within a sensible width instead of stretching it.
+  // A real table, every cell centred under its heading and ruled off from its neighbours. Its
+  // columns are set widths, not sized to whatever rows are showing, so changing the month, the
+  // filter or the sort, or opening a row, never shifts a column: the frame stays put and only
+  // its contents change. Product takes whatever width is left; long text is cut off with "…".
   const rule = "border-r border-line/15 last:border-r-0";
   const th = `px-3 py-2.5 text-center text-[11px] font-bold uppercase leading-tight tracking-wide text-muted-foreground ${rule}`;
   const td = `px-3 py-3 text-center align-middle ${rule}`;
   const colCount = showPayment ? 10 : 8;
 
+  const widths = [108, 140, 96, null, 52, 100, ...(showPayment ? [104, 156] : []), 92, showPayment ? 164 : 80];
+
   const head = (label: string, key?: SortKey) => (
-    <th scope="col" className={`${th} ${label.length > 12 ? "max-w-[96px]" : "whitespace-nowrap"}`}>
+    <th scope="col" className={th}>
       {key ? (
         <button
           type="button"
@@ -368,7 +372,12 @@ export function TransactionTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="mx-auto w-full border-collapse text-[13px]">
+      <table className={`w-full table-fixed border-collapse text-[13px] ${showPayment ? "min-w-[1150px]" : "min-w-[820px]"}`}>
+        <colgroup>
+          {widths.map((w, i) => (
+            <col key={i} style={w ? { width: w } : undefined} />
+          ))}
+        </colgroup>
         <thead className="border-b border-line/15 bg-secondary">
           <tr>
             {head("Date", "date")}
@@ -409,14 +418,14 @@ export function TransactionTable({
                   className={`group border-b border-line/20 bg-card ${expandable ? "cursor-pointer hover:bg-secondary/40" : ""}`}
                 >
                   <td className={`${td} whitespace-nowrap`}>{formatDate(e.timestamp)}</td>
-                  <td className={`${td} max-w-[180px]`}>
+                  <td className={td} title={e.counterparty ?? undefined}>
                     <span className="block truncate font-medium">{e.counterparty}</span>
                     {carried && <div className="text-[11px] font-semibold text-[var(--status-warning)]">Carried from {carried}</div>}
                   </td>
-                  <td className={`${td} whitespace-nowrap`}>{typeLabel(e)}</td>
+                  <td className={`${td} truncate`}>{typeLabel(e)}</td>
                   {/* Every product in the order, one per line, each with its own quantity on the same line next door. */}
                   <td
-                    className={`${td} max-w-[260px]`}
+                    className={td}
                     title={items.map((l) => l.name).join(", ") + (e.type === "EXPENSE" && e.category ? ` · ${EXPENSE_CATEGORY_LABELS[e.category] ?? e.category}` : "")}
                   >
                     {items.map((l, j) => (
@@ -436,9 +445,9 @@ export function TransactionTable({
                     {e.amount != null ? formatPeso(e.amount) : null}
                   </td>
                   {showPayment && (
-                    <td className={`${td} whitespace-nowrap`}>
+                    <td className={td}>
                       {paidBy(e, showPayment).map((m) => (
-                        <span key={`${m.method}${m.bank}`} className="block leading-6" title={m.method === "bank_transfer" ? "Bank transfer" : undefined}>
+                        <span key={`${m.method}${m.bank}`} className="block truncate leading-6" title={m.method === "bank_transfer" ? `Bank transfer${m.bank ? ` · ${m.bank}` : ""}` : undefined}>
                           {m.method === "bank_transfer" ? (m.bank ?? "Bank transfer") : "Cash"}
                         </span>
                       ))}
@@ -476,7 +485,9 @@ export function TransactionTable({
                       )}
                     </td>
                   )}
-                  <td className={`${td} whitespace-nowrap`}>{e.loggedByName}</td>
+                  <td className={`${td} truncate`} title={e.loggedByName ?? undefined}>
+                    {e.loggedByName}
+                  </td>
                   {/* The same three actions in the same places on every row; one that doesn't apply is shaded out. */}
                   <td className="px-2 py-1.5 text-center align-middle">
                     <div className="flex items-start justify-center gap-0.5">
