@@ -20,11 +20,14 @@ export function SupplierNameInput({
   value,
   onChange,
   className,
+  inputClassName,
   placeholder = "Shop or supplier",
 }: {
   value: string | null;
   onChange: (name: string | null) => void;
   className?: string;
+  /** Styles the text box itself. `className` is only the wrapper the suggestion list hangs from. */
+  inputClassName?: string;
   placeholder?: string;
 }) {
   const { suppliers } = useStore();
@@ -38,7 +41,7 @@ export function SupplierNameInput({
   return (
     <div className={cn("relative", className)}>
       <Input
-        className="h-9"
+        className={cn("h-9", inputClassName)}
         value={value ?? ""}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value || null)}

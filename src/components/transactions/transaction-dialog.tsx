@@ -595,7 +595,7 @@ export function TransactionDialog({
                 <span className={label}>
                   Buyer name <span className="text-danger">*</span>
                 </span>
-                <CustomerNameInput value={customer} onChange={setCustomer} className={field} placeholder="Who bought it" />
+                <CustomerNameInput value={customer} onChange={setCustomer} inputClassName={field} placeholder="Who bought it" />
               </label>
             </>
           )}
@@ -630,7 +630,7 @@ export function TransactionDialog({
                 <span className={label}>
                   Paid to <span className="text-danger">*</span>
                 </span>
-                <SupplierNameInput value={party} onChange={setParty} className={field} placeholder="Shop or supplier" />
+                <SupplierNameInput value={party} onChange={setParty} inputClassName={field} placeholder="Shop or supplier" />
               </label>
             </>
           )}
@@ -662,7 +662,7 @@ export function TransactionDialog({
               </div>
               <label className="flex flex-col gap-1">
                 <span className={label}>Bought from</span>
-                <SupplierNameInput value={party} onChange={setParty} className={field} placeholder="Seller (optional)" />
+                <SupplierNameInput value={party} onChange={setParty} inputClassName={field} placeholder="Seller (optional)" />
               </label>
             </>
           )}
