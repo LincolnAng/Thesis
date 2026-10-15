@@ -2,10 +2,10 @@
 
 import { Fragment, useMemo, useState } from "react";
 import { ArrowDownLeft, ArrowUpRight, HandCoins, History as HistoryIcon, Pencil } from "lucide-react";
-import { EXPENSE_CATEGORY_LABELS, PRICE_TYPE_LABELS, describePaymentMethod, formatDate, formatPeso } from "@/lib/format";
+import { EXPENSE_CATEGORY_LABELS, PRICE_TYPE_LABELS, formatDate, formatPeso } from "@/lib/format";
 import { dueInfo, methodOf, obligationInfo, obligationKind, outstanding, paymentsOf } from "@/lib/transactions/ledger";
 import { lineSubtotal, orderTotal } from "@/lib/transactions/order-lines";
-import { QuickPay } from "@/components/transactions/obligation-dialogs";
+import { PaymentLine, QuickPay } from "@/components/transactions/obligation-dialogs";
 import type { Entry } from "@/lib/store/types";
 
 /**
@@ -146,14 +146,8 @@ function Details({ e, showPayment, owed, onPay }: { e: Entry; showPayment: boole
         <div className="flex min-w-[260px] flex-col gap-1">
           {payments.length > 0 ? (
             <ul className="flex flex-col gap-0.5">
-              {payments.map((p, i) => (
-                <li key={i} className="flex items-baseline justify-between gap-6">
-                  <span className={faint}>
-                    {formatDate(p.date)} · {describePaymentMethod(p.method, p.bankName) || "Not recorded"}
-                    {p.note ? ` · ${p.note}` : ""}
-                  </span>
-                  <span className="font-semibold tabular-nums">{formatPeso(p.amount)}</span>
-                </li>
+              {payments.map((p) => (
+                <PaymentLine key={p.id} entry={e} payment={p} canChange={!!owed} onChanged={(m) => owed?.onSaved(m)} />
               ))}
             </ul>
           ) : (
@@ -197,8 +191,9 @@ function Details({ e, showPayment, owed, onPay }: { e: Entry; showPayment: boole
 
 /** What can be done to an owed row. Executives only. */
 export interface OwedActions {
-  /** A payment was saved: the message to tell the person. */
-  onSaved: (message: string) => void;
+  /** A payment was saved, corrected or taken back: the message to tell the person, and — right
+   *  after a new one — a way to take it back. */
+  onSaved: (message: string, undo?: () => Promise<string>) => void;
   onDefault: (entry: Entry) => void;
   onMoveDue: (entry: Entry) => void;
 }

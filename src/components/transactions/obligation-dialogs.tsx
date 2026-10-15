@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
+import { Pencil, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -9,9 +9,9 @@ import { Label } from "@/components/ui/label";
 import { ChipGroup } from "@/components/ui/chip-group";
 import { COMMON_BANKS } from "@/components/transactions/method-fields";
 import { formatPeso } from "@/lib/format";
-import { markDefaulted, moveDueDate, recordPaymentOn } from "@/lib/transactions/actions";
+import { editPaymentOn, markDefaulted, moveDueDate, recordPaymentOn, removePaymentOn } from "@/lib/transactions/actions";
 import { PAYMENT_TERMS, dayOf, dueFromTerms, obligationInfo, termsLabel, todayOf, type ObligationKind } from "@/lib/transactions/ledger";
-import type { Entry } from "@/lib/store/types";
+import type { Entry, PaymentRecord } from "@/lib/store/types";
 
 const WORDS: Record<ObligationKind, { who: string; money: string; verb: string; done: string }> = {
   receivable: { who: "Customer", money: "received", verb: "Record money received", done: "Received" },
@@ -43,7 +43,8 @@ export function QuickPay({
   kind: ObligationKind;
   remaining: number;
   onClose: () => void;
-  onSaved: (message: string) => void;
+  /** The message to show, and a way to take the payment back if it was a mistake. */
+  onSaved: (message: string, undo?: () => Promise<string>) => void;
 }) {
   const w = WORDS[kind];
   const incoming = kind === "receivable";
@@ -77,10 +78,19 @@ export function QuickPay({
     if (!confirmed) {
       return setError("Not saved yet — check the internet connection. It keeps trying, so please don't enter it twice.");
     }
+    const newId = result.entry.payments?.at(-1)?.id;
+    const amount = typed;
     onSaved(
       result.remaining > 0
-        ? `${w.done} ${formatPeso(typed)}. ${formatPeso(result.remaining)} is still ${incoming ? "owed to you" : "owed by you"}.`
-        : `${w.done} ${formatPeso(typed)}. This is now paid in full.`,
+        ? `${w.done} ${formatPeso(amount)}. ${formatPeso(result.remaining)} is still ${incoming ? "owed to you" : "owed by you"}.`
+        : `${w.done} ${formatPeso(amount)}. This is now paid in full.`,
+      newId
+        ? async () => {
+            const back = removePaymentOn(entry.id, newId);
+            if (!back.ok) return back.reason;
+            return (await back.saved) ? `Took back the ${formatPeso(amount)} payment.` : "Not saved yet — check the internet connection.";
+          }
+        : undefined,
     );
     onClose();
   }
@@ -134,6 +144,138 @@ export function QuickPay({
       </div>
       {error && <ErrorLine text={error} />}
     </div>
+  );
+}
+
+/**
+ * One payment in an obligation's history. A mistake — a typo in the amount, the wrong day, cash
+ * that was really a transfer — is fixed here: correct it in place, or remove it. Either way the
+ * balance follows, and the ledger checks a correction exactly as it checks a new payment.
+ */
+export function PaymentLine({
+  entry,
+  payment,
+  canChange,
+  onChanged,
+}: {
+  entry: Entry;
+  payment: PaymentRecord;
+  /** Executives, on an obligation they can act on. */
+  canChange: boolean;
+  onChanged: (message: string) => void;
+}) {
+  const [mode, setMode] = useState<"view" | "edit" | "remove">("view");
+  const [amount, setAmount] = useState(String(payment.amount));
+  const [date, setDate] = useState(payment.date);
+  const [method, setMethod] = useState<"cash" | "bank_transfer">(payment.method === "bank_transfer" ? "bank_transfer" : "cash");
+  const [bank, setBank] = useState(payment.bankName ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const how = payment.method === "bank_transfer" ? `Bank transfer${payment.bankName ? ` · ${payment.bankName}` : ""}` : payment.method === "cash" ? "Cash" : "Not recorded";
+  const day = new Date(`${payment.date}T00:00:00`).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" });
+  const iconBtn = "flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao";
+
+  async function finish(result: ReturnType<typeof removePaymentOn>, message: string) {
+    if (!result.ok) return setError(result.reason);
+    setSaving(true);
+    const ok = await result.saved;
+    setSaving(false);
+    if (!ok) return setError("Not saved yet — check the internet connection and try again.");
+    setMode("view");
+    onChanged(message);
+  }
+
+  if (mode === "edit") {
+    const typed = Number(amount.replace(/[^0-9.]/g, ""));
+    const seg = (on: boolean) => `h-8 rounded-md px-2.5 text-[12.5px] font-semibold ${on ? "bg-cacao text-ivory" : "text-muted-foreground hover:bg-card"}`;
+    return (
+      <li className="flex flex-col gap-1.5 rounded-lg bg-card p-2" onClick={(e) => e.stopPropagation()}>
+        <div className="flex flex-wrap items-center gap-2">
+          <Input type="date" value={date} max={todayOf(new Date())} min={dayOf(entry.timestamp)} onChange={(e) => setDate(e.target.value)} aria-label="Day of payment" className="h-8 w-auto text-[13px]" />
+          <div className="relative">
+            <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[13px] text-muted-foreground">₱</span>
+            <Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} aria-label="Amount" className="h-8 w-28 pl-5 text-[13px] font-semibold tabular-nums" />
+          </div>
+          <div className="flex gap-0.5 rounded-lg bg-secondary p-0.5" role="radiogroup" aria-label="How it was paid">
+            <button type="button" role="radio" aria-checked={method === "cash"} onClick={() => setMethod("cash")} className={seg(method === "cash")}>
+              Cash
+            </button>
+            <button type="button" role="radio" aria-checked={method === "bank_transfer"} onClick={() => setMethod("bank_transfer")} className={seg(method === "bank_transfer")}>
+              Bank
+            </button>
+          </div>
+          {method === "bank_transfer" && (
+            <>
+              <Input list={`banks-${payment.id}`} value={bank} onChange={(e) => setBank(e.target.value)} placeholder="Which bank?" aria-label="Bank" className="h-8 w-32 text-[13px]" />
+              <datalist id={`banks-${payment.id}`}>
+                {COMMON_BANKS.map((b) => (
+                  <option key={b} value={b} />
+                ))}
+              </datalist>
+            </>
+          )}
+          <Button
+            size="sm"
+            className="h-8 px-3"
+            disabled={saving || !(typed > 0)}
+            onClick={() =>
+              void finish(
+                editPaymentOn(entry.id, payment.id, { amount: typed, date, method, bankName: method === "bank_transfer" ? bank.trim() : null, note: payment.note ?? "" }),
+                `Corrected the payment to ${formatPeso(typed)}.`,
+              )
+            }
+          >
+            {saving ? "Saving…" : "Save"}
+          </Button>
+          <button type="button" onClick={() => (setMode("view"), setError(null))} aria-label="Cancel" className={iconBtn}>
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        {error && <ErrorLine text={error} />}
+      </li>
+    );
+  }
+
+  return (
+    <li className="flex flex-col gap-1" onClick={(e) => mode !== "view" && e.stopPropagation()}>
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-muted-foreground">
+          {day} · {how}
+          {payment.note ? ` · ${payment.note}` : ""}
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="font-semibold tabular-nums">{formatPeso(payment.amount)}</span>
+          {canChange && mode === "view" && (
+            <>
+              <button type="button" onClick={(e) => (e.stopPropagation(), setMode("edit"))} aria-label="Correct this payment" title="Correct this payment" className={iconBtn}>
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+              <button type="button" onClick={(e) => (e.stopPropagation(), setMode("remove"))} aria-label="Remove this payment" title="Remove this payment" className={`${iconBtn} hover:text-danger`}>
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
+        </span>
+      </div>
+      {mode === "remove" && (
+        <div className="flex flex-wrap items-center justify-end gap-2 rounded-lg bg-danger/5 px-2 py-1.5">
+          <span className="text-[12.5px]">Remove this {formatPeso(payment.amount)} payment? The balance goes back up by that much.</span>
+          <button type="button" onClick={() => setMode("view")} className="min-h-8 rounded-lg px-2.5 text-[12.5px] font-semibold text-muted-foreground hover:bg-secondary">
+            Keep it
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => void finish(removePaymentOn(entry.id, payment.id), `Removed the ${formatPeso(payment.amount)} payment.`)}
+            className="min-h-8 rounded-lg bg-danger px-3 text-[12.5px] font-semibold text-white disabled:opacity-50"
+          >
+            {saving ? "Removing…" : "Remove"}
+          </button>
+        </div>
+      )}
+      {mode === "remove" && error && <ErrorLine text={error} />}
+    </li>
   );
 }
 

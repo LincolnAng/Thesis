@@ -2,12 +2,12 @@
 
 import { currentUser } from "@/lib/auth/current-user";
 import { getSnapshot, replaceEntryTracked } from "@/lib/store/store";
-import { addPayment, changeDueDate, confirmDefault, outstanding, type PaymentInput } from "@/lib/transactions/ledger";
+import { addPayment, changeDueDate, confirmDefault, editPayment, outstanding, removePayment, type PaymentInput } from "@/lib/transactions/ledger";
 import type { Entry } from "@/lib/store/types";
 
 /**
- * What a person can do to a receivable or payable that already exists: record a payment,
- * confirm a default, move the deadline. Each one works out the change in lib/transactions/
+ * What a person can do to a receivable or payable that already exists: record a payment (and
+ * correct or take one back), confirm a default, move the deadline. Each one works out the change in lib/transactions/
  * ledger.ts (which refuses anything that would corrupt a balance), then saves it by editing
  * the same entry — so there is one record per obligation, never a second one.
  *
@@ -36,6 +36,23 @@ export function recordPaymentOn(entryId: string, input: PaymentInput): ActionRes
   if (!entry) return { ok: false, reason: "That transaction can't be found any more." };
   const who = currentUser();
   const change = addPayment(entry, input, { id: who?.id, name: who?.name }, new Date());
+  return change.ok ? apply(entry, change.patch) : change;
+}
+
+/** Takes back a payment recorded by mistake. */
+export function removePaymentOn(entryId: string, paymentId: string): ActionResult {
+  const entry = find(entryId);
+  if (!entry) return { ok: false, reason: "That transaction can't be found any more." };
+  const change = removePayment(entry, paymentId, new Date());
+  return change.ok ? apply(entry, change.patch) : change;
+}
+
+/** Corrects a payment: its amount, day or how it was paid. */
+export function editPaymentOn(entryId: string, paymentId: string, input: PaymentInput): ActionResult {
+  const entry = find(entryId);
+  if (!entry) return { ok: false, reason: "That transaction can't be found any more." };
+  const who = currentUser();
+  const change = editPayment(entry, paymentId, input, { id: who?.id, name: who?.name }, new Date());
   return change.ok ? apply(entry, change.patch) : change;
 }
 

@@ -83,7 +83,7 @@ function TransactionsPageInner() {
   const [defaulting, setDefaulting] = useState<ObligationRow | null>(null);
   const [movingDue, setMovingDue] = useState<ObligationRow | null>(null);
   const [editBudgets, setEditBudgets] = useState(false);
-  const [notice, setNotice] = useState<{ tone: "wait" | "good" | "bad"; text: string } | null>(null);
+  const [notice, setNotice] = useState<{ tone: "wait" | "good" | "bad"; text: string; undo?: () => Promise<string> } | null>(null);
   const now = useMemo(() => new Date(), []);
 
   const ledger = useMemo(() => entries.filter((e) => LEDGER_TYPES.has(e.type)), [entries]);
@@ -402,9 +402,24 @@ function TransactionsPageInner() {
             }`}
           >
             <span>{notice.text}</span>
-            <button type="button" onClick={() => setNotice(null)} className="shrink-0 font-semibold">
-              Dismiss
-            </button>
+            <span className="flex shrink-0 items-center gap-3">
+              {notice.undo && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const undo = notice.undo!;
+                    setNotice({ tone: "wait", text: "Taking it back…" });
+                    setNotice({ tone: "good", text: await undo() });
+                  }}
+                  className="font-semibold underline underline-offset-2"
+                >
+                  Undo
+                </button>
+              )}
+              <button type="button" onClick={() => setNotice(null)} className="font-semibold">
+                Dismiss
+              </button>
+            </span>
           </div>
         )}
 
@@ -426,7 +441,7 @@ function TransactionsPageInner() {
             owed={
               exec
                 ? {
-                    onSaved: (text) => setNotice({ tone: "good", text }),
+                    onSaved: (text, undo) => setNotice({ tone: "good", text, undo }),
                     onDefault: (e) => setDefaulting(rowFor(e)),
                     onMoveDue: (e) => setMovingDue(rowFor(e)),
                   }

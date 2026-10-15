@@ -554,6 +554,48 @@ export function addPayment(e: Entry, input: PaymentInput, who: { id?: string | n
   return { ok: true, patch: { payments, amountPaid: paid, paymentStatus: wasDefaulted ? "defaulted" : "partial", settledAt: null, defaultedAt } };
 }
 
+/** What a set of payments comes to on an obligation: the running total, and whether it is settled. */
+function settleWith(e: Entry, payments: PaymentRecord[], now: Date): Partial<Entry> {
+  const total = e.amount ?? 0;
+  const paid = Math.min(total, cents(sum(payments, (p) => p.amount)));
+  const wasDefaulted = !!e.defaultedAt || e.paymentStatus === "defaulted";
+  if (payments.length > 0 && paid >= total - 0.005) {
+    return { payments, amountPaid: total, paymentStatus: "settled", settledAt: e.settledAt ?? now.toISOString() };
+  }
+  return {
+    payments: payments.length > 0 ? payments : null,
+    amountPaid: paid > 0 ? paid : null,
+    paymentStatus: wasDefaulted ? "defaulted" : paid > 0 ? "partial" : "pending",
+    settledAt: null,
+  };
+}
+
+/**
+ * Takes back one payment that was recorded by mistake. The balance goes back up by exactly that
+ * much; everything else on the obligation — its amount, due date, default — is left as it was.
+ */
+export function removePayment(e: Entry, paymentId: string, now: Date): Change {
+  if (!obligationKind(e)) return fail("Only a receivable or a payable has payments.");
+  const existing = paymentsOf(e);
+  if (!existing.some((p) => p.id === paymentId)) return fail("That payment isn't on this record any more.");
+  return { ok: true, patch: settleWith(e, existing.filter((p) => p.id !== paymentId), now) };
+}
+
+/**
+ * Corrects one payment: its amount, day or how it was paid. Checked exactly like a new payment
+ * against what was owed without it, so a correction can't overpay or pre-date the transaction.
+ * It keeps its place in the history.
+ */
+export function editPayment(e: Entry, paymentId: string, input: PaymentInput, who: { id?: string | null; name?: string | null }, now: Date): Change {
+  const removed = removePayment(e, paymentId, now);
+  if (!removed.ok) return removed;
+  const without = { ...e, ...removed.patch } as Entry;
+  const added = addPayment(without, input, who, now);
+  if (!added.ok) return added;
+  const payments = (added.patch.payments ?? []).map((p, i, all) => (i === all.length - 1 ? { ...p, id: paymentId } : p));
+  return { ok: true, patch: { ...added.patch, payments: [...payments].sort((a, b) => a.date.localeCompare(b.date)) } };
+}
+
 /**
  * Payables and receivables from before this month that are still owed — shown with the month
  * so they aren't forgotten when the calendar turns. The same entry, not a copy: settle it here

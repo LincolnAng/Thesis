@@ -5,6 +5,8 @@ import {
   cashMovements,
   changeDueDate,
   confirmDefault,
+  editPayment,
+  removePayment,
   dueFromTerms,
   entryIntegrityProblem,
   inView,
@@ -216,6 +218,42 @@ test("the server rule: payments can't exceed the amount, and a payable can't sit
   assert.equal(entryIntegrityProblem({ ...base, paymentTerm: "payable" }), "payable_must_be_an_expense");
   assert.equal(entryIntegrityProblem({ ...base, amount: -5 }), "invalid_amount");
   assert.equal(entryIntegrityProblem(base), null);
+});
+
+// ── Taking back a mistake ─────────────────────────────────────────────────
+
+test("a mistyped payment can be removed, and the balance goes back up by exactly that much", () => {
+  let e = pay(sale({ paymentTerm: "receivable", dueDate: "2026-11-01" }), 2000, "2026-10-05");
+  e = pay(e, 3000, "2026-10-12"); // settles it
+  assert.equal(obligationInfo(e, now).status, "settled");
+  const second = e.payments![1].id;
+  const r = removePayment(e, second, now);
+  assert.ok(r.ok);
+  const back = { ...e, ...(r as { patch: Partial<Entry> }).patch } as Entry;
+  assert.equal(outstanding(back), 3000);
+  assert.equal(back.payments?.length, 1);
+  assert.equal(obligationInfo(back, now).status, "partial");
+  assert.equal(summarize([back], "2026-10", now).moneyIn, 2000);
+});
+
+test("a payment can be corrected in place, checked like a new one", () => {
+  const e = pay(sale({ paymentTerm: "receivable" }), 200, "2026-10-05"); // meant ₱2,000
+  const id = e.payments![0].id;
+  const fixed = editPayment(e, id, { amount: 2000, date: "2026-10-05", method: "cash" }, me, now);
+  assert.ok(fixed.ok);
+  const next = { ...e, ...(fixed as { patch: Partial<Entry> }).patch } as Entry;
+  assert.equal(next.payments?.length, 1);
+  assert.equal(next.payments?.[0].id, id);
+  assert.equal(outstanding(next), 3000);
+  assert.equal(editPayment(e, id, { amount: 6000, date: "2026-10-05", method: "cash" }, me, now).ok, false);
+});
+
+test("an older running total can be taken back too", () => {
+  // Rows from before payments were dated carry their total in as one payment with this id.
+  const e = sale({ paymentTerm: "receivable", amountPaid: 1500, paymentStatus: "partial" });
+  const r = removePayment(e, `${e.id}-earlier`, now);
+  assert.ok(r.ok);
+  assert.equal(outstanding({ ...e, ...(r as { patch: Partial<Entry> }).patch } as Entry), 5000);
 });
 
 // ── Dates and terms ───────────────────────────────────────────────────────
