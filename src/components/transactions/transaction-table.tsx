@@ -69,8 +69,8 @@ function PaymentCell({ e }: { e: Entry }) {
           : "border-line/30 text-muted-foreground";
 
   return (
-    <div className="flex flex-col gap-0.5">
-      <div className="flex flex-wrap items-center gap-1">
+    <div className="flex flex-col items-center gap-0.5">
+      <div className="flex flex-wrap items-center justify-center gap-1">
         <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${termChip}`}>{term === "receivable" ? "Owed to us" : "We owe"}</span>
         <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusChip}`}>{STATUS_TEXT[status]}</span>
       </div>
@@ -182,13 +182,15 @@ export function TransactionTable({
     });
   }, [rows, sort]);
 
-  // Date · Type · Item · Qty sold · Customer / Supplier · Category · Amount · [Mode of payment · Payment] · Logged by · actions
-  const columns = showPayment
-    ? "grid-cols-[108px_118px_minmax(0,1.2fr)_76px_minmax(0,1fr)_110px_112px_128px_180px_96px_72px]"
-    : "grid-cols-[108px_118px_minmax(0,1.2fr)_76px_minmax(0,1fr)_110px_112px_96px_72px]";
+  // A real table, sized to its contents: every column only as wide as what's in it, so there are
+  // no wide empty gutters, and every cell centred under its heading. Long item and name text
+  // wraps within a sensible width instead of stretching the table.
+  const th = "whitespace-nowrap px-3 py-2.5 text-center text-[11px] font-bold uppercase tracking-wide text-muted-foreground";
+  const td = "px-3 py-2 text-center align-middle";
+  const colCount = showPayment ? 11 : 9;
 
-  const head = (label: string, key?: SortKey, right?: boolean) => (
-    <div className={`px-1 py-2.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground ${right ? "text-right" : ""}`}>
+  const head = (label: string, key?: SortKey) => (
+    <th scope="col" className={th}>
       {key ? (
         <button
           type="button"
@@ -202,7 +204,7 @@ export function TransactionTable({
       ) : (
         label
       )}
-    </div>
+    </th>
   );
 
   if (rows.length === 0) {
@@ -211,113 +213,126 @@ export function TransactionTable({
 
   return (
     <div className="overflow-x-auto">
-      <div className={showPayment ? "min-w-[1250px]" : "min-w-[920px]"}>
-        <div className={`grid ${columns} gap-1 border-b border-line/15 bg-secondary px-2`}>
-          {head("Date", "date")}
-          {head("Type")}
-          {head("Item")}
-          {head("Qty sold", "qty", true)}
-          {head("Customer / Supplier")}
-          {head("Category")}
-          {head("Amount", "amount", true)}
-          {showPayment && head("Mode of payment")}
-          {showPayment && head("Payment")}
-          {head("Logged by")}
-          {head("")}
-        </div>
-
-        {sorted.map((e, i) => {
-          const carried = carriedFrom?.get(e.id);
-          const overdue = showPayment && dueInfo(e, new Date()).overdue;
-          const moneyIn = e.type === "SALE" || e.type === "CAPITAL";
-          const qty = quantitySold(e);
-          const expandable = hasDetails(e, showPayment);
-          const isOpen = open.has(e.id);
-          return (
-            <Fragment key={e.id}>
-              <div
-                className={`grid ${columns} items-center gap-1 border-b border-line/5 px-2 py-2 text-[13px] ${
-                  overdue ? "bg-danger/[0.05]" : i % 2 === 0 ? "bg-card" : "bg-[#FBFAF7] dark:bg-secondary/30"
-                }`}
-              >
-                <div className="px-1">
-                  <div>{formatDate(e.timestamp)}</div>
-                  {carried && <div className="text-[11px] font-semibold text-[var(--status-warning)]">Carried from {carried}</div>}
-                </div>
-                <div className="px-1">
-                  <TypeChip e={e} />
-                </div>
-                <div className="truncate px-1" title={e.sku ?? ""}>
-                  {e.lineItems?.length ? (
-                    <span>
-                      <span className="font-semibold">{e.lineItems.length} products</span>
-                      <span className="text-muted-foreground"> · {e.lineItems.map((l) => l.name).join(", ")}</span>
-                    </span>
-                  ) : (
-                    (e.sku ?? <span className="text-muted-foreground">—</span>)
-                  )}
-                </div>
-                <div className="px-1 text-right tabular-nums">{qty ?? <span className="text-muted-foreground">—</span>}</div>
-                <div className="truncate px-1">{e.counterparty ?? <span className="text-muted-foreground">—</span>}</div>
-                <div className="truncate px-1 text-muted-foreground">{categoryOf(e)}</div>
-                <div className={`px-1 text-right font-semibold tabular-nums ${moneyIn ? "text-success" : "text-danger"}`}>
-                  {e.amount == null ? <span className="font-normal text-muted-foreground">—</span> : `${moneyIn ? "+" : "−"}${formatPeso(e.amount)}`}
-                </div>
-                {showPayment && (
-                  <div className="px-1 text-[12.5px]">
-                    {e.paymentMethod ? (
-                      <span className={`inline-block rounded-full px-2 py-0.5 font-semibold ${e.paymentMethod === "bank_transfer" ? "bg-[#3F6E8C]/10 text-[#3F6E8C]" : "bg-secondary text-foreground"}`}>
-                        {describePaymentMethod(e.paymentMethod, e.bankName)}
+      <table className="mx-auto w-full border-collapse text-[13px]">
+        <thead className="border-b border-line/15 bg-secondary">
+          <tr>
+            {head("Date", "date")}
+            {head("Type")}
+            {head("Item")}
+            {head("Qty sold", "qty")}
+            {head("Customer / Supplier")}
+            {head("Category")}
+            {head("Amount", "amount")}
+            {showPayment && head("Mode of payment")}
+            {showPayment && head("Payment")}
+            {head("Logged by")}
+            <th scope="col" className={th}>
+              <span className="sr-only">Actions</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((e, i) => {
+            const carried = carriedFrom?.get(e.id);
+            const overdue = showPayment && dueInfo(e, new Date()).overdue;
+            const moneyIn = e.type === "SALE" || e.type === "CAPITAL";
+            const qty = quantitySold(e);
+            const expandable = hasDetails(e, showPayment);
+            const isOpen = open.has(e.id);
+            return (
+              <Fragment key={e.id}>
+                <tr
+                  className={`border-b border-line/5 ${overdue ? "bg-danger/[0.05]" : i % 2 === 0 ? "bg-card" : "bg-[#FBFAF7] dark:bg-secondary/30"}`}
+                >
+                  <td className={`${td} whitespace-nowrap`}>
+                    <div>{formatDate(e.timestamp)}</div>
+                    {carried && <div className="text-[11px] font-semibold text-[var(--status-warning)]">Carried from {carried}</div>}
+                  </td>
+                  <td className={`${td} whitespace-nowrap`}>
+                    <TypeChip e={e} />
+                  </td>
+                  <td className={`${td} max-w-[220px]`} title={e.sku ?? ""}>
+                    {e.lineItems?.length ? (
+                      <span>
+                        <span className="font-semibold">{e.lineItems.length} products</span>
+                        <span className="block truncate text-[12px] text-muted-foreground">{e.lineItems.map((l) => l.name).join(", ")}</span>
                       </span>
                     ) : (
-                      <span className="text-muted-foreground">—</span>
+                      <span className="line-clamp-2">{e.sku ?? <span className="text-muted-foreground">—</span>}</span>
                     )}
-                  </div>
-                )}
-                {showPayment && (
-                  <div className="px-1">
-                    <PaymentCell e={e} />
-                  </div>
-                )}
-                <div className="truncate px-1 text-muted-foreground">{e.loggedByName ?? "—"}</div>
-                <div className="flex items-center justify-end gap-0.5">
-                  {expandable && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setOpen((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(e.id)) next.delete(e.id);
-                          else next.add(e.id);
-                          return next;
-                        })
-                      }
-                      aria-expanded={isOpen}
-                      aria-label={isOpen ? "Hide details" : "Show details"}
-                      className="flex h-11 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
-                    >
-                      {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                    </button>
+                  </td>
+                  <td className={`${td} tabular-nums`}>{qty ?? <span className="text-muted-foreground">—</span>}</td>
+                  <td className={`${td} max-w-[180px]`}>
+                    <span className="line-clamp-2">{e.counterparty ?? <span className="text-muted-foreground">—</span>}</span>
+                  </td>
+                  <td className={`${td} whitespace-nowrap text-muted-foreground`}>{categoryOf(e)}</td>
+                  <td className={`${td} whitespace-nowrap font-semibold tabular-nums ${moneyIn ? "text-success" : "text-danger"}`}>
+                    {e.amount == null ? <span className="font-normal text-muted-foreground">—</span> : `${moneyIn ? "+" : "−"}${formatPeso(e.amount)}`}
+                  </td>
+                  {showPayment && (
+                    <td className={`${td} text-[12.5px]`}>
+                      {e.paymentMethod ? (
+                        <span
+                          className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 font-semibold ${e.paymentMethod === "bank_transfer" ? "bg-[#3F6E8C]/10 text-[#3F6E8C]" : "bg-secondary text-foreground"}`}
+                        >
+                          {describePaymentMethod(e.paymentMethod, e.bankName)}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => onEdit(e)}
-                    aria-label="Change this transaction"
-                    className="flex h-11 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-              {isOpen && (
-                <div className="border-b border-line/10 bg-secondary/40">
-                  <Details e={e} showPayment={showPayment} />
-                </div>
-              )}
-            </Fragment>
-          );
-        })}
-      </div>
+                  {showPayment && (
+                    <td className={td}>
+                      <div className="flex justify-center">
+                        <PaymentCell e={e} />
+                      </div>
+                    </td>
+                  )}
+                  <td className={`${td} whitespace-nowrap text-muted-foreground`}>{e.loggedByName ?? "—"}</td>
+                  <td className="px-1 py-1 text-center align-middle">
+                    <div className="flex items-center justify-center gap-0.5">
+                      {expandable && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setOpen((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(e.id)) next.delete(e.id);
+                              else next.add(e.id);
+                              return next;
+                            })
+                          }
+                          aria-expanded={isOpen}
+                          aria-label={isOpen ? "Hide details" : "Show details"}
+                          className="flex h-11 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
+                        >
+                          {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => onEdit(e)}
+                        aria-label="Change this transaction"
+                        className="flex h-11 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                {isOpen && (
+                  <tr className="border-b border-line/10 bg-secondary/40">
+                    <td colSpan={colCount} className="text-left">
+                      <Details e={e} showPayment={showPayment} />
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

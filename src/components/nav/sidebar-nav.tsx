@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChocolateBarLogo } from "@/components/ui/chocolate-bar-logo";
 import { cn } from "@/lib/utils";
-import { NAV_ITEMS, SECONDARY_ITEMS, type NavItem } from "@/lib/nav-items";
+import { navItemsFor, SECONDARY_ITEMS, type NavItem } from "@/lib/nav-items";
 import { profileColor } from "@/lib/auth/profile-colors";
 import { useStore } from "@/lib/store/use-store";
 import { useCurrentUser, signOut } from "@/lib/auth/current-user";
@@ -59,7 +59,7 @@ export function SidebarNav() {
       </div>
 
       <nav className="flex w-full flex-col gap-1">
-        {NAV_ITEMS.map((item) => (
+        {navItemsFor(me?.role).map((item) => (
           <NavLink key={item.href} item={item} active={isActive(pathname, item.href)} />
         ))}
       </nav>

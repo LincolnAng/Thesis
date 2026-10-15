@@ -1,4 +1,5 @@
-import { ArrowLeftRight, CalendarDays, Factory, Home, Settings, Tag, Users, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, Boxes, CalendarDays, Factory, Home, Settings, Tag, Users, type LucideIcon } from "lucide-react";
+import type { Role } from "@/lib/store/types";
 
 export interface NavItem {
   href: string;
@@ -21,6 +22,16 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/production", label: "Production", icon: Factory },
   { href: "/calendar", label: "Calendar", icon: CalendarDays },
 ];
+
+/**
+ * The tabs as a profile sees them. An employee's Costing tab is the shop's inventory — what's
+ * on the shelf, product by product — with no costs, so it is called Inventory for them. Same
+ * address (/costing), same place in the bar.
+ */
+export function navItemsFor(role: Role | undefined): NavItem[] {
+  if (role === "executive") return NAV_ITEMS;
+  return NAV_ITEMS.map((item) => (item.href === "/costing" ? { ...item, label: "Inventory", icon: Boxes } : item));
+}
 
 /**
  * Not tabs: reached from the profile menu (bottom of the sidebar, last tab on phones). People

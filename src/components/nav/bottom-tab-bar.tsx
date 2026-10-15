@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogOut, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { NAV_ITEMS, SECONDARY_ITEMS } from "@/lib/nav-items";
+import { navItemsFor, SECONDARY_ITEMS } from "@/lib/nav-items";
 import { signOut, useCurrentUser } from "@/lib/auth/current-user";
 import {
   DropdownMenu,
@@ -29,7 +29,7 @@ export function BottomTabBar() {
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 flex overflow-x-auto border-t border-line/10 bg-card min-[900px]:hidden">
-      {NAV_ITEMS.map((item) => {
+      {navItemsFor(me?.role).map((item) => {
         const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
         const Icon = item.icon;
         return (
