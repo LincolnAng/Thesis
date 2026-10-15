@@ -1,10 +1,11 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import { BanknoteArrowDown, BanknoteArrowUp, Pencil } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
 import { EXPENSE_CATEGORY_LABELS, PRICE_TYPE_LABELS, describePaymentMethod, formatDate, formatPeso } from "@/lib/format";
 import { dueInfo, obligationInfo, obligationKind, outstanding, paymentsOf } from "@/lib/transactions/ledger";
 import { expandOrderLines } from "@/lib/transactions/order-lines";
+import { QuickPay } from "@/components/transactions/obligation-dialogs";
 import type { Entry } from "@/lib/store/types";
 
 /**
@@ -44,7 +45,7 @@ function NA() {
 }
 
 /** The deadline of a receivable or payable, with where it stands. */
-function Deadline({ e }: { e: Entry }) {
+function Deadline({ e, action }: { e: Entry; action?: React.ReactNode }) {
   const now = new Date();
   const info = obligationInfo(e, now);
   const due = dueInfo(e, now);
@@ -52,6 +53,7 @@ function Deadline({ e }: { e: Entry }) {
   return (
     <div className="flex flex-col items-center gap-0.5">
       <span className={bad ? "font-semibold text-danger" : "font-semibold"}>{e.dueDate ? formatDate(e.dueDate) : "No date set"}</span>
+      <div className="flex flex-wrap items-center justify-center gap-1.5">
       <span className={`text-[11.5px] ${bad ? "font-semibold text-danger" : "text-muted-foreground"}`}>
         {info.status === "settled"
           ? "Paid in full"
@@ -67,6 +69,8 @@ function Deadline({ e }: { e: Entry }) {
                       : ` · in ${due.daysLeft} day${due.daysLeft === 1 ? "" : "s"}`
               }`}
       </span>
+      {action}
+      </div>
     </div>
   );
 }
@@ -78,7 +82,7 @@ const hasDetails = (e: Entry, showPayment: boolean) =>
   priceTypeOf(e) !== null || Boolean(e.notes) || (showPayment && obligationKind(e) !== null);
 
 /** What opens under an order: the price type, the payments on it, and a note. */
-function Details({ e, showPayment, owed }: { e: Entry; showPayment: boolean; owed?: OwedActions }) {
+function Details({ e, showPayment, owed, onPay }: { e: Entry; showPayment: boolean; owed?: OwedActions; onPay: () => void }) {
   const kind = showPayment ? obligationKind(e) : null;
   const info = kind ? obligationInfo(e, new Date()) : null;
   const payments = kind ? paymentsOf(e) : [];
@@ -124,8 +128,8 @@ function Details({ e, showPayment, owed }: { e: Entry; showPayment: boolean; owe
           )}
           {owed && info.status !== "settled" && (
             <div className="mt-1 flex flex-wrap gap-2">
-              <button type="button" onClick={() => owed.onPay(e)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line/25 px-3 text-[13px] font-medium transition hover:border-cacao hover:text-cacao">
-                {kind === "receivable" ? <BanknoteArrowDown className="h-4 w-4" /> : <BanknoteArrowUp className="h-4 w-4" />}
+              <button type="button" onClick={onPay} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line/25 px-3 text-[13px] font-medium transition hover:border-cacao hover:text-cacao">
+                <Plus className="h-4 w-4" />
                 Record a payment
               </button>
               <button type="button" onClick={() => owed.onMoveDue(e)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line/25 px-3 text-[13px] font-medium transition hover:border-cacao hover:text-cacao">
@@ -148,7 +152,8 @@ function Details({ e, showPayment, owed }: { e: Entry; showPayment: boolean; owe
 
 /** What can be done to an owed row. Executives only. */
 export interface OwedActions {
-  onPay: (entry: Entry) => void;
+  /** A payment was saved: the message to tell the person. */
+  onSaved: (message: string) => void;
   onDefault: (entry: Entry) => void;
   onMoveDue: (entry: Entry) => void;
 }
@@ -179,6 +184,8 @@ export function TransactionTable({
 }) {
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 } | null>(null);
   const [open, setOpen] = useState<Set<string>>(new Set());
+  // The order whose payment form is showing under its rows.
+  const [paying, setPaying] = useState<string | null>(null);
 
   // Orders are sorted as a whole, then opened out into their products.
   const groups = useMemo(() => {
@@ -316,27 +323,35 @@ export function TransactionTable({
                     {/* The deadline and the actions belong to the whole order: one cell spanning its rows, centred. */}
                     {showPayment && first && (
                       <td rowSpan={group.length} className={`${td} text-[12.5px]`}>
-                        {kind ? <Deadline e={origin} /> : <NA />}
+                        {kind ? (
+                          <Deadline
+                            e={origin}
+                            action={
+                              owed && outstanding(origin) > 0 ? (
+                                <button
+                                  type="button"
+                                  onClick={(ev) => {
+                                    ev.stopPropagation();
+                                    setPaying(paying === origin.id ? null : origin.id);
+                                  }}
+                                  aria-label={kind === "receivable" ? "Record a payment received" : "Record a payment made"}
+                                  className="inline-flex items-center gap-0.5 rounded-full bg-cacao/10 px-2 py-0.5 text-[11.5px] font-semibold text-cacao transition hover:bg-cacao/20 active:scale-95"
+                                >
+                                  <Plus className="h-3 w-3" strokeWidth={2.4} />
+                                  Pay
+                                </button>
+                              ) : undefined
+                            }
+                          />
+                        ) : (
+                          <NA />
+                        )}
                       </td>
                     )}
                     <td className={`${td} whitespace-nowrap text-muted-foreground`}>{row.loggedByName ?? "—"}</td>
                     {first && (
                       <td rowSpan={group.length} className="px-2 py-1 text-center align-middle">
                         <div className="flex flex-col items-center gap-1">
-                          {owed && kind && outstanding(origin) > 0 && (
-                            <button
-                              type="button"
-                              onClick={(ev) => {
-                                ev.stopPropagation();
-                                owed.onPay(origin);
-                              }}
-                              aria-label={kind === "receivable" ? "Record a payment received" : "Record a payment made"}
-                              className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg border border-line/20 px-2.5 text-[12px] font-medium text-muted-foreground transition hover:border-cacao hover:text-cacao active:scale-[0.97]"
-                            >
-                              {kind === "receivable" ? <BanknoteArrowDown className="h-3.5 w-3.5" /> : <BanknoteArrowUp className="h-3.5 w-3.5" />}
-                              Record a payment
-                            </button>
-                          )}
                           <div className="flex items-center justify-center gap-0.5">
                             <button
                               type="button"
@@ -355,10 +370,23 @@ export function TransactionTable({
                     )}
                   </tr>
                 ))}
+                {paying === origin.id && owed && kind && (
+                  <tr className="border-b border-line/10 bg-secondary/40">
+                    <td colSpan={colCount} className="text-left">
+                      <QuickPay
+                        entry={origin}
+                        kind={kind}
+                        remaining={outstanding(origin)}
+                        onClose={() => setPaying(null)}
+                        onSaved={owed.onSaved}
+                      />
+                    </td>
+                  </tr>
+                )}
                 {isOpen && (
                   <tr className="border-b border-line/10 bg-secondary/40">
                     <td colSpan={colCount} className="text-left">
-                      <Details e={origin} showPayment={showPayment} owed={owed} />
+                      <Details e={origin} showPayment={showPayment} owed={owed} onPay={() => setPaying(origin.id)} />
                     </td>
                   </tr>
                 )}

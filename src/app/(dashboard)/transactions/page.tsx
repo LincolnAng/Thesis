@@ -16,7 +16,7 @@ import { QuickEditDialog } from "@/components/home/quick-edit-dialog";
 import { TransactionTable } from "@/components/transactions/transaction-table";
 import { TransactionDialog } from "@/components/transactions/transaction-dialog";
 import { EMPTY_FILTERS, TransactionSearch, type TransactionFilters } from "@/components/transactions/transaction-search";
-import { DefaultDialog, DueDateDialog, RecordPaymentDialog } from "@/components/transactions/obligation-dialogs";
+import { DefaultDialog, DueDateDialog } from "@/components/transactions/obligation-dialogs";
 import { useStore } from "@/lib/store/use-store";
 import { addEntry, deleteEntry, replaceEntry } from "@/lib/store/store";
 import { entryToDraft } from "@/lib/home/describe-entry";
@@ -67,7 +67,6 @@ function TransactionsPageInner() {
   const [filters, setFilters] = useState<TransactionFilters>(EMPTY_FILTERS);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Entry | null>(null);
-  const [paying, setPaying] = useState<ObligationRow | null>(null);
   const [defaulting, setDefaulting] = useState<ObligationRow | null>(null);
   const [movingDue, setMovingDue] = useState<ObligationRow | null>(null);
   const [editBudgets, setEditBudgets] = useState(false);
@@ -368,7 +367,7 @@ function TransactionsPageInner() {
             owed={
               exec
                 ? {
-                    onPay: (e) => setPaying(rowFor(e)),
+                    onSaved: (text) => setNotice({ tone: "good", text }),
                     onDefault: (e) => setDefaulting(rowFor(e)),
                     onMoveDue: (e) => setMovingDue(rowFor(e)),
                   }
@@ -410,15 +409,6 @@ function TransactionsPageInner() {
           allowedTypes={["RND"]}
           onSave={(draft) => replaceEntry(editing.id, draft)}
           onDelete={() => deleteEntry(editing.id)}
-        />
-      )}
-      {paying && (
-        <RecordPaymentDialog
-          entry={paying.entry}
-          kind={paying.kind}
-          remaining={paying.info.remaining}
-          onClose={() => setPaying(null)}
-          onSaved={(text) => setNotice({ tone: "good", text })}
         />
       )}
       {defaulting && (

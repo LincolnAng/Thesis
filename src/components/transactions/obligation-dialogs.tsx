@@ -1,32 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import {
-  BanknoteArrowDown,
-  BanknoteArrowUp,
-  CalendarCheck,
-  CalendarDays,
-  Check,
-  CircleCheck,
-  CircleDot,
-  Hourglass,
-  Package,
-  Receipt,
-  StickyNote,
-  Store,
-  TriangleAlert,
-  User,
-  X,
-} from "lucide-react";
+import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ChipGroup } from "@/components/ui/chip-group";
-import { MethodFields } from "@/components/transactions/method-fields";
-import { formatDate, formatPeso } from "@/lib/format";
+import { COMMON_BANKS } from "@/components/transactions/method-fields";
+import { formatPeso } from "@/lib/format";
 import { markDefaulted, moveDueDate, recordPaymentOn } from "@/lib/transactions/actions";
-import { PAYMENT_TERMS, addDays, dayOf, dueFromTerms, obligationInfo, termsLabel, todayOf, type ObligationKind } from "@/lib/transactions/ledger";
+import { PAYMENT_TERMS, dayOf, dueFromTerms, obligationInfo, termsLabel, todayOf, type ObligationKind } from "@/lib/transactions/ledger";
 import type { Entry } from "@/lib/store/types";
 
 const WORDS: Record<ObligationKind, { who: string; money: string; verb: string; done: string }> = {
@@ -43,15 +27,12 @@ function ErrorLine({ text }: { text: string }) {
 }
 
 /**
- * A payment against something already owed. It never creates a second receivable or payable:
- * the amount is added to that one's history and the balance drops by exactly that much.
- *
- * Laid out in the order a person thinks it through: what is this (who, what, how much of it is
- * left), how much came in, when, how, and then record it. The amount starts at the whole
- * balance — the common case — with one tap for half, and the line under it says what will be
- * left, so there is nothing to work out.
+ * A payment against something already owed, as a single line under its row: the amount (starting
+ * at the whole balance, the common case), cash or bank, and Save. The date is today. It never
+ * creates a second receivable or payable: the amount is added to that one's history and the
+ * balance drops by exactly that much.
  */
-export function RecordPaymentDialog({
+export function QuickPay({
   entry,
   kind,
   remaining,
@@ -66,52 +47,35 @@ export function RecordPaymentDialog({
 }) {
   const w = WORDS[kind];
   const incoming = kind === "receivable";
-  const total = entry.amount ?? 0;
-  const paidBefore = Math.max(0, Math.round((total - remaining) * 100) / 100);
-  const pct = total > 0 ? Math.min(100, (paidBefore / total) * 100) : 0;
   const today = todayOf(new Date());
-  const yesterday = addDays(today, -1);
-  const earliest = dayOf(entry.timestamp);
-
   const [amount, setAmount] = useState(String(remaining));
-  const [date, setDate] = useState(today);
-  const [method, setMethod] = useState<string | null>("cash");
-  const [bankName, setBankName] = useState<string | null>(null);
-  const [note, setNote] = useState("");
-  const [showNote, setShowNote] = useState(false);
+  const [method, setMethod] = useState<"cash" | "bank_transfer">("cash");
+  const [bank, setBank] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const typed = Number(amount.replace(/[^0-9.]/g, ""));
   const valid = Number.isFinite(typed) && typed > 0;
   const leftAfter = valid ? Math.max(0, Math.round((remaining - typed) * 100) / 100) : remaining;
-  const bankMissing = method === "bank_transfer" && !bankName?.trim();
-  const who = entry.counterparty ?? w.who;
-
   const problem = !valid
     ? null
     : typed > remaining + 0.005
-      ? `That's more than the ${formatPeso(remaining)} still owed.`
-      : !date
-        ? "Pick the day the money changed hands."
-        : date > today
-          ? "The date can't be in the future."
-          : date < earliest
-            ? `The date can't be before the transaction (${formatDate(earliest)}).`
-            : bankMissing
-              ? "Pick or type the bank to save this."
-              : null;
+      ? `More than the ${formatPeso(remaining)} still owed.`
+      : today < dayOf(entry.timestamp)
+        ? "This transaction is dated in the future."
+        : method === "bank_transfer" && !bank.trim()
+          ? "Which bank?"
+          : null;
 
   async function save() {
     setError(null);
-    if (!method) return setError("Say whether it was cash or a bank transfer.");
-    const result = recordPaymentOn(entry.id, { amount: typed, date, method, bankName, note });
+    const result = recordPaymentOn(entry.id, { amount: typed, date: today, method, bankName: method === "bank_transfer" ? bank.trim() : null, note: "" });
     if (!result.ok) return setError(result.reason);
     setSaving(true);
     const confirmed = await result.saved;
     setSaving(false);
     if (!confirmed) {
-      return setError("This could not be saved yet — check the internet connection. It will keep trying, so please don't enter it twice.");
+      return setError("Not saved yet — check the internet connection. It keeps trying, so please don't enter it twice.");
     }
     onSaved(
       result.remaining > 0
@@ -121,149 +85,57 @@ export function RecordPaymentDialog({
     onClose();
   }
 
-  const chip = (on: boolean) =>
-    `inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3.5 text-[13px] font-semibold transition active:scale-95 ${
-      on ? "border-cacao bg-cacao text-ivory" : "border-line/25 bg-card hover:border-cacao hover:text-cacao"
-    }`;
-  const half = Math.round((remaining / 2) * 100) / 100;
-  const overpaid = valid && typed > remaining + 0.005;
+  const seg = (on: boolean) =>
+    `h-9 rounded-md px-3 text-[13px] font-semibold transition ${on ? "bg-cacao text-ivory" : "text-muted-foreground hover:bg-card"}`;
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="rounded-2xl border border-border ring-0 sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-cacao/10 text-cacao">
-              {incoming ? <BanknoteArrowDown className="h-5 w-5" /> : <BanknoteArrowUp className="h-5 w-5" />}
-            </span>
-            Record a payment
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          {/* Who and what, and where it stands */}
-          <div className="space-y-2.5 rounded-xl bg-secondary/60 p-3.5">
-            <p className="flex items-center gap-2 text-[15px] font-semibold">
-              {incoming ? <User className="h-4 w-4 shrink-0 text-muted-foreground" /> : <Store className="h-4 w-4 shrink-0 text-muted-foreground" />}
-              <span className="truncate">{who}</span>
-              {entry.sku && (
-                <span className="flex min-w-0 items-center gap-1 text-[13px] font-normal text-muted-foreground">
-                  <Package className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">{entry.sku}</span>
-                </span>
-              )}
-            </p>
-            <div className="h-2 overflow-hidden rounded-full bg-line/15" aria-hidden>
-              <div className="h-full rounded-full bg-success" style={{ width: `${pct}%` }} />
-            </div>
-            <div className="grid grid-cols-3 gap-2 text-center text-[14px] font-semibold tabular-nums">
-              <span className="flex items-center justify-center gap-1.5" title="Total">
-                <Receipt className="h-4 w-4 text-muted-foreground" aria-label="Total" />
-                {formatPeso(total)}
-              </span>
-              <span className="flex items-center justify-center gap-1.5 text-success" title={incoming ? "Received" : "Paid"}>
-                <CircleCheck className="h-4 w-4" aria-label={incoming ? "Received" : "Paid"} />
-                {formatPeso(paidBefore)}
-              </span>
-              <span className="flex items-center justify-center gap-1.5" title="Still owed">
-                <Hourglass className="h-4 w-4 text-[var(--status-warning)]" aria-label="Still owed" />
-                {formatPeso(remaining)}
-              </span>
-            </div>
-          </div>
-
-          {/* How much */}
-          <div className="space-y-2">
-            <div className="relative">
-              <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[18px] font-semibold text-muted-foreground">₱</span>
-              <Input
-                inputMode="decimal"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
-                aria-label="Amount"
-                className="h-14 pl-9 pr-28 text-[22px] font-bold tabular-nums"
-              />
-              <span
-                className={`pointer-events-none absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-1 text-[12.5px] font-semibold ${
-                  overpaid ? "text-danger" : leftAfter === 0 && valid ? "text-success" : "text-muted-foreground"
-                }`}
-                aria-live="polite"
-              >
-                {overpaid ? (
-                  <>
-                    <TriangleAlert className="h-3.5 w-3.5" /> Too much
-                  </>
-                ) : valid && leftAfter === 0 ? (
-                  <>
-                    <CircleCheck className="h-3.5 w-3.5" /> Settled
-                  </>
-                ) : valid ? (
-                  <>
-                    <Hourglass className="h-3.5 w-3.5" /> {formatPeso(leftAfter)} left
-                  </>
-                ) : null}
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => setAmount(String(remaining))} className={chip(valid && Math.abs(typed - remaining) < 0.005)}>
-                <CircleCheck className="h-4 w-4" />
-                All
-              </button>
-              {half > 0 && half < remaining && (
-                <button type="button" onClick={() => setAmount(String(half))} className={chip(valid && Math.abs(typed - half) < 0.005)}>
-                  <CircleDot className="h-4 w-4" />
-                  Half
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* When */}
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={() => setDate(today)} className={chip(date === today)}>
-              <CalendarCheck className="h-4 w-4" />
-              Today
-            </button>
-            {yesterday >= earliest && (
-              <button type="button" onClick={() => setDate(yesterday)} className={chip(date === yesterday)}>
-                <CalendarDays className="h-4 w-4" />
-                Yesterday
-              </button>
-            )}
-            <Input type="date" value={date} max={today} min={earliest} onChange={(e) => setDate(e.target.value)} aria-label="Date of payment" className="h-9 w-auto min-w-[150px] flex-1" />
-          </div>
-
-          {/* How */}
-          <MethodFields method={method} bankName={bankName} label="" onChange={(n) => (setMethod(n.method), setBankName(n.bankName))} />
-
-          {/* A note, if wanted */}
-          {showNote ? (
-            <div className="relative">
-              <StickyNote className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note — e.g. GCash ref 1234" className="h-10 pl-9" autoFocus />
-            </div>
-          ) : (
-            <button type="button" onClick={() => setShowNote(true)} className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-cacao">
-              <StickyNote className="h-4 w-4" />
-              Add a note
-            </button>
-          )}
-
-          {(error || problem) && <ErrorLine text={error ?? problem ?? ""} />}
-
-          <div className="flex gap-2">
-            <Button variant="ghost" className="h-12 gap-1.5 px-4" onClick={onClose}>
-              <X className="h-4 w-4" />
-              Cancel
-            </Button>
-            <Button className="h-12 flex-1 gap-2 text-[15px]" disabled={saving || !valid || !!problem} onClick={() => void save()}>
-              <Check className="h-4 w-4" strokeWidth={2.4} />
-              {saving ? "Saving…" : valid ? `${formatPeso(typed)} ${incoming ? "received" : "paid"}` : "Record"}
-            </Button>
-          </div>
+    <div className="space-y-1.5 px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[12px] font-semibold text-muted-foreground">{incoming ? "Received" : "Paid"}</span>
+        <div className="relative">
+          <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[14px] font-semibold text-muted-foreground">₱</span>
+          <Input
+            inputMode="decimal"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+            onKeyDown={(e) => e.key === "Enter" && valid && !problem && !saving && void save()}
+            aria-label="Amount"
+            autoFocus
+            className="h-9 w-32 pl-6 text-[14px] font-semibold tabular-nums"
+          />
         </div>
-      </DialogContent>
-    </Dialog>
+        <div className="flex gap-0.5 rounded-lg bg-secondary p-0.5" role="radiogroup" aria-label="How it was paid">
+          <button type="button" role="radio" aria-checked={method === "cash"} onClick={() => setMethod("cash")} className={seg(method === "cash")}>
+            Cash
+          </button>
+          <button type="button" role="radio" aria-checked={method === "bank_transfer"} onClick={() => setMethod("bank_transfer")} className={seg(method === "bank_transfer")}>
+            Bank
+          </button>
+        </div>
+        {method === "bank_transfer" && (
+          <>
+            <Input list="quickpay-banks" value={bank} onChange={(e) => setBank(e.target.value)} placeholder="Which bank?" aria-label="Bank" className="h-9 w-36 text-[13px]" />
+            <datalist id="quickpay-banks">
+              {COMMON_BANKS.map((b) => (
+                <option key={b} value={b} />
+              ))}
+            </datalist>
+          </>
+        )}
+        <span className={`text-[12.5px] ${problem && problem !== "Which bank?" ? "font-semibold text-danger" : "text-muted-foreground"}`} aria-live="polite">
+          {problem ?? (valid ? (leftAfter > 0 ? `${formatPeso(leftAfter)} left after` : "Settles it") : "")}
+        </span>
+        <div className="ml-auto flex items-center gap-1">
+          <Button size="sm" className="h-9 px-4" disabled={saving || !valid || !!problem} onClick={() => void save()}>
+            {saving ? "Saving…" : "Save"}
+          </Button>
+          <button type="button" onClick={onClose} aria-label="Cancel" className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+      {error && <ErrorLine text={error} />}
+    </div>
   );
 }
 
