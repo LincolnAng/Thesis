@@ -151,9 +151,7 @@ export function ProcessPlan() {
 
   const stages = [
     { key: "raw", icon: <Sprout className="h-4 w-4" />, title: "Raw materials", nodes: chain.rawMaterials.map((n) => costNode(n, "material")), empty: "No recipe uses an ingredient yet" },
-    // Only shown once something is made to go into another product; empty, it was a quarter of
-    // the panel saying nothing.
-    ...(chain.inHouse.length > 0 ? [{ key: "inhouse", icon: <Factory className="h-4 w-4" />, title: "Made in-house", nodes: chain.inHouse.map((n) => costNode(n, "product")), empty: "" }] : []),
+    { key: "inhouse", icon: <Factory className="h-4 w-4" />, title: "Made in-house", nodes: chain.inHouse.map((n) => costNode(n, "product")), empty: "Nothing is made to go into another product yet" },
     { key: "sold", icon: <Package className="h-4 w-4" />, title: "Products sold", nodes: chain.products.map((n) => costNode(n, "product")), empty: "No products yet" },
     { key: "pack", icon: <ShoppingCart className="h-4 w-4" />, title: "Packaging", nodes: chain.packaging.map((n) => costNode(n, "material")), empty: "No recipe uses packaging yet" },
   ];
@@ -161,6 +159,20 @@ export function ProcessPlan() {
 
   return (
     <>
+      <Panel
+        title="How it's made, and what each step costs"
+        note="From the recipes in Costing. Tap a product to see its recipe and how its cost adds up. Add an in-house ingredient to a recipe (tablea in ice cream) to link the stages."
+      >
+        <div className="grid grid-cols-1 gap-3 min-[900px]:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr]">
+          {stages.map((st, i) => (
+            <Fragment key={st.key}>
+              {i > 0 && <Arrow />}
+              <Stage icon={st.icon} title={st.title} nodes={st.nodes} empty={st.empty} />
+            </Fragment>
+          ))}
+        </div>
+      </Panel>
+
       <Panel title="Alerts" note={alerts.length ? "What to make, buy or sell first, most urgent at the top." : undefined}>
         {alerts.length === 0 ? (
           <p className="text-sm text-muted-foreground">Nothing to make or buy — stock covers what&apos;s expected, and no batch is near its date.</p>
@@ -314,19 +326,6 @@ export function ProcessPlan() {
         </div>
       </section>
 
-      <Panel
-        title="How it's made, and what each step costs"
-        note="From the recipes in Costing. Tap a product to see its recipe and how its cost adds up. Add an in-house ingredient to a recipe (tablea in ice cream) to link the stages."
-      >
-        <div className={`grid grid-cols-1 gap-3 ${stages.length === 4 ? "min-[900px]:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr]" : "min-[900px]:grid-cols-[1fr_auto_1fr_auto_1fr]"}`}>
-          {stages.map((st, i) => (
-            <Fragment key={st.key}>
-              {i > 0 && <Arrow />}
-              <Stage icon={st.icon} title={st.title} nodes={st.nodes} empty={st.empty} />
-            </Fragment>
-          ))}
-        </div>
-      </Panel>
     </>
   );
 }
