@@ -64,7 +64,6 @@ function TransactionsPageInner() {
   const supplierFilter = searchParams.get("supplier");
 
   const [kind, setKind] = useState<Kind>(supplierFilter ? "EXPENSE" : "all");
-  const [view, setView] = useState<"log" | "RECEIVABLE" | "PAYABLE">("log");
   const [filters, setFilters] = useState<TransactionFilters>(EMPTY_FILTERS);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Entry | null>(null);
@@ -119,13 +118,10 @@ function TransactionsPageInner() {
     return true;
   };
 
-  // Receivables and payables are tabs of their own; the carousel steps through the rest.
-  const kinds = (exec ? KINDS : KINDS.filter(([k]) => EMPLOYEE_KINDS.includes(k))).filter(([k]) => k !== "RECEIVABLE" && k !== "PAYABLE");
-  const logKind: Kind = kinds.some(([k]) => k === kind) ? kind : "all";
-  const effectiveKind: Kind = exec && view !== "log" ? view : logKind;
-  const openCount = (k: "receivable" | "payable") => ledger.filter((e) => obligationKind(e) === k && outstanding(e) > 0).length;
+  const kinds = exec ? KINDS : KINDS.filter(([k]) => EMPLOYEE_KINDS.includes(k));
+  const effectiveKind: Kind = kinds.some(([k]) => k === kind) ? kind : "all";
   const stepKind = (by: 1 | -1) => {
-    const at = Math.max(0, kinds.findIndex(([k]) => k === logKind));
+    const at = Math.max(0, kinds.findIndex(([k]) => k === effectiveKind));
     setKind(kinds[(at + by + kinds.length) % kinds.length][0]);
   };
   const inKind = (e: Entry) => {
@@ -307,49 +303,17 @@ function TransactionsPageInner() {
 
         {/* One list: filter by kind, with the add button beside it. */}
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Executives get what is owed as tabs of its own, with how many are still open. */}
-            {exec && (
-              <div className="flex gap-1 rounded-xl bg-secondary p-1" role="tablist" aria-label="Transactions, receivables or payables">
-                {(
-                  [
-                    ["log", "Transactions", 0],
-                    ["PAYABLE", "Payables", openCount("payable")],
-                    ["RECEIVABLE", "Receivables", openCount("receivable")],
-                  ] as const
-                ).map(([v, label, count]) => (
-                  <button
-                    key={v}
-                    type="button"
-                    role="tab"
-                    aria-selected={view === v}
-                    onClick={() => setView(v)}
-                    className={`flex min-h-10 items-center gap-1.5 rounded-lg px-4 text-[14px] font-semibold transition ${
-                      view === v ? "bg-cacao text-ivory shadow-sm" : "text-muted-foreground hover:bg-card/70"
-                    }`}
-                  >
-                    {label}
-                    {count > 0 && (
-                      <span className={`rounded-full px-1.5 text-[11.5px] font-bold ${view === v ? "bg-ivory/20" : "bg-cacao/10 text-cacao"}`}>{count}</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
-            {/* A carousel through the log: everything, then each kind in turn. */}
-            {view === "log" && (
-              <CarouselNav
-                wrap
-                size="large"
-                label={kinds.find(([k]) => k === logKind)?.[1] ?? "All"}
-                labelWidth="min-w-[140px]"
-                onPrev={() => stepKind(-1)}
-                onNext={() => stepKind(1)}
-                prevLabel="Previous kind of transaction"
-                nextLabel="Next kind of transaction"
-              />
-            )}
-          </div>
+          {/* A carousel through the log: everything, then each kind in turn. */}
+          <CarouselNav
+            wrap
+            size="large"
+            label={kinds.find(([k]) => k === effectiveKind)?.[1] ?? "All"}
+            labelWidth="min-w-[160px]"
+            onPrev={() => stepKind(-1)}
+            onNext={() => stepKind(1)}
+            prevLabel="Previous kind of transaction"
+            nextLabel="Next kind of transaction"
+          />
           <button
             type="button"
             onClick={() => setAdding(true)}

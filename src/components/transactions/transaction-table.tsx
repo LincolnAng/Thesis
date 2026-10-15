@@ -12,7 +12,8 @@ import type { Entry } from "@/lib/store/types";
  * Every recorded transaction, one row each, in one fixed set of columns — the same for sales,
  * expenses, receivables and payables, so what is owed reads exactly like what was paid:
  *
- *   Date · Customer / Supplier · Product · Qty · Amount · Payment (mode · bank) · Deadline · Recorded by
+ *   Date · Customer / Supplier · Product · Qty · Amount · Payment (mode · bank) · Payable · Receivable ·
+ *   Deadline · Recorded by
  *
  * An order of several products is still one row: its products are listed top to bottom in the
  * Product cell with their quantities lined up beside them, and the Amount is the order's total.
@@ -239,7 +240,7 @@ export function TransactionTable({
   // name text wraps within a sensible width instead of stretching the table.
   const th = "whitespace-nowrap px-3 py-2.5 text-center text-[11px] font-bold uppercase tracking-wide text-muted-foreground";
   const td = "px-3 py-2 text-center align-middle";
-  const colCount = showPayment ? 9 : 7;
+  const colCount = showPayment ? 11 : 7;
 
   const head = (label: string, key?: SortKey) => (
     <th scope="col" className={th}>
@@ -274,6 +275,8 @@ export function TransactionTable({
             {head("Qty")}
             {head("Amount", "amount")}
             {showPayment && head("Payment")}
+            {showPayment && head("Payable")}
+            {showPayment && head("Receivable")}
             {showPayment && head("Deadline", "due")}
             {head("Recorded by")}
             <th scope="col" className={th}>
@@ -301,6 +304,32 @@ export function TransactionTable({
             const blankSlot = more > 0 ? [<span key="blank" />] : [];
             const amountText = (v: number | null) =>
               v == null ? "—" : `${e.type === "WASTE" ? "" : moneyIn ? "+" : "−"}${formatPeso(v)}`;
+            const owedNode =
+              kind && info ? (
+                <div className="flex flex-col items-center gap-0.5">
+                  <span
+                    className={`font-semibold tabular-nums ${
+                      info.remaining > 0 ? (info.status === "overdue" || info.status === "defaulted" ? "text-danger" : "text-[var(--status-warning)]") : "text-success"
+                    }`}
+                  >
+                    {info.remaining > 0 ? `${formatPeso(info.remaining)} left` : "Paid in full"}
+                  </span>
+                  {owed && info.remaining > 0 && (
+                    <button
+                      type="button"
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        setPaying(paying === e.id ? null : e.id);
+                      }}
+                      aria-label={kind === "receivable" ? "Log a payment received" : "Log a payment made"}
+                      title={kind === "receivable" ? "Log a payment received" : "Log a payment made"}
+                      className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
+                    >
+                      <HandCoins className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              ) : null;
             const paymentNode = !hasPayment(e) ? (
               <NA />
             ) : method === "bank_transfer" ? (
@@ -379,31 +408,11 @@ export function TransactionTable({
                     ) : (
                       amountText(e.amount)
                     )}
-                    {showPayment && kind && (
-                      <div
-                        className={`mt-0.5 text-[11.5px] font-medium ${
-                          info && info.remaining > 0 ? (info.status === "overdue" || info.status === "defaulted" ? "text-danger" : "text-[var(--status-warning)]") : "text-success"
-                        }`}
-                      >
-                        {info && info.remaining > 0 ? `${formatPeso(info.remaining)} left` : "Paid in full"}
-                      </div>
-                    )}
-                    {owed && kind && outstanding(e) > 0 && (
-                      <button
-                        type="button"
-                        onClick={(ev) => {
-                          ev.stopPropagation();
-                          setPaying(paying === e.id ? null : e.id);
-                        }}
-                        aria-label={kind === "receivable" ? "Log a payment received" : "Log a payment made"}
-                        title={kind === "receivable" ? "Log a payment received" : "Log a payment made"}
-                        className="mx-auto mt-1 flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
-                      >
-                        <HandCoins className="h-4 w-4" />
-                      </button>
-                    )}
                   </td>
                   {showPayment && <td className={`${td} whitespace-nowrap text-[12.5px]`}>{paymentNode}</td>}
+                  {/* What is still owed, in a column of its own for each direction, with the way to log a payment below it */}
+                  {showPayment && <td className={`${td} text-[12.5px]`}>{kind === "payable" ? owedNode : <NA />}</td>}
+                  {showPayment && <td className={`${td} text-[12.5px]`}>{kind === "receivable" ? owedNode : <NA />}</td>}
                   {showPayment && (
                     <td className={`${td} text-[12.5px]`}>
                       {kind ? (
