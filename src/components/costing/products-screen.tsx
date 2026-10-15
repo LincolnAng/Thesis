@@ -187,7 +187,7 @@ function standing(p: Product, costCtx: ReturnType<typeof useCostContext>) {
   const complete = cost.unpriced.length === 0 && cost.unconvertible.length === 0 && p.recipeIngredients.length > 0;
   const unitCost = costPerUnit(cost.batchTotal, p.batchYield, complete);
   const next = noRecipe
-    ? "Add what goes into it"
+    ? "Add the recipe"
     : cost.unpriced.length > 0
       ? `Add a price for ${cost.unpriced.length === 1 ? cost.unpriced[0] : pluralize(cost.unpriced.length, "ingredient")}`
       : cost.unconvertible.length > 0
