@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { ChevronDown, Plus, Trash2 } from "lucide-react";
-import { setBusinessSetting, updateProduct } from "@/lib/store/store";
-import { HOURLY_LABOR_RATE_KEY } from "@/lib/summary/use-cost-context";
+import { updateProduct } from "@/lib/store/store";
 import { perBatch, perUnit, unitsPerBatch } from "@/lib/costing/per-unit";
 import { useStore } from "@/lib/store/use-store";
 import { useCostContext } from "@/lib/summary/use-cost-context";
@@ -15,12 +14,13 @@ import type { Product, RawMaterialStock, RecipeComponentRow, RecipeExtraRow, Rec
 
 /**
  * The Recipe tab: what goes into ONE unit — one jar, one pack — because batches vary in size and
- * a cost per batch would change every time. Four short lists, in the order it's made:
+ * a cost per batch would change every time. Three short lists, in the order it's made:
  *
  *   Ingredients — bought ones and ones you make yourself (tablea), in one list
  *   Packaging   — the jar, lid, label
- *   Your time   — minutes per jar at your hourly rate
  *   Other costs — anything else one costs
+ *
+ * Your time isn't a cost here (see batchLaborCost in lib/summary/cost-engine).
  *
  * Each shows its cost per unit beside its heading, and what one costs to make sits at the
  * bottom — this is the whole cost, so there is no separate cost page. Below it, a planner for
@@ -201,10 +201,6 @@ export function RecipePanel({ product }: { product: Product }) {
         ))}
       </Section>
 
-      <Section title="Your time" total={one(cost.laborTotal)} unit={unit} count={1}>
-        <TimeEditor product={product} unit={unit} hourlyRate={ctx.hourlyLaborRate} save={save} />
-      </Section>
-
       <Section
         title="Other costs"
         hint={`Anything else one ${unit} costs — a sticker, a share of gas or delivery.`}
@@ -244,46 +240,6 @@ export function RecipePanel({ product }: { product: Product }) {
 /** A line's cost, or — when its ingredient has no price yet — says so instead of showing ₱0. */
 function priceText(amount: number, unpriced: string[], name: string | undefined): string {
   return name && unpriced.includes(name) ? "No price yet" : formatPeso(amount);
-}
-
-/**
- * Your time for one unit: minutes per jar at the hourly rate. The rate is one number for the
- * whole business. A peso amount typed in before (laborCostOverride) still counts until it's
- * switched back to minutes, and says so.
- */
-function TimeEditor({ product, unit, hourlyRate, save }: { product: Product; unit: string; hourlyRate: number; save: (patch: Partial<Product>) => void }) {
-  const minutes = useNumericDraft(perUnit(product, product.minutesPerBatch ?? 0), (n) => save({ minutesPerBatch: perBatch(product, n) }));
-  const rate = useNumericDraft(hourlyRate, (n) => setBusinessSetting(HOURLY_LABOR_RATE_KEY, String(n)));
-  const fromTime = (perUnit(product, product.minutesPerBatch ?? 0) / 60) * hourlyRate;
-
-  if (product.laborCostOverride != null) {
-    return (
-      <div className="flex flex-wrap items-center gap-2 text-[14px]">
-        <span>
-          Counted as <span className="font-semibold">{formatPeso(perUnit(product, product.laborCostOverride))}</span> per {unit}, a figure typed in before.
-        </span>
-        <button type="button" onClick={() => save({ laborCostOverride: null })} className="text-[13px] font-semibold text-cacao">
-          Use minutes instead
-        </button>
-      </div>
-    );
-  }
-  return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex flex-wrap items-center gap-2 text-[14px]">
-        <input inputMode="decimal" aria-label={`Minutes for one ${unit}`} value={minutes.value} onChange={(e) => minutes.onChange(e.target.value.replace(/[^0-9.]/g, ""))} className={`${input} w-20 text-right`} />
-        <span className="text-muted-foreground">minutes per {unit}, at ₱</span>
-        <input inputMode="decimal" aria-label="Hourly rate" value={rate.value} onChange={(e) => rate.onChange(e.target.value.replace(/[^0-9.]/g, ""))} className={`${input} w-20 text-right`} />
-        <span className="text-muted-foreground">
-          an hour = <span className="font-semibold text-foreground">{formatPeso(fromTime)}</span>
-        </span>
-      </div>
-      <p className="text-[12.5px] text-muted-foreground">
-        {hourlyRate <= 0 ? "Set what an hour of work is worth — until then your time counts as ₱0. " : ""}
-        The hourly rate is the same for every product; changing it here updates them all.
-      </p>
-    </div>
-  );
 }
 
 /** Making N: what they'd cost, and which ingredients you'd run short of. */

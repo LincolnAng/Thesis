@@ -18,7 +18,7 @@ import { formatPeso } from "@/lib/format";
 /**
  * One product, in three plainly named tabs — one job each:
  *
- *   Recipe        what goes into ONE unit — ingredients, packaging, your time, other costs —
+ *   Recipe        what goes into ONE unit — ingredients, packaging, other costs —
  *                 each with its cost, adding up to what one costs to make
  *   Price         the three ways to set a price, side by side, and what you keep
  *   Stock & sizes what's on hand, how long it keeps, the other sizes

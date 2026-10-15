@@ -199,7 +199,7 @@ export function ProcessPlan() {
             note={
               unknownRuns.length > 0
                 ? `Not counting ${unknownRuns.map((p) => p.name).join(", ")} — no cost yet`
-                : "Ingredients, packaging, your time and other costs"
+                : "Ingredients, packaging and other costs"
             }
           />
           <MoneyFigure

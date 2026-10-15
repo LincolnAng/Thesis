@@ -149,13 +149,14 @@ export function ingredientRowCost(
 }
 
 /**
- * Labor for one batch: minutes on the clock at the hourly rate, unless the owner typed a
- * figure in directly, in which case theirs stands.
+ * Labor for one batch. No longer part of what a product costs: a product's cost is its raw
+ * materials, packaging and other costs, and nothing else — the owners' call, so the Recipe tab
+ * no longer asks for time. The minutes, any typed labor figure and the hourly rate are still
+ * stored untouched, so counting labor again is a change to this function alone.
  */
 export function batchLaborCost(product: Product, hourlyLaborRate: number): { cost: number; isOverride: boolean } {
-  if (product.laborCostOverride != null) return { cost: product.laborCostOverride, isOverride: true };
-  const minutes = product.minutesPerBatch ?? 0;
-  return { cost: (minutes / 60) * hourlyLaborRate, isOverride: false };
+  void hourlyLaborRate;
+  return { cost: 0, isOverride: product.laborCostOverride != null };
 }
 
 /**
