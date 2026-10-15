@@ -314,8 +314,8 @@ function TransactionsPageInner() {
                 {(
                   [
                     ["log", "Transactions", 0],
-                    ["RECEIVABLE", "Receivables", openCount("receivable")],
                     ["PAYABLE", "Payables", openCount("payable")],
+                    ["RECEIVABLE", "Receivables", openCount("receivable")],
                   ] as const
                 ).map(([v, label, count]) => (
                   <button

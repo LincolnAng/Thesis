@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import { HandCoins, History as HistoryIcon, Pencil, Plus } from "lucide-react";
+import { HandCoins, History as HistoryIcon, Pencil } from "lucide-react";
 import { EXPENSE_CATEGORY_LABELS, PRICE_TYPE_LABELS, describePaymentMethod, formatDate, formatPeso } from "@/lib/format";
 import { dueInfo, obligationInfo, obligationKind, outstanding, paymentsOf } from "@/lib/transactions/ledger";
 import { lineSubtotal, orderTotal } from "@/lib/transactions/order-lines";
@@ -176,7 +176,7 @@ function Details({ e, showPayment, owed, onPay }: { e: Entry; showPayment: boole
           {owed && info.status !== "settled" && (
             <div className="mt-1 flex flex-wrap gap-2">
               <button type="button" onClick={onPay} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line/25 px-3 text-[13px] font-medium transition hover:border-cacao hover:text-cacao">
-                <Plus className="h-4 w-4" />
+                <HandCoins className="h-4 w-4" />
                 Log Payment
               </button>
               <button type="button" onClick={() => owed.onMoveDue(e)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line/25 px-3 text-[13px] font-medium transition hover:border-cacao hover:text-cacao">
@@ -397,12 +397,9 @@ export function TransactionTable({
                         }}
                         aria-label={kind === "receivable" ? "Log a payment received" : "Log a payment made"}
                         title={kind === "receivable" ? "Log a payment received" : "Log a payment made"}
-                        className="relative mx-auto mt-1.5 flex h-9 w-9 items-center justify-center rounded-full bg-cacao/10 text-cacao transition hover:bg-cacao/20 active:scale-90"
+                        className="mx-auto mt-1 flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
                       >
-                        <HandCoins className="h-[18px] w-[18px]" />
-                        <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-cacao text-ivory">
-                          <Plus className="h-2.5 w-2.5" strokeWidth={3} />
-                        </span>
+                        <HandCoins className="h-4 w-4" />
                       </button>
                     )}
                   </td>
@@ -418,12 +415,7 @@ export function TransactionTable({
                   )}
                   <td className={`${td} whitespace-nowrap text-muted-foreground`}>{e.loggedByName ?? "—"}</td>
                   <td className="px-2 py-1 text-center align-middle">
-                    {/* Out of sight until the row is hovered, so a long list isn't a wall of icons; always there on touch screens */}
-                    <div
-                      className={`flex items-center justify-center gap-0.5 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100 ${
-                        isOpen ? "opacity-100" : "opacity-0"
-                      }`}
-                    >
+                    <div className="flex items-center justify-center gap-0.5">
                       {showPayment && kind && (
                         <button
                           type="button"
