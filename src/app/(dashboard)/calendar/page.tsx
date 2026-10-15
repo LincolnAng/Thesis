@@ -1,8 +1,8 @@
 "use client";
 
-import { ProductionScreen } from "@/components/production/production-screen";
+import { CalendarScreen } from "@/components/calendar/calendar-screen";
 
-/** The production plan by day. Same plan as Production, laid out on a calendar. */
+/** Everything dated, on one calendar: production, events, shipments, day-offs, payments, alerts. */
 export default function CalendarPage() {
-  return <ProductionScreen section="calendar" />;
+  return <CalendarScreen />;
 }
