@@ -64,14 +64,15 @@ function productLines(e: Entry): ProductLine[] {
 }
 
 /**
- * One value per product, each in its own ruled slot, so every column of an order lines up
- * product by product while it stays a single row — one entry, edited and paid as one.
+ * One value per product, each in its own slot, so every column of an order lines up product by
+ * product while it stays a single row — one entry, edited and paid as one. The slots are told
+ * apart by spacing alone: no rules, so the eye reads straight across instead of snagging on lines.
  */
 function Slots({ children }: { children: React.ReactNode[] }) {
   return (
-    <ul className="divide-y divide-line/10">
+    <ul>
       {children.map((c, i) => (
-        <li key={i} className="flex h-8 items-center justify-center whitespace-nowrap px-3">
+        <li key={i} className="flex h-7 items-center justify-center whitespace-nowrap px-3">
           {c}
         </li>
       ))}
@@ -290,9 +291,9 @@ export function TransactionTable({
             const more = items.length - shown.length;
             const info = kind && showPayment ? obligationInfo(e, new Date()) : null;
             // Only product, quantity and amount repeat per product; they share the same slots so they line up.
-            // Split cells drop their side padding (the slots carry it), so the rules of Product, Qty
-            // and Amount run on as one unbroken line across the three columns.
-            const split = multi ? "px-0 py-1 text-center align-middle" : td;
+            // Split cells drop their side padding (the slots carry it), so the slots of Product, Qty
+            // and Amount sit on the same lines across the three columns.
+            const split = multi ? "px-0 py-1.5 text-center align-middle" : td;
             const moreSlot = more > 0 ? [<span key="more" className="text-[12px] text-muted-foreground">+{more} more</span>] : [];
             const blankSlot = more > 0 ? [<span key="blank" />] : [];
             const amountText = (v: number | null) =>
