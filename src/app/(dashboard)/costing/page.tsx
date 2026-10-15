@@ -10,7 +10,7 @@ import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 
 /**
  * Costing, organised around products. The Products list is the way in: tap a product and its
- * recipe, cost breakdown and price calculator are all on one page (components/costing/
+ * page walks through what goes in, what it costs and what it sells for (components/costing/
  * product-detail). Raw materials and Packaging are the inputs every product's cost is worked
  * out from.
  *
@@ -56,7 +56,9 @@ function CostingPageInner() {
     />
   );
 
-  if (productId) return <ProductDetail productId={productId} subnav={subnav} onBack={() => go("products")} />;
+  if (productId) {
+    return <ProductDetail productId={productId} subnav={subnav} onBack={() => go("products")} onOpenProduct={(id) => go("products", id)} />;
+  }
   return <ProductsScreen subnav={subnav} list={LIST_FOR_VIEW[view]} onOpenPricing={(id) => go("products", id)} />;
 }
 

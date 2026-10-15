@@ -388,33 +388,29 @@ export function TransactionTable({
                         {info && info.remaining > 0 ? `${formatPeso(info.remaining)} left` : "Paid in full"}
                       </div>
                     )}
+                    {owed && kind && outstanding(e) > 0 && (
+                      <button
+                        type="button"
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          setPaying(paying === e.id ? null : e.id);
+                        }}
+                        aria-label={kind === "receivable" ? "Log a payment received" : "Log a payment made"}
+                        title={kind === "receivable" ? "Log a payment received" : "Log a payment made"}
+                        className="relative mx-auto mt-1.5 flex h-9 w-9 items-center justify-center rounded-full bg-cacao/10 text-cacao transition hover:bg-cacao/20 active:scale-90"
+                      >
+                        <HandCoins className="h-[18px] w-[18px]" />
+                        <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-cacao text-ivory">
+                          <Plus className="h-2.5 w-2.5" strokeWidth={3} />
+                        </span>
+                      </button>
+                    )}
                   </td>
                   {showPayment && <td className={`${td} whitespace-nowrap text-[12.5px]`}>{paymentNode}</td>}
                   {showPayment && (
                     <td className={`${td} text-[12.5px]`}>
                       {kind ? (
-                        <Deadline
-                          e={e}
-                          action={
-                            owed && outstanding(e) > 0 ? (
-                              <button
-                                type="button"
-                                onClick={(ev) => {
-                                  ev.stopPropagation();
-                                  setPaying(paying === e.id ? null : e.id);
-                                }}
-                                aria-label={kind === "receivable" ? "Log a payment received" : "Log a payment made"}
-                                title="Log a payment"
-                                className="relative inline-flex h-9 w-9 items-center justify-center rounded-full bg-cacao/10 text-cacao transition hover:bg-cacao/20 active:scale-90"
-                              >
-                                <HandCoins className="h-[18px] w-[18px]" />
-                                <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-cacao text-ivory">
-                                  <Plus className="h-2.5 w-2.5" strokeWidth={3} />
-                                </span>
-                              </button>
-                            ) : undefined
-                          }
-                        />
+                        <Deadline e={e} />
                       ) : (
                         <NA />
                       )}
