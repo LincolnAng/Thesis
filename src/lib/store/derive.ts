@@ -1,3 +1,4 @@
+import { expandOrderLines } from "@/lib/transactions/order-lines";
 import type { Entry } from "./types";
 
 export function isWithinDays(iso: string, days: number, now: Date = new Date()): boolean {
@@ -31,7 +32,7 @@ export function totalWasteValue(entries: Entry[]): number {
 
 export function revenueBySku(entries: Entry[]): { sku: string; revenue: number; qty: number }[] {
   const map = new Map<string, { sku: string; revenue: number; qty: number }>();
-  for (const e of salesEntries(entries)) {
+  for (const e of salesEntries(expandOrderLines(entries))) {
     const key = e.sku ?? "Unspecified";
     const existing = map.get(key) ?? { sku: key, revenue: 0, qty: 0 };
     existing.revenue += e.amount ?? 0;

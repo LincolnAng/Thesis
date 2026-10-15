@@ -1,3 +1,4 @@
+import { expandOrderLines } from "@/lib/transactions/order-lines";
 import type { Entry } from "@/lib/store/types";
 import { nameKey, nameScore } from "@/lib/summary/name-match";
 
@@ -93,7 +94,8 @@ export function deriveCustomers(entries: Entry[]): DerivedCustomer[] {
         .at(0) ?? "";
 
     const bySku = new Map<string, CustomerPurchase>();
-    for (const e of group) {
+    // Per product: an order of several products counts toward each of them.
+    for (const e of expandOrderLines(group)) {
       const sku = e.sku?.trim() || "Unspecified item";
       const existing = bySku.get(sku);
       if (existing) {
@@ -107,7 +109,7 @@ export function deriveCustomers(entries: Entry[]): DerivedCustomer[] {
     }
 
     const totalSpent = group.reduce((sum, e) => sum + (e.amount ?? 0), 0);
-    const totalQty = group.reduce((sum, e) => sum + (e.quantity ?? 0), 0);
+    const totalQty = expandOrderLines(group).reduce((sum, e) => sum + (e.quantity ?? 0), 0);
     customers.push({
       key,
       name,

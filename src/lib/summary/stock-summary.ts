@@ -1,3 +1,4 @@
+import { expandOrderLines } from "@/lib/transactions/order-lines";
 import { pluralize } from "@/lib/format";
 import type { Entry, Product, RawMaterialStock } from "@/lib/store/types";
 import { sum } from "./period";
@@ -29,7 +30,7 @@ function normalize(text: string | null | undefined): string {
 function salesVelocityPerDay(entries: Entry[], productName: string, days = 30): number {
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
   const n = normalize(productName);
-  const sales = entries.filter(
+  const sales = expandOrderLines(entries).filter(
     (e) => e.type === "SALE" && e.sku && normalize(e.sku) === n && new Date(e.timestamp).getTime() >= cutoff,
   );
   return sum(sales, (e) => e.quantity ?? 0) / days;

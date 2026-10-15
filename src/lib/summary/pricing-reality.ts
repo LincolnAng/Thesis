@@ -1,3 +1,4 @@
+import { expandOrderLines } from "@/lib/transactions/order-lines";
 import { effectiveProductPrice, productCostPerJar, type CostContext } from "@/lib/summary/recipe-cost";
 import { findProduct } from "@/lib/summary/product-match";
 import type { Entry, Product } from "@/lib/store/types";
@@ -33,7 +34,7 @@ export function buildPricingRows(
   now = new Date(),
 ): PricingRow[] {
   const cutoff = now.getTime() - WINDOW_DAYS * 24 * 60 * 60 * 1000;
-  const recentSales = entries.filter(
+  const recentSales = expandOrderLines(entries).filter(
     (e) => e.type === "SALE" && new Date(e.timestamp).getTime() >= cutoff,
   );
 

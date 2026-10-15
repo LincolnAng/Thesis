@@ -131,7 +131,7 @@ test("event products link to their card in Costing, and alerts to the right Prod
     }),
   );
   const ev = out.find((e) => e.category === "events")!;
-  assert.equal(ev.details.find((d) => d.value === "30 packs")?.href, "/costing?view=pricing&product=p1");
+  assert.equal(ev.details.find((d) => d.value === "30 packs")?.href, "/costing?product=p1");
   assert.equal(ev.details.find((d) => d.value === "5 jars")?.href, "/costing");
   assert.equal(out.find((e) => e.id === "alert:short:Jars")?.href, "/production#what-to-buy");
   assert.equal(out.find((e) => e.id === "alert:low:p1")?.href, "/production#what-to-make");

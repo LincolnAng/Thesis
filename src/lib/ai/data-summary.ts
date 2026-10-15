@@ -1,3 +1,4 @@
+import { expandOrderLines } from "@/lib/transactions/order-lines";
 import { formatPeso, pluralize } from "@/lib/format";
 import {
   expensesByCategory,
@@ -47,7 +48,7 @@ export function buildDataSummary(state: StoreState): string {
 
   // Cost of goods for the month, so margin can be stated rather than guessed at.
   let cogsMonth = 0;
-  for (const sale of salesThisMonth) {
+  for (const sale of expandOrderLines(salesThisMonth)) {
     const product = findProduct(state.products, sale.sku);
     if (product && sale.quantity) cogsMonth += productCostPerJar(product, costCtx).costPerJar * sale.quantity;
   }

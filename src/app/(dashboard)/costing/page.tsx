@@ -4,35 +4,26 @@ import { Suspense } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PageTabs } from "@/components/layout/page";
 import { ProductsScreen, type CostingList } from "@/components/costing/products-screen";
-import { PricingScreen } from "@/components/costing/pricing-screen";
+import { ProductDetail } from "@/components/costing/product-detail";
 import { ProductGallery } from "@/components/costing/product-gallery";
 import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 
 /**
- * Costing: what the shop sells, what goes into it, and what to charge. Products and the old
- * price calculator are one place now, because a price is only ever worked out from a recipe.
+ * Costing, organised around products. The Products list is the way in: tap a product and its
+ * recipe, cost breakdown and price calculator are all on one page (components/costing/
+ * product-detail). Raw materials and Packaging are the inputs every product's cost is worked
+ * out from.
  *
- *   Products       the SKU list — tap one to open its pricing
- *   Pricing        one product's recipe, cost and price (self-set, markup, or target margin)
- *   Raw materials  what goes in, and what it cost
- *   Packaging      what it goes in
- *
- * Every cost is computed live from the recipe and the materials (summary/cost-engine), so a
- * change to a material's price or a recipe shows up in every product and price at once —
- * there is no stored cost to fall out of date. Executives only; employees get the gallery.
- * The view and product live in the URL, so the old /pricing link and the back button work.
+ * Executives only; an employee gets the product gallery. The view and product live in the URL,
+ * so links from elsewhere (the Calendar, the old /pricing address) open the right product.
  */
-type View = "products" | "pricing" | "materials" | "packaging";
+type View = "products" | "materials" | "packaging";
 
-const LIST_FOR_VIEW: Record<Exclude<View, "pricing">, CostingList> = {
+const LIST_FOR_VIEW: Record<View, CostingList> = {
   products: "products",
   materials: "ingredient",
   packaging: "supply",
 };
-
-function readView(raw: string | null): View {
-  return raw === "pricing" || raw === "materials" || raw === "packaging" ? raw : "products";
-}
 
 function CostingPageInner() {
   const me = useCurrentUser();
@@ -41,33 +32,32 @@ function CostingPageInner() {
   const pathname = usePathname();
   if (!isExecutive(me)) return <ProductGallery />;
 
-  const view = readView(searchParams.get("view"));
+  const raw = searchParams.get("view");
+  const view: View = raw === "materials" || raw === "packaging" ? raw : "products";
+  // ?view=pricing&product=… is the old price calculator's address; it now means the product.
   const productId = searchParams.get("product");
   const go = (next: View, product?: string) => {
     const params = new URLSearchParams();
     if (next !== "products") params.set("view", next);
     if (product) params.set("product", product);
     const query = params.toString();
-    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: true });
   };
 
   const subnav = (
     <PageTabs
       tabs={[
         ["products", "Products"],
-        ["pricing", "Pricing"],
         ["materials", "Raw materials"],
         ["packaging", "Packaging"],
       ]}
-      value={view}
-      onChange={(next) => go(next, next === "pricing" ? (productId ?? undefined) : undefined)}
+      value={productId ? "products" : view}
+      onChange={(next) => go(next)}
     />
   );
 
-  if (view === "pricing") {
-    return <PricingScreen subnav={subnav} productId={productId} onSelect={(id) => go("pricing", id)} />;
-  }
-  return <ProductsScreen subnav={subnav} list={LIST_FOR_VIEW[view]} onOpenPricing={(id) => go("pricing", id)} />;
+  if (productId) return <ProductDetail productId={productId} subnav={subnav} onBack={() => go("products")} />;
+  return <ProductsScreen subnav={subnav} list={LIST_FOR_VIEW[view]} onOpenPricing={(id) => go("products", id)} />;
 }
 
 export default function CostingPage() {

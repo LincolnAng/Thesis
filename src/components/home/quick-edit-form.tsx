@@ -562,7 +562,7 @@ function withDay(timestamp: string, day: string): string {
   return new Date(y, m - 1, d, t.getHours(), t.getMinutes(), t.getSeconds()).toISOString();
 }
 
-const STATUS_LABELS: Record<PaymentStatus, string> = { pending: "Not paid yet", partial: "Partly paid", settled: "Fully paid" };
+const STATUS_LABELS: Record<PaymentStatus, string> = { pending: "Not paid yet", partial: "Partly paid", settled: "Fully paid", defaulted: "Defaulted" };
 
 /**
  * Spot, or owed — and if owed, by when and how much is paid so far. A receivable is a sale the

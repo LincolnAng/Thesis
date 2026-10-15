@@ -1,3 +1,4 @@
+import { expandOrderLines } from "@/lib/transactions/order-lines";
 import type { Entry, Product } from "@/lib/store/types";
 import { productCostPerJar, type CostContext } from "./recipe-cost";
 import { entriesInMonth, sum } from "./period";
@@ -27,7 +28,7 @@ export function computeMonthlyProfitTrend(
 ): ProfitPoint[] {
   const points: ProfitPoint[] = [];
   for (let i = months - 1; i >= 0; i--) {
-    const monthEntries = entriesInMonth(entries, i, now);
+    const monthEntries = expandOrderLines(entriesInMonth(entries, i, now));
     const sales = monthEntries.filter((e) => e.type === "SALE");
     // Investments (the RND type — R&D, equipment, repairs) are funded by the owners, so they are
     // not the business's expenses: see lib/transactions/ledger.ts.
@@ -81,7 +82,7 @@ export function computeProductMarginRanking(
   ctx: CostContext,
   now: Date = new Date(),
 ): ProductMarginRow[] {
-  const thisMonth = entriesInMonth(entries, 0, now).filter((e) => e.type === "SALE");
+  const thisMonth = expandOrderLines(entriesInMonth(entries, 0, now)).filter((e) => e.type === "SALE");
   const bySku = new Map<string, { revenue: number; cost: number; qty: number }>();
   for (const e of thisMonth) {
     const key = e.sku ?? "Other";

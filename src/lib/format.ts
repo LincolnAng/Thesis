@@ -104,7 +104,9 @@ export const INVESTMENT_CATEGORIES = [
 export const ENTRY_TYPE_LABELS: Record<string, string> = {
   SALE: "Sale",
   EXPENSE: "Expense",
-  RND: "Investment",
+  RND: "Investment (owner-funded)",
+  CAPITAL: "Capital put in",
+  ASSET: "Long-term asset",
   INVENTORY_IN: "Batch made",
   INVENTORY_OUT: "Stock out",
   WASTE: "Waste",
@@ -118,6 +120,8 @@ export const ENTRY_TYPE_COLORS: Record<string, string> = {
   SALE: "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/40 dark:text-green-300 dark:border-green-900",
   EXPENSE: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900",
   RND: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900",
+  CAPITAL: "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/40 dark:text-green-300 dark:border-green-900",
+  ASSET: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900",
   INVENTORY_IN: "bg-muted text-muted-foreground border-border",
   INVENTORY_OUT: "bg-muted text-muted-foreground border-border",
   WASTE: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900",
@@ -153,4 +157,15 @@ export function currentMonthLabel(now: Date = new Date()): string {
 export function previousMonthShortLabel(now: Date = new Date()): string {
   const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   return d.toLocaleDateString("en-PH", { month: "long" });
+}
+
+/** Banks offered when a payment is a bank transfer. Any other bank can be typed in. */
+export const COMMON_BANKS = ["BDO", "BPI", "Metrobank", "Landbank", "PNB", "Security Bank", "UnionBank", "RCBC", "China Bank", "EastWest"] as const;
+
+export const PAYMENT_METHOD_LABELS: Record<string, string> = { cash: "Cash", bank_transfer: "Bank transfer" };
+
+/** "Bank transfer · BDO", "Cash", or "" when not recorded. */
+export function describePaymentMethod(method: string | null | undefined, bank: string | null | undefined): string {
+  if (!method) return "";
+  return method === "bank_transfer" ? `Bank transfer${bank ? ` · ${bank}` : ""}` : "Cash";
 }

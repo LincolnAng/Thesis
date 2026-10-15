@@ -126,7 +126,7 @@ export function buildCalendarEntries(input: CalendarInput): CalendarEntry[] {
         ...plan.map(([productId, qty]) => ({
           label: nameOf(products, productId),
           value: plural(qty, unitOf(products, productId)),
-          href: products.some((p) => p.id === productId) ? `/costing?view=pricing&product=${productId}` : "/costing",
+          href: products.some((p) => p.id === productId) ? `/costing?product=${productId}` : "/costing",
         })),
         ...(event.notes ? [{ label: "Notes", value: event.notes }] : []),
       ],

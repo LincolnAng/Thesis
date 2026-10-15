@@ -1,3 +1,4 @@
+import { expandOrderLines } from "@/lib/transactions/order-lines";
 import { PRICE_TYPE_LABELS } from "@/lib/format";
 import { chipColor } from "@/lib/chart-colors";
 import type { Entry, Product } from "@/lib/store/types";
@@ -59,14 +60,16 @@ export function computeSalesSummary(entries: Entry[], products: Product[], ctx: 
 
   const revenue = sum(thisMonth, (e) => e.amount ?? 0);
   const lastRevenue = sum(lastMonth, (e) => e.amount ?? 0);
-  const jarsSold = sum(thisMonth, (e) => e.quantity ?? 0);
-  const lastJarsSold = sum(lastMonth, (e) => e.quantity ?? 0);
+  const jarsSold = sum(expandOrderLines(thisMonth), (e) => e.quantity ?? 0);
+  const lastJarsSold = sum(expandOrderLines(lastMonth), (e) => e.quantity ?? 0);
   const avgPerJar = jarsSold > 0 ? revenue / jarsSold : 0;
   const orderCount = thisMonth.length;
   const avgOrderValue = orderCount > 0 ? revenue / orderCount : 0;
 
   let profit = 0;
-  for (const e of thisMonth) {
+  // Multi-product orders count each product separately (see transactions/order-lines).
+  const thisMonthLines = expandOrderLines(thisMonth);
+  for (const e of thisMonthLines) {
     const product = findProduct(products, e.sku);
     if (product && e.quantity) {
       const cost = productCostPerJar(product, ctx).costPerJar * e.quantity;
@@ -75,7 +78,7 @@ export function computeSalesSummary(entries: Entry[], products: Product[], ctx: 
   }
 
   const bySku = new Map<string, { revenue: number; qty: number }>();
-  for (const e of thisMonth) {
+  for (const e of thisMonthLines) {
     const key = e.sku ?? "Other";
     const current = bySku.get(key) ?? { revenue: 0, qty: 0 };
     current.revenue += e.amount ?? 0;

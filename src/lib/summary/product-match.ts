@@ -18,6 +18,9 @@ export function findProduct(products: Product[], sku: string | null): Product | 
   const n = normalize(sku);
   if (!n) return undefined;
   return (
+    // "Cacao Tablea · 150g" — a size, named the way the app writes it, before the bare family
+    // name could match whichever size happens to come first.
+    products.find((p) => p.sizeLabel && normalize(`${p.name} · ${p.sizeLabel}`) === n) ??
     products.find((p) => normalize(p.name) === n) ??
     products.find((p) => normalize(p.name).includes(n) || n.includes(normalize(p.name)))
   );

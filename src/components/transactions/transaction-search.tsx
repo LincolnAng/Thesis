@@ -18,6 +18,7 @@ export const STATUS_FILTERS: [string, string][] = [
   ["pending", "Not paid yet"],
   ["partial", "Partly paid"],
   ["settled", "Paid in full"],
+  ["defaulted", "Defaulted"],
   ["overdue", "Overdue"],
 ];
 

@@ -749,6 +749,19 @@ function applyEntrySideEffects(
   // Its effect on the event's holdings is derived from the entry itself (see summary/events.ts).
   const drawsFromEventHoldings = Boolean(entry.eventId);
 
+  // An order of several products takes each one off its own shelf, by product id.
+  if (entry.type === "SALE" && entry.lineItems?.length) {
+    if (drawsFromEventHoldings) return { products, rawMaterials, touchedProductIds, touchedMaterialIds };
+    for (const line of entry.lineItems) {
+      const product = (line.productId && products.find((p) => p.id === line.productId)) || findProduct(products, line.name);
+      if (!product) continue;
+      const lineDelta = line.quantity * direction;
+      products = products.map((p) => (p.id === product.id ? { ...p, stockQty: Math.max(0, p.stockQty - lineDelta) } : p));
+      touchedProductIds.push(product.id);
+    }
+    return { products, rawMaterials, touchedProductIds, touchedMaterialIds };
+  }
+
   if (entry.type === "SALE" || entry.type === "INVENTORY_OUT" || entry.type === "WASTE") {
     if (drawsFromEventHoldings) return { products, rawMaterials, touchedProductIds, touchedMaterialIds };
     const product = findProduct(products, entry.sku);

@@ -74,3 +74,74 @@ test("recording a payment settles it once it covers what is owed", () => {
   assert.equal(full.paymentStatus, "settled");
   assert.equal(full.amountPaid, 900);
 });
+
+// --- Dated payments, capital and long-term assets -------------------------------------------
+
+import { addPayment as addPaymentFn, cashInPeriod, summarize as summarizeFn } from "./ledger.ts";
+import type { Entry } from "@/lib/store/types";
+
+const e = (over: Partial<Entry>): Entry =>
+  ({ id: "x", timestamp: "2026-09-10T10:00:00", type: "SALE", amount: 1000, quantity: 1, unit: null, sku: "Tablea", counterparty: null, location: null, priceType: "standard", category: null, rawText: "", confidence: 1, ...over }) as Entry;
+
+test("a payment on a receivable counts as money in the month it was paid, not the month of the sale", () => {
+  const sale = e({ paymentTerm: "receivable", payments: [{ date: "2026-10-05", amount: 600, method: "cash" }] });
+  assert.equal(cashInPeriod(sale, "2026-09"), 0);
+  assert.equal(cashInPeriod(sale, "2026-10"), 600);
+  const oct = summarizeFn([sale], "2026-10", new Date(2026, 9, 15));
+  assert.equal(oct.moneyIn, 600);
+  assert.equal(oct.sales, 0); // the sale itself was in September
+  assert.equal(oct.receivables, 400);
+});
+
+test("older receivables without dated payments keep counting in the sale's month", () => {
+  const sale = e({ paymentTerm: "receivable", amountPaid: 300, paymentStatus: "partial" });
+  assert.equal(cashInPeriod(sale, "2026-09"), 300);
+  assert.equal(cashInPeriod(sale, "2026-10"), 0);
+});
+
+test("capital is money in, but not a sale and not earned", () => {
+  const s = summarizeFn([e({ type: "CAPITAL", amount: 50000 }), e({ amount: 1000 })], "2026-09", new Date(2026, 8, 20));
+  assert.equal(s.moneyIn, 51000);
+  assert.equal(s.capitalIn, 50000);
+  assert.equal(s.sales, 1000);
+  assert.equal(s.earned, 1000);
+});
+
+test("an asset bought on credit is a payable, money out only as it is paid, and never an expense", () => {
+  const freezer = e({ type: "ASSET", amount: 30000, paymentTerm: "payable", payments: [{ date: "2026-09-12", amount: 10000, method: "bank_transfer", bankName: "BDO" }] });
+  const s = summarizeFn([freezer], "2026-09", new Date(2026, 8, 20));
+  assert.equal(s.moneyOut, 10000);
+  assert.equal(s.assetsOut, 10000);
+  assert.equal(s.assetsBought, 30000);
+  assert.equal(s.payables, 20000);
+  assert.equal(s.expenses, 0);
+  assert.equal(s.earned, 0);
+});
+
+test("an unpaid payable paid by bank transfer later is not money out until paid", () => {
+  const bill = e({ type: "EXPENSE", amount: 500, paymentTerm: "payable", paymentMethod: "bank_transfer", bankName: "BPI" });
+  const s = summarizeFn([bill], "2026-09", new Date(2026, 8, 20));
+  assert.equal(s.moneyOut, 0);
+  assert.equal(s.payables, 500);
+});
+
+test("defaulted receivables stay owed", () => {
+  const sale = e({ paymentTerm: "receivable", paymentStatus: "defaulted", payments: [{ date: "2026-09-11", amount: 200, method: "cash" }] });
+  const s = summarizeFn([sale], "2026-09", new Date(2026, 8, 20));
+  assert.equal(s.receivables, 800);
+  assert.equal(s.moneyIn, 200);
+});
+
+test("adding a payment carries an older running total in as a first payment, and settles at the full amount", () => {
+  const sale = e({ paymentTerm: "receivable", amountPaid: 300, paymentStatus: "partial" });
+  const patch = addPaymentFn(sale, { date: "2026-10-01", amount: 700, method: "bank_transfer", bankName: "BDO" }, new Date(2026, 9, 1));
+  assert.equal(patch.payments?.length, 2);
+  assert.equal(patch.payments?.[0].date, "2026-09-10");
+  assert.equal(patch.paymentStatus, "settled");
+  assert.equal(patch.amountPaid, 1000);
+});
+
+test("overpaying never counts more cash than was owed", () => {
+  const sale = e({ paymentTerm: "receivable", payments: [{ date: "2026-10-01", amount: 900, method: "cash" }, { date: "2026-10-02", amount: 900, method: "cash" }] });
+  assert.equal(cashInPeriod(sale, "2026-10"), 1000);
+});

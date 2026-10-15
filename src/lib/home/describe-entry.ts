@@ -23,11 +23,11 @@ export function categoryBadgeLabel(draft: EntryDraft): string {
 }
 
 export function isMoneyIn(draft: EntryDraft): boolean {
-  return draft.type === "SALE";
+  return draft.type === "SALE" || draft.type === "CAPITAL";
 }
 
 export function hasAmount(draft: EntryDraft): boolean {
-  return draft.type === "SALE" || draft.type === "EXPENSE";
+  return draft.type === "SALE" || draft.type === "EXPENSE" || draft.type === "CAPITAL" || draft.type === "ASSET";
 }
 
 /** A plain-language one-sentence description, used to ask "is this right?". */

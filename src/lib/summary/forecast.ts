@@ -1,3 +1,4 @@
+import { expandOrderLines } from "@/lib/transactions/order-lines";
 import { resolveProductId } from "@/lib/summary/product-match";
 import {
   fitHoltWinters,
@@ -128,7 +129,8 @@ export function monthlyDemand(productId: string, entries: Entry[], products: Pro
   const thisMonth = currentMonthKey(now);
   const byMonth = new Map<string, number>();
 
-  for (const entry of entries) {
+  // Multi-product orders count each product separately (see transactions/order-lines).
+  for (const entry of expandOrderLines(entries)) {
     if (entry.type !== "SALE" || !entry.quantity) continue;
     if (resolveProductId(products, entry.sku) !== productId) continue;
     const key = monthKey(entry.timestamp);

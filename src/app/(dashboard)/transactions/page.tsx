@@ -3,7 +3,7 @@
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowDownLeft, ArrowUpRight, CircleDollarSign, HandCoins, Landmark } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, CircleDollarSign } from "lucide-react";
 import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 import { CarouselNav } from "@/components/ui/carousel-nav";
 import { Page } from "@/components/layout/page";
@@ -14,28 +14,29 @@ import { MissingProductBanner } from "@/components/sales/missing-product-banner"
 import { SettingNumberInput } from "@/components/ui/setting-number-input";
 import { QuickEditDialog } from "@/components/home/quick-edit-dialog";
 import { TransactionTable } from "@/components/transactions/transaction-table";
+import { TransactionDialog } from "@/components/transactions/transaction-dialog";
 import { EMPTY_FILTERS, TransactionSearch, type TransactionFilters } from "@/components/transactions/transaction-search";
 import { useStore } from "@/lib/store/use-store";
 import { addEntry, deleteEntry, replaceEntry } from "@/lib/store/store";
-import { blankEntryDraft } from "@/lib/store/blank-draft";
 import { entryToDraft } from "@/lib/home/describe-entry";
 import { computeExpensesSummary } from "@/lib/summary/expenses-summary";
 import { salesTarget, setSalesTarget } from "@/lib/summary/business-config";
-import { carriedOver, dueInfo, monthOf, statusOf, summarize, termOf } from "@/lib/transactions/ledger";
+import { carriedOver, dueInfo, isAnyInvestment, monthOf, statusOf, summarize, termOf } from "@/lib/transactions/ledger";
 import { formatPeso, pluralize } from "@/lib/format";
 import type { Entry, EntryType } from "@/lib/store/types";
 
 /** The static tabs: one per kind of transaction, always on screen. */
-type Tab = "all" | "SALE" | "EXPENSE" | "RND" | "WASTE";
+type Tab = "all" | "SALE" | "EXPENSE" | "INVEST" | "WASTE";
 const TABS: [Tab, string][] = [
   ["all", "All"],
   ["SALE", "Sales"],
   ["EXPENSE", "Expenses"],
-  ["RND", "Investments"],
+  ["INVEST", "Investments"],
   ["WASTE", "Spoilage"],
 ];
 const EMPLOYEE_TABS: Tab[] = ["all", "SALE", "WASTE"];
-const LEDGER_TYPES = new Set<EntryType>(["SALE", "EXPENSE", "RND", "WASTE"]);
+const LEDGER_TYPES = new Set<EntryType>(["SALE", "EXPENSE", "RND", "CAPITAL", "ASSET", "WASTE"]);
+const inTab = (e: Entry, tab: Tab) => tab === "all" || (tab === "INVEST" ? isAnyInvestment(e) : e.type === tab);
 
 function monthLabel(key: string, style: "long" | "short" = "long") {
   const [y, m] = key.split("-").map(Number);
@@ -95,7 +96,8 @@ function TransactionsPageInner() {
   const choices = useMemo(() => {
     const uniq = (list: (string | null | undefined)[]) => [...new Set(list.filter((x): x is string => !!x))].sort((a, b) => a.localeCompare(b));
     return {
-      products: uniq(ledger.map((e) => e.sku)),
+      // A multi-product order offers each of its products, not the joined list.
+      products: uniq(ledger.flatMap((e) => (e.lineItems?.length ? e.lineItems.map((l) => l.name) : [e.sku]))),
       people: uniq(ledger.map((e) => e.counterparty)),
       recorders: uniq(ledger.map((e) => e.loggedByName)),
     };
@@ -106,26 +108,25 @@ function TransactionsPageInner() {
     // Still-owed rows from earlier months come first in a month's Sales, Expenses and All tabs.
     const pool = [...carried, ...periodRows.slice().sort((a, b) => b.timestamp.localeCompare(a.timestamp))];
     return pool.filter((e) => {
-      if (tab !== "all" && e.type !== tab) return false;
+      if (!inTab(e, tab)) return false;
       if (filters.type && e.type !== filters.type) return false;
       if (supplierFilter && (e.counterparty ?? "").toLowerCase() !== supplierFilter.toLowerCase()) return false;
-      if (filters.product && e.sku !== filters.product) return false;
+      if (filters.product && e.sku !== filters.product && !e.lineItems?.some((l) => l.name === filters.product)) return false;
       if (filters.person && e.counterparty !== filters.person) return false;
       if (filters.recordedBy && e.loggedByName !== filters.recordedBy) return false;
       if (filters.status) {
         if (filters.status === "spot" && termOf(e) !== "spot") return false;
         if (filters.status === "overdue" && !dueInfo(e, now).overdue) return false;
-        if (["pending", "partial", "settled"].includes(filters.status) && statusOf(e) !== filters.status) return false;
+        if (["pending", "partial", "settled", "defaulted"].includes(filters.status) && statusOf(e) !== filters.status) return false;
       }
       if (q) {
-        const hay = [e.sku, e.counterparty, e.rawText, e.notes, e.loggedByName].join(" ").toLowerCase();
+        const hay = [e.sku, e.counterparty, e.rawText, e.notes, e.loggedByName, e.bankName].join(" ").toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
   }, [carried, periodRows, tab, filters, supplierFilter, now]);
 
-  const addType: EntryType = tab === "all" ? "SALE" : tab;
 
   return (
     <Page
@@ -160,22 +161,51 @@ function TransactionsPageInner() {
           </button>
         </div>
 
-        {/* The money, by kind: cash that moved, what is still owed, and what was earned. */}
+        {/* Three cards. Cash that actually moved sits beside what is still owed, each in its own
+            labelled figure — never added together — and the third is earnings, as before. */}
         {exec ? (
-          <section className="grid grid-cols-1 gap-3 min-[600px]:grid-cols-2 min-[1200px]:grid-cols-5" aria-label="Money summary">
-            <MoneyBox
+          <section className="grid grid-cols-1 gap-3 min-[900px]:grid-cols-3" aria-label="Money summary">
+            <SplitCard
               icon={<ArrowDownLeft className="h-5 w-5" />}
-              label="Money in"
-              value={summary.moneyIn}
+              title="Money in & receivables"
               tone="good"
-              note={`Cash received · ${periodName}`}
+              main={{
+                label: "Money received",
+                value: summary.moneyIn,
+                note:
+                  summary.capitalIn > 0
+                    ? `Cash that came in · ${periodName} · includes ${formatPeso(summary.capitalIn)} capital put in`
+                    : `Cash that came in · ${periodName}`,
+              }}
+              owed={{
+                label: "Still owed to us",
+                value: summary.receivables,
+                note: summary.overdueReceivables
+                  ? `Receivables · ${pluralize(summary.overdueReceivables, "payment")} overdue`
+                  : "Receivables — not counted as money in until paid",
+                alert: summary.overdueReceivables > 0,
+              }}
             />
-            <MoneyBox
+            <SplitCard
               icon={<ArrowUpRight className="h-5 w-5" />}
-              label="Money out"
-              value={summary.moneyOut}
+              title="Money out & payables"
               tone="bad"
-              note={`Cash paid · ${periodName}`}
+              main={{
+                label: "Money paid",
+                value: summary.moneyOut,
+                note:
+                  summary.assetsOut > 0
+                    ? `Cash that went out · ${periodName} · includes ${formatPeso(summary.assetsOut)} for long-term assets`
+                    : `Cash that went out · ${periodName}`,
+              }}
+              owed={{
+                label: "We still owe",
+                value: summary.payables,
+                note: summary.overduePayables
+                  ? `Payables · ${pluralize(summary.overduePayables, "payment")} overdue`
+                  : "Payables — not counted as money out until paid",
+                alert: summary.overduePayables > 0,
+              }}
             />
             <MoneyBox
               icon={<CircleDollarSign className="h-5 w-5" />}
@@ -184,22 +214,6 @@ function TransactionsPageInner() {
               tone={summary.earned >= 0 ? "good" : "bad"}
               filled
               note={summary.spoiled > 0 ? `Sales − expenses − ${formatPeso(summary.spoiled)} spoiled, paid or not` : "Sales − expenses, paid or not"}
-            />
-            <MoneyBox
-              icon={<HandCoins className="h-5 w-5" />}
-              label="Receivables"
-              value={summary.receivables}
-              tone="neutral"
-              note={summary.overdueReceivables ? `Owed to us · ${pluralize(summary.overdueReceivables, "overdue")}` : "Owed to us, not yet paid"}
-              alert={summary.overdueReceivables > 0}
-            />
-            <MoneyBox
-              icon={<Landmark className="h-5 w-5" />}
-              label="Payables"
-              value={summary.payables}
-              tone="neutral"
-              note={summary.overduePayables ? `We owe · ${pluralize(summary.overduePayables, "overdue")}` : "We owe, not yet paid"}
-              alert={summary.overduePayables > 0}
             />
           </section>
         ) : (
@@ -234,9 +248,17 @@ function TransactionsPageInner() {
                 tone="warning"
               />
             </div>
-            {summary.invested > 0 && (
+            {(summary.assetsBought > 0 || summary.capitalIn > 0 || summary.invested > 0) && (
               <p className="text-xs text-muted-foreground">
-                {formatPeso(summary.invested)} went into investments {period === "all" ? "overall" : "this month"} — funded by the owners, so not counted above.
+                Investments aren&apos;t counted against the target or budget:{" "}
+                {[
+                  summary.capitalIn > 0 && `${formatPeso(summary.capitalIn)} capital put in`,
+                  summary.assetsBought > 0 && `${formatPeso(summary.assetsBought)} in long-term assets`,
+                  summary.invested > 0 && `${formatPeso(summary.invested)} in older owner-funded investments`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+                .
               </p>
             )}
             {editBudgets && (
@@ -293,17 +315,19 @@ function TransactionsPageInner() {
             </div>
           )}
 
-          {tab === "RND" && (
+          {tab === "INVEST" && (
             <p className="text-[13px] text-muted-foreground">
-              Investments build the business rather than run it — R&D, equipment, repairs, permits and the like. The owners fund
-              them, so they are kept out of money in, money out and earnings.
+              Two kinds, kept apart from sales and expenses: <span className="font-semibold">money put in</span> by an owner or
+              investor (money in, but not a sale) and <span className="font-semibold">things bought to keep</span> — machinery,
+              a freezer (money out when paid, but not an everyday expense). Neither counts in money earned. Older investments
+              recorded before this split were funded by the owners and stay out of money in and out.
             </p>
           )}
 
           <div className="overflow-hidden rounded-2xl border border-line/15 bg-card">
             <TransactionTable rows={rows} showPayment={exec} onEdit={setEditing} carriedFrom={carriedFrom} />
             <div className="flex flex-wrap justify-between gap-2 border-t border-line/10 px-4 py-2.5 text-xs text-muted-foreground">
-              <span>Press the pencil on a row to change it.</span>
+              <span>Press the arrow on a row for its details, or the pencil to change it.</span>
               <span>
                 Showing {rows.length} of {periodRows.length + carried.length} rows
                 {carried.length > 0 ? ` · ${carried.length} still owed from earlier months` : ""}
@@ -313,27 +337,69 @@ function TransactionsPageInner() {
         </section>
       </div>
 
-      <QuickEditDialog
-        open={adding}
-        onOpenChange={setAdding}
-        title="Add transaction"
-        initial={blankEntryDraft(exec ? addType : addType === "WASTE" ? "WASTE" : "SALE")}
-        allowedTypes={exec ? ["SALE", "EXPENSE", "RND", "WASTE"] : ["SALE", "WASTE"]}
-        onSave={(draft) => addEntry(draft)}
-      />
-      {editing && (
+      {adding && (
+        <TransactionDialog open onOpenChange={setAdding} existing={null} exec={exec} onSave={(draft) => addEntry(draft)} />
+      )}
+      {editing && editing.type !== "RND" && (
+        <TransactionDialog
+          key={editing.id}
+          open
+          onOpenChange={(open) => !open && setEditing(null)}
+          existing={editing}
+          exec={exec}
+          onSave={(draft) => replaceEntry(editing.id, draft)}
+          onDelete={() => deleteEntry(editing.id)}
+        />
+      )}
+      {/* Older owner-funded investments keep the form they were recorded with. */}
+      {editing && editing.type === "RND" && (
         <QuickEditDialog
           key={editing.id}
           open
           onOpenChange={(open) => !open && setEditing(null)}
-          title="Change transaction"
+          title="Change investment"
           initial={entryToDraft(editing)}
-          allowedTypes={exec ? ["SALE", "EXPENSE", "RND", "WASTE"] : ["SALE", "WASTE"]}
+          allowedTypes={["RND"]}
           onSave={(draft) => replaceEntry(editing.id, draft)}
           onDelete={() => deleteEntry(editing.id)}
         />
       )}
     </Page>
+  );
+}
+
+/** One card, two figures: what actually moved, and what is still owed — labelled apart. */
+function SplitCard({
+  icon,
+  title,
+  tone,
+  main,
+  owed,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  tone: "good" | "bad";
+  main: { label: string; value: number; note: string };
+  owed: { label: string; value: number; note: string; alert?: boolean };
+}) {
+  const color = tone === "good" ? "text-success" : "text-danger";
+  return (
+    <div className={`flex flex-col rounded-2xl border bg-card ${owed.alert ? "border-danger/40" : "border-line/15"}`}>
+      <span className="flex items-center gap-2 px-5 pt-4 text-[13px] font-semibold text-muted-foreground">
+        <span className={color}>{icon}</span>
+        {title}
+      </span>
+      <div className="flex flex-col gap-0.5 px-5 pb-3 pt-2">
+        <span className="text-[13px] font-semibold">{main.label}</span>
+        <span className={`font-display text-[28px] font-bold leading-tight ${color}`}>{formatPeso(main.value)}</span>
+        <span className="text-[12px] text-muted-foreground">{main.note}</span>
+      </div>
+      <div className="mt-auto flex flex-col gap-0.5 border-t border-dashed border-line/20 bg-secondary/40 px-5 py-3">
+        <span className="text-[13px] font-semibold">{owed.label}</span>
+        <span className="font-display text-[22px] font-bold leading-tight">{formatPeso(owed.value)}</span>
+        <span className={`text-[12px] ${owed.alert ? "font-semibold text-danger" : "text-muted-foreground"}`}>{owed.note}</span>
+      </div>
+    </div>
   );
 }
 

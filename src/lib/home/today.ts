@@ -1,3 +1,4 @@
+import { expandOrderLines } from "@/lib/transactions/order-lines";
 import type { Entry, Product, Role } from "@/lib/store/types";
 
 /**
@@ -100,7 +101,8 @@ function productFor(products: Product[], sku: string | null): Product | undefine
  * an unknown cost as zero is the one number that would mislead.
  */
 export function netIncome(entries: Entry[], products: Product[], costPerUnit: TodayInputs["costPerUnit"]): Figure {
-  const sales = entries.filter((e) => e.type === "SALE");
+  // Multi-product orders count each product separately (see transactions/order-lines).
+  const sales = expandOrderLines(entries).filter((e) => e.type === "SALE");
   let cogs = 0;
   const missing = new Set<string>();
   for (const e of sales) {
@@ -356,7 +358,9 @@ function overdueHeadliner(input: TodayInputs): Headliner | null {
 }
 
 function bestSellerHeadliner(input: TodayInputs): Headliner | null {
-  const sales = inMonth(input.entries, input.now.getFullYear(), input.now.getMonth()).filter((e) => e.type === "SALE" && e.sku);
+  const sales = expandOrderLines(inMonth(input.entries, input.now.getFullYear(), input.now.getMonth())).filter(
+    (e) => e.type === "SALE" && e.sku,
+  );
   if (sales.length === 0) return null;
   const totals = new Map<string, { revenue: number; units: number }>();
   for (const e of sales) {

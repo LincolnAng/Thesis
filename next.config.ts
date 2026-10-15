@@ -17,7 +17,7 @@ const nextConfig: NextConfig = {
       // The five-tab redesign: Products and the price calculator became Costing, and Stock
       // (with its production calendar) became Production and Calendar.
       { source: "/products", destination: "/costing", permanent: false },
-      { source: "/pricing", destination: "/costing?view=pricing", permanent: false },
+      { source: "/pricing", destination: "/costing", permanent: false },
       { source: "/inventory", destination: "/production", permanent: false },
       { source: "/customers", destination: "/people", permanent: false },
       { source: "/suppliers", destination: "/people?tab=suppliers", permanent: false },

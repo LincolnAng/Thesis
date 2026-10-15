@@ -5,6 +5,13 @@ export type EntryType =
    *  packaging mock-ups. Money out like any expense, but kept apart so the cost of
    *  experimenting can be seen rather than buried in the ingredients line. */
   | "RND"
+  /** Money put into the business by an owner or investor. Money in, but never a sale:
+   *  kept out of sales, revenue and earnings. Recorded when the money actually arrives. */
+  | "CAPITAL"
+  /** Money the business spends on something it keeps — machinery, a freezer, equipment.
+   *  Money out when paid (a payable until then), but not an everyday operating expense,
+   *  so it stays out of expenses and earnings. */
+  | "ASSET"
   | "INVENTORY_IN"
   | "INVENTORY_OUT"
   | "WASTE"
@@ -20,8 +27,32 @@ export type PriceType = "standard" | "friend" | "wholesale" | null;
  */
 export type PaymentTerm = "spot" | "payable" | "receivable";
 
-/** Noted by hand on a payable or receivable: nothing paid yet, some paid, or all paid. */
-export type PaymentStatus = "pending" | "partial" | "settled";
+/** Noted by hand on a payable or receivable: nothing paid yet, some paid, all paid — or
+ *  given up on (defaulted), which keeps its unpaid balance on the books as still owed. */
+export type PaymentStatus = "pending" | "partial" | "settled" | "defaulted";
+
+/** How money moved. Bank transfers also name the bank — never an account number. */
+export type PaymentMethod = "cash" | "bank_transfer";
+
+/** One payment made against a payable or receivable, dated so cash lands in the right month. */
+export interface PaymentRecord {
+  /** "YYYY-MM-DD" */
+  date: string;
+  amount: number;
+  method: PaymentMethod;
+  bankName?: string | null;
+}
+
+/** One product in a multi-product order, with the price it actually sold at. */
+export interface OrderLine {
+  /** Null when the product has since been removed from Costing. */
+  productId: string | null;
+  /** The product's name (and size) when it was sold. */
+  name: string;
+  quantity: number;
+  /** Price per unit at the time of the sale — kept, so later price changes don't rewrite history. */
+  unitPrice: number;
+}
 
 // The 6 built-ins below always exist; a plain string (not a closed union) so the
 // owner can add their own categories from the Expenses budget editor — anything
@@ -71,6 +102,15 @@ export interface Entry {
   paymentStatus?: PaymentStatus | null;
   /** When it was marked fully paid. */
   settledAt?: string | null;
+  /** A sale of several products as one order. `quantity` is then the total units and `amount`
+   *  the order total; `sku` names the products for display. */
+  lineItems?: OrderLine[] | null;
+  /** How it was (or will be) paid. */
+  paymentMethod?: PaymentMethod | null;
+  bankName?: string | null;
+  /** Payments made against a payable or receivable, each dated. When present they are the
+   *  record of what was paid; `amountPaid` is kept equal to their sum for older readers. */
+  payments?: PaymentRecord[] | null;
 }
 
 export interface RecipeIngredientRow {

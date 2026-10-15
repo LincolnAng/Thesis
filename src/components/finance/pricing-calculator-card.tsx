@@ -15,7 +15,6 @@ import { LaborEditor } from "@/components/finance/labor-editor";
 import { useCostContext } from "@/lib/summary/use-cost-context";
 import { useNumericDraft } from "@/lib/use-numeric-draft";
 import type { Product, RawMaterialStock, RecipeComponentRow, RecipeExtraRow, RecipeIngredientRow } from "@/lib/store/types";
-import { cn } from "@/lib/utils";
 
 function genRowId(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
@@ -146,31 +145,6 @@ function IngredientRowEditor({
   );
 }
 
-function TierRow({
-  tier,
-}: {
-  tier: { label: string; price: number; onChange: (n: number) => void; profit: number; belowCost: boolean };
-}) {
-  const field = useNumericDraft(tier.price, tier.onChange);
-  return (
-    <div className="flex items-center justify-between gap-2 text-sm">
-      <span className="flex items-center gap-2 text-muted-foreground">
-        {tier.label}
-        <Input type="number" value={field.value} onChange={(e) => field.onChange(e.target.value)} className="h-7 w-20 text-xs" />
-      </span>
-      <span
-        className={cn(
-          "flex items-center gap-1 font-medium",
-          tier.belowCost ? "text-[var(--status-warning)]" : "text-[var(--status-good)]",
-        )}
-      >
-        {tier.belowCost && <AlertTriangle className="h-3.5 w-3.5" />}
-        {tier.belowCost ? "Losing money" : `${formatPeso(tier.profit)} profit`}
-      </span>
-    </div>
-  );
-}
-
 /**
  * Something this shop makes that goes into this product — tablea into ice cream or brandy.
  * Chosen from the product list, measured in that product's own unit, costed at what one of it
@@ -251,13 +225,6 @@ export function RecipeEditor({ product }: { product: Product }) {
 
   const yieldField = useNumericDraft(product.batchYield, (n) => persist(ingredients, labor, misc, n));
 
-  const otherTiers = [
-    { label: "Friend rate", price: product.friendPrice, onChange: (n: number) => updateProduct(product.id, { friendPrice: n }) },
-    { label: "Wholesale", price: product.wholesalePrice, onChange: (n: number) => updateProduct(product.id, { wholesalePrice: n }) },
-  ].map((tier) => {
-    const profit = tier.price - cost.costPerJar;
-    return { ...tier, profit, belowCost: profit < 0 };
-  });
 
   const shortages = ingredients
     .map((row) => {
@@ -426,20 +393,11 @@ export function RecipeEditor({ product }: { product: Product }) {
 
         <Button size="sm" variant="ghost" className="min-h-11 w-full gap-1 text-xs text-muted-foreground" onClick={() => setShowMore((v) => !v)}>
           {showMore ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-          {showMore ? "Show less" : "Other prices, cost breakdown and batch planning"}
+          {showMore ? "Show less" : "Cost chart and planning several batches"}
         </Button>
 
         {showMore && (
           <div className="space-y-5 border-t border-border pt-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-muted-foreground">Other prices</Label>
-              <div className="space-y-1.5">
-                {otherTiers.map((tier) => (
-                  <TierRow key={tier.label} tier={tier} />
-                ))}
-              </div>
-            </div>
-
             <div className="space-y-2">
               <Label className="text-xs font-semibold text-muted-foreground">What one {(product.unit || "jar").replace(/s$/, "")} costs to make</Label>
               <CostBreakdownLines cost={cost} />

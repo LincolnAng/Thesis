@@ -133,9 +133,9 @@ export function EditProductDialog({
               <p className="text-sm text-foreground">
                 <span className="font-semibold">{formatPeso(effectivePrice)}</span>{" "}
                 <span className="text-muted-foreground">
-                  · {PRICING_MODE_LABELS[product.pricingMode]}, change it on{" "}
-                  <Link href="/costing?view=pricing" className="text-primary underline decoration-dotted">
-                    Pricing
+                  · {PRICING_MODE_LABELS[product.pricingMode]}, change it in the{" "}
+                  <Link href={`/costing?product=${product.id}`} onClick={onClose} className="text-primary underline decoration-dotted">
+                    price calculator
                   </Link>
                 </span>
               </p>

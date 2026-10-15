@@ -33,7 +33,7 @@ export type CollectionName =
 export type WriteOp = "append" | "update" | "delete" | "migrate";
 
 /** Payment terms on a sale — who owes what, and when. Executives only; see redactForEmployee. */
-const PAYMENT_FIELDS = ["paymentTerm", "dueDate", "amountPaid", "paymentStatus", "settledAt"] as const;
+const PAYMENT_FIELDS = ["paymentTerm", "dueDate", "amountPaid", "paymentStatus", "settledAt", "paymentMethod", "bankName", "payments"] as const;
 
 function withoutPaymentFields<T extends object>(entry: T): T {
   const copy = { ...entry } as Record<string, unknown>;

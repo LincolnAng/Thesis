@@ -18,9 +18,16 @@ interface CollectionConfig<T> {
   deletedColumn?: string;
 }
 
-// Every collection in this app fits well under 26 columns.
-function columnLetter(index: number): string {
-  return String.fromCharCode(65 + index);
+/** Spreadsheet column name for a zero-based index: 0 → A, 25 → Z, 26 → AA. */
+export function columnLetter(index: number): string {
+  let n = index + 1;
+  let out = "";
+  while (n > 0) {
+    const r = (n - 1) % 26;
+    out = String.fromCharCode(65 + r) + out;
+    n = Math.floor((n - 1) / 26);
+  }
+  return out;
 }
 
 /**

@@ -18,7 +18,7 @@ import { formatPrice, pluralize } from "@/lib/format";
 import type { Product } from "@/lib/store/types";
 
 /** Shown behind the icon when a product has no photo yet, cycling by position. */
-const GRADIENTS = [
+export const GRADIENTS = [
   "from-[#7B4B2A] to-[#5A3620]",
   "from-[#A9754A] to-[#7B4B2A]",
   "from-[#5E4536] to-[#3D3D3A]",
@@ -29,7 +29,7 @@ const GRADIENTS = [
   "from-[#4D3B2F] to-[#2A2019]",
 ];
 
-function ProductPhoto({ product, gradient, photo }: { product: Product; gradient: string; photo: string | undefined }) {
+export function ProductPhoto({ product, gradient, photo }: { product: Product; gradient: string; photo: string | undefined }) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(file: File | undefined) {

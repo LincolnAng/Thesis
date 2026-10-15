@@ -1,3 +1,4 @@
+import { expandOrderLines } from "@/lib/transactions/order-lines";
 import { resolveProductId } from "@/lib/summary/product-match";
 import type { BusinessEvent, Entry, EventStockMovement, Product } from "@/lib/store/types";
 
@@ -40,6 +41,8 @@ export function summarizeEvent(
   entries: Entry[],
   products: Product[],
 ): EventSummary {
+  // Multi-product orders count each product separately (see transactions/order-lines).
+  entries = expandOrderLines(entries);
   const byProduct = new Map<string, EventProductHolding>();
   let lastActivityAt: string | null = null;
 

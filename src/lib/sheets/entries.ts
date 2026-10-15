@@ -30,7 +30,22 @@ const HEADER = [
   "amountPaid",
   "paymentStatus",
   "settledAt",
+  // Multi-product orders, payment method and dated payments — appended last, as always.
+  // lineItems and payments are JSON lists; a cell holds one order's products or payments.
+  "lineItems",
+  "paymentMethod",
+  "bankName",
+  "payments",
 ];
+
+function json<T>(raw: string | undefined): T | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
 
 function toRow(e: Entry): string[] {
   return [
@@ -57,12 +72,16 @@ function toRow(e: Entry): string[] {
     e.amountPaid == null ? "" : String(e.amountPaid),
     e.paymentStatus ?? "",
     e.settledAt ?? "",
+    e.lineItems?.length ? JSON.stringify(e.lineItems) : "",
+    e.paymentMethod ?? "",
+    e.bankName ?? "",
+    e.payments?.length ? JSON.stringify(e.payments) : "",
   ];
 }
 
 function fromRow(row: string[]): Entry | null {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [id, timestamp, type, amount, quantity, unit, sku, counterparty, location, priceType, category, rawText, confidence, notes, _deletedAt, eventId, loggedById, loggedByName, paymentTerm, dueDate, amountPaid, paymentStatus, settledAt] =
+  const [id, timestamp, type, amount, quantity, unit, sku, counterparty, location, priceType, category, rawText, confidence, notes, _deletedAt, eventId, loggedById, loggedByName, paymentTerm, dueDate, amountPaid, paymentStatus, settledAt, lineItems, paymentMethod, bankName, payments] =
     row;
   if (!id) return null;
   return {
@@ -86,8 +105,12 @@ function fromRow(row: string[]): Entry | null {
     paymentTerm: (["spot", "payable", "receivable"].includes(paymentTerm) ? paymentTerm : null) as Entry["paymentTerm"],
     dueDate: dueDate || null,
     amountPaid: amountPaid ? Number(amountPaid) : null,
-    paymentStatus: (["pending", "partial", "settled"].includes(paymentStatus) ? paymentStatus : null) as Entry["paymentStatus"],
+    paymentStatus: (["pending", "partial", "settled", "defaulted"].includes(paymentStatus) ? paymentStatus : null) as Entry["paymentStatus"],
     settledAt: settledAt || null,
+    lineItems: json<Entry["lineItems"]>(lineItems),
+    paymentMethod: (["cash", "bank_transfer"].includes(paymentMethod) ? paymentMethod : null) as Entry["paymentMethod"],
+    bankName: bankName || null,
+    payments: json<Entry["payments"]>(payments),
   };
 }
 

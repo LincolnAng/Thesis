@@ -14,6 +14,7 @@
  * Pure: no store, no React.
  */
 
+import { expandOrderLines } from "@/lib/transactions/order-lines";
 import type { Entry, Product } from "@/lib/store/types";
 
 export interface StockLot {
@@ -81,6 +82,8 @@ export function productExpiry(
   /** Every product, so batches of things made FROM this one (tablea into ice cream) draw it down. */
   allProducts: Product[] = [],
 ): ProductExpiry {
+  // Multi-product orders count each product separately (see transactions/order-lines).
+  entries = expandOrderLines(entries);
   const todayDay = dayOf(today.toISOString());
 
   const made = entries
