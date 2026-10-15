@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 import Link from "next/link";
 import { ArrowRight, CircleAlert, Clock, Factory, Package, ShoppingCart, Sprout, TriangleAlert } from "lucide-react";
 import { useStore } from "@/lib/store/use-store";
@@ -149,31 +149,19 @@ export function ProcessPlan() {
     };
   };
 
+  const stages = [
+    { key: "raw", icon: <Sprout className="h-4 w-4" />, title: "Raw materials", nodes: chain.rawMaterials.map((n) => costNode(n, "material")), empty: "No recipe uses an ingredient yet" },
+    // Only shown once something is made to go into another product; empty, it was a quarter of
+    // the panel saying nothing.
+    ...(chain.inHouse.length > 0 ? [{ key: "inhouse", icon: <Factory className="h-4 w-4" />, title: "Made in-house", nodes: chain.inHouse.map((n) => costNode(n, "product")), empty: "" }] : []),
+    { key: "sold", icon: <Package className="h-4 w-4" />, title: "Products sold", nodes: chain.products.map((n) => costNode(n, "product")), empty: "No products yet" },
+    { key: "pack", icon: <ShoppingCart className="h-4 w-4" />, title: "Packaging", nodes: chain.packaging.map((n) => costNode(n, "material")), empty: "No recipe uses packaging yet" },
+  ];
+  const th = "whitespace-nowrap px-3 py-2 text-right font-semibold";
+
   return (
-    <section className="flex flex-col gap-4" aria-labelledby="process-title">
-      <h2 id="process-title" className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-        Process and plan · covers next month&apos;s sales and upcoming events
-      </h2>
-
-      <div className="rounded-2xl border border-line/15 bg-card p-5">
-        <h3 className="text-sm font-semibold">How it&apos;s made, and what each step costs</h3>
-        <p className="mb-4 text-xs text-muted-foreground">
-          From the recipes in Costing. Tap a product to see its recipe and how its cost adds up. Add an in-house ingredient to a recipe (tablea in ice
-          cream) to link the stages.
-        </p>
-        <div className="grid grid-cols-1 gap-3 min-[900px]:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr]">
-          <Stage icon={<Sprout className="h-4 w-4" />} title="Raw materials" nodes={chain.rawMaterials.map((n) => costNode(n, "material"))} empty="No recipe uses an ingredient yet" />
-          <Arrow />
-          <Stage icon={<Factory className="h-4 w-4" />} title="Made in-house" nodes={chain.inHouse.map((n) => costNode(n, "product"))} empty="Nothing is made to go into another product yet" />
-          <Arrow />
-          <Stage icon={<Package className="h-4 w-4" />} title="Products sold" nodes={chain.products.map((n) => costNode(n, "product"))} empty="No products yet" />
-          <Arrow />
-          <Stage icon={<ShoppingCart className="h-4 w-4" />} title="Packaging" nodes={chain.packaging.map((n) => costNode(n, "material"))} empty="No recipe uses packaging yet" />
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-line/15 bg-card p-5">
-        <h3 className="mb-3 text-sm font-semibold">Alerts</h3>
+    <>
+      <Panel title="Alerts" note={alerts.length ? "What to make, buy or sell first, most urgent at the top." : undefined}>
         {alerts.length === 0 ? (
           <p className="text-sm text-muted-foreground">Nothing to make or buy — stock covers what&apos;s expected, and no batch is near its date.</p>
         ) : (
@@ -189,153 +177,190 @@ export function ProcessPlan() {
             ))}
           </ul>
         )}
-      </div>
+      </Panel>
 
-      {(runs.length > 0 || toBuy.length > 0 || salesValue > 0) && (
-        <div className="grid grid-cols-1 gap-3 min-[700px]:grid-cols-3" aria-label="What the plan costs">
-          <MoneyFigure
-            label="Making it all costs about"
-            value={formatPeso(makeTotal)}
-            note={
-              unknownRuns.length > 0
-                ? `Not counting ${unknownRuns.map((p) => p.name).join(", ")} — no cost yet`
-                : "Ingredients, packaging and other costs"
-            }
-          />
-          <MoneyFigure
-            label="Of that, still to buy"
-            value={formatPeso(buyTotal)}
-            note={unpricedBuys.length > 0 ? `Not counting ${unpricedBuys.map((m) => m.name).join(", ")} — no price yet` : "What's missing from the shelf"}
-          />
-          <MoneyFigure label="Next month's sales should bring in" value={formatPeso(salesValue)} note="Expected sales and events, at today's prices" good />
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 gap-4 min-[1500px]:grid-cols-[3fr_2fr]">
-        <div id="what-to-make" className="scroll-mt-24 overflow-hidden rounded-2xl border border-line/15 bg-card">
-          <div className="px-5 pt-4">
-            <h3 className="text-sm font-semibold">What to make</h3>
-            <p className="text-xs text-muted-foreground">
-              Need = expected sales + what other products use. Made in whole batches, so it always covers the shortfall.
-            </p>
+      {/* The plan in one place: what it all costs, then what to make and what to buy side by side. */}
+      <section className="flex flex-col gap-4" aria-label="Next month's plan">
+        {(runs.length > 0 || toBuy.length > 0 || salesValue > 0) && (
+          <div className="grid grid-cols-1 gap-4 min-[700px]:grid-cols-3" aria-label="What the plan costs">
+            <MoneyFigure
+              label="Making it all costs about"
+              value={formatPeso(makeTotal)}
+              note={unknownRuns.length > 0 ? `Not counting ${unknownRuns.map((p) => p.name).join(", ")} — no cost yet` : "Ingredients, packaging and other costs"}
+            />
+            <MoneyFigure
+              label="Of that, still to buy"
+              value={formatPeso(buyTotal)}
+              note={unpricedBuys.length > 0 ? `Not counting ${unpricedBuys.map((m) => m.name).join(", ")} — no price yet` : "What's missing from the shelf"}
+            />
+            <MoneyFigure label="Next month's sales should bring in" value={formatPeso(salesValue)} note="Expected sales and events, at today's prices" good />
           </div>
-          <div className="overflow-x-auto">
-            <table className="mt-3 w-full min-w-[620px] text-[13px]">
-              <thead className="bg-secondary/50 text-[12px] font-semibold text-muted-foreground">
-                <tr>
-                  <th className="px-5 py-2 text-left">Product</th>
-                  <th className="px-3 py-2 text-right">Need</th>
-                  <th className="px-3 py-2 text-right">On hand</th>
-                  <th className="px-3 py-2 text-right">Short</th>
-                  <th className="px-3 py-2 text-right">Batches</th>
-                  <th className="px-3 py-2 text-right">Cost of run</th>
-                  <th className="px-3 py-2 text-left">Can make now</th>
-                </tr>
-              </thead>
-              <tbody>
-                {planned.length === 0 ? (
+        )}
+
+        <div className="grid grid-cols-1 gap-4 min-[1280px]:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
+          <Panel id="what-to-make" flush title="What to make" note="Need = expected sales + what other products use. Made in whole batches, so it always covers the shortfall.">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[560px] text-[13px]">
+                <thead className="bg-secondary/50 text-[12px] text-muted-foreground">
                   <tr>
-                    <td colSpan={7} className="px-5 py-6 text-center text-muted-foreground">
-                      No demand expected yet — sales history and event plans drive this.
-                    </td>
+                    <th className="px-5 py-2 text-left font-semibold">Product</th>
+                    <th className={th}>Need</th>
+                    <th className={th}>On hand</th>
+                    <th className={th}>Short</th>
+                    <th className={th}>Batches</th>
+                    <th className={th}>Cost of run</th>
+                    <th className="px-5 py-2 text-left font-semibold">Can make now</th>
                   </tr>
-                ) : (
-                  planned.map((p) => (
-                    <tr key={p.productId} className="border-t border-line/10">
-                      <td className="px-5 py-2">
-                        <div className="font-medium">{p.name}</div>
-                        {p.usedByOthers > 0 && <div className="text-[11.5px] text-muted-foreground">{p.usedByOthers} go into other products</div>}
+                </thead>
+                <tbody>
+                  {planned.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-5 py-6 text-center text-muted-foreground">
+                        No demand expected yet — sales history and event plans drive this.
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums">{p.need}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{p.onHand}</td>
-                      <td className={`px-3 py-2 text-right tabular-nums ${p.shortfall > 0 ? "font-semibold text-danger" : ""}`}>{p.shortfall}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{p.missingBatchSize ? "—" : p.batches ? `${p.batches} (${p.produced})` : "0"}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        {p.batches > 0 ? (
-                          runCost(p.productId, p.batches) != null ? (
-                            formatPeso(runCost(p.productId, p.batches) ?? 0)
+                    </tr>
+                  ) : (
+                    planned.map((p) => (
+                      <tr key={p.productId} className="border-t border-line/10">
+                        <td className="px-5 py-2.5">
+                          <div className="font-medium">{p.name}</div>
+                          {p.usedByOthers > 0 && <div className="text-[11.5px] text-muted-foreground">{p.usedByOthers} go into other products</div>}
+                        </td>
+                        <td className="px-3 py-2.5 text-right tabular-nums">{p.need}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums">{p.onHand}</td>
+                        <td className={`px-3 py-2.5 text-right tabular-nums ${p.shortfall > 0 ? "font-semibold text-danger" : ""}`}>{p.shortfall}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums">{p.missingBatchSize ? "—" : p.batches ? `${p.batches} (${p.produced})` : "0"}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums">
+                          {p.batches > 0 ? (
+                            runCost(p.productId, p.batches) != null ? (
+                              formatPeso(runCost(p.productId, p.batches) ?? 0)
+                            ) : (
+                              <Link href={`/costing?product=${p.productId}`} className="text-[12px] text-[var(--status-warning)] underline decoration-dotted">
+                                No cost yet
+                              </Link>
+                            )
+                          ) : null}
+                        </td>
+                        <td className="px-5 py-2.5">
+                          {p.missingBatchSize ? (
+                            <span className="text-[var(--status-warning)]">Set a batch size under Settings</span>
+                          ) : p.batches === 0 ? (
+                            <span className="text-muted-foreground">Nothing to make</span>
+                          ) : p.canMakeNow >= p.batches ? (
+                            <span className="font-semibold text-success">All {p.batches}</span>
                           ) : (
-                            <Link href={`/costing?product=${p.productId}`} className="text-[12px] text-[var(--status-warning)] underline decoration-dotted">
-                              No cost yet
-                            </Link>
-                          )
-                        ) : null}
-                      </td>
-                      <td className="px-3 py-2">
-                        {p.missingBatchSize ? (
-                          <span className="text-[var(--status-warning)]">Set a batch size under Settings</span>
-                        ) : p.batches === 0 ? (
-                          <span className="text-muted-foreground">Nothing to make</span>
-                        ) : p.canMakeNow >= p.batches ? (
-                          <span className="font-semibold text-success">All {p.batches}</span>
-                        ) : (
-                          <span className="font-semibold text-danger">
-                            {p.canMakeNow} of {p.batches} · short of {p.limitedBy}
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                            <span className="whitespace-nowrap font-semibold text-danger">
+                              {p.canMakeNow} of {p.batches} · short of {p.limitedBy}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
 
-        <div id="what-to-buy" className="scroll-mt-24 overflow-hidden rounded-2xl border border-line/15 bg-card">
-          <div className="px-5 pt-4">
-            <h3 className="text-sm font-semibold">What to buy</h3>
-            <p className="text-xs text-muted-foreground">Raw materials and packaging the plan draws on.</p>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="mt-3 w-full min-w-[420px] text-[13px]">
-              <thead className="bg-secondary/50 text-[12px] font-semibold text-muted-foreground">
-                <tr>
-                  <th className="px-5 py-2 text-left">Material</th>
-                  <th className="px-3 py-2 text-right">Needed</th>
-                  <th className="px-3 py-2 text-right">On hand</th>
-                  <th className="px-3 py-2 text-right">To buy</th>
-                  <th className="px-3 py-2 text-right">Est. cost</th>
-                </tr>
-              </thead>
-              <tbody>
-                {buying.length === 0 ? (
+          <Panel id="what-to-buy" flush title="What to buy" note="Raw materials and packaging the plan draws on.">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[380px] text-[13px]">
+                <thead className="bg-secondary/50 text-[12px] text-muted-foreground">
                   <tr>
-                    <td colSpan={5} className="px-5 py-6 text-center text-muted-foreground">
-                      Nothing needed yet.
-                    </td>
+                    <th className="px-5 py-2 text-left font-semibold">Material</th>
+                    <th className={th}>Needed</th>
+                    <th className={th}>On hand</th>
+                    <th className={th}>To buy</th>
+                    <th className={`${th} pr-5`}>Est. cost</th>
                   </tr>
-                ) : (
-                  buying.map((m) => (
-                    <tr key={m.materialId} className="border-t border-line/10">
-                      <td className="px-5 py-2">
-                        <div className="font-medium">{m.name}</div>
-                        {m.belowReorderPoint && (
-                          <div className="text-[11.5px] text-danger">
-                            At its restock point ({m.reorderPoint} {m.unit})
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        {m.required} {m.unit}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        {m.onHand} {m.unit}
-                      </td>
-                      <td className={`px-3 py-2 text-right tabular-nums ${m.toBuy > 0 ? "font-semibold text-danger" : "text-muted-foreground"}`}>
-                        {m.toBuy > 0 ? `${m.toBuy} ${m.unit}` : "—"}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        {m.toBuy > 0 ? (buyCost(m.materialId, m.toBuy) != null ? formatPeso(buyCost(m.materialId, m.toBuy) ?? 0) : <span className="text-[12px] text-muted-foreground">No price yet</span>) : null}
+                </thead>
+                <tbody>
+                  {buying.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-5 py-6 text-center text-muted-foreground">
+                        Nothing needed yet.
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  ) : (
+                    buying.map((m) => (
+                      <tr key={m.materialId} className="border-t border-line/10">
+                        <td className="px-5 py-2.5">
+                          <div className="font-medium">{m.name}</div>
+                          {m.belowReorderPoint && (
+                            <div className="whitespace-nowrap text-[11.5px] text-danger">
+                              At restock point · {m.reorderPoint} {m.unit}
+                            </div>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums">
+                          {m.required} {m.unit}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums">
+                          {m.onHand} {m.unit}
+                        </td>
+                        <td className={`whitespace-nowrap px-3 py-2.5 text-right tabular-nums ${m.toBuy > 0 ? "font-semibold text-danger" : "text-muted-foreground"}`}>
+                          {m.toBuy > 0 ? `${m.toBuy} ${m.unit}` : "—"}
+                        </td>
+                        <td className="px-3 py-2.5 pr-5 text-right tabular-nums">
+                          {m.toBuy > 0 ? (buyCost(m.materialId, m.toBuy) != null ? formatPeso(buyCost(m.materialId, m.toBuy) ?? 0) : <span className="text-[12px] text-muted-foreground">No price yet</span>) : null}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
         </div>
+      </section>
+
+      <Panel
+        title="How it's made, and what each step costs"
+        note="From the recipes in Costing. Tap a product to see its recipe and how its cost adds up. Add an in-house ingredient to a recipe (tablea in ice cream) to link the stages."
+      >
+        <div className={`grid grid-cols-1 gap-3 ${stages.length === 4 ? "min-[900px]:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr]" : "min-[900px]:grid-cols-[1fr_auto_1fr_auto_1fr]"}`}>
+          {stages.map((st, i) => (
+            <Fragment key={st.key}>
+              {i > 0 && <Arrow />}
+              <Stage icon={st.icon} title={st.title} nodes={st.nodes} empty={st.empty} />
+            </Fragment>
+          ))}
+        </div>
+      </Panel>
+    </>
+  );
+}
+
+/**
+ * Every card on Production and Calendar: a display-font title, an optional line under it and
+ * something on the right (a legend), over its contents. `flush` lets a table run to the card's
+ * edges, with the title still padded in.
+ */
+export function Panel({
+  title,
+  note,
+  aside,
+  id,
+  flush,
+  children,
+}: {
+  title: string;
+  note?: string;
+  aside?: React.ReactNode;
+  id?: string;
+  flush?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <section id={id} className={`h-full scroll-mt-24 rounded-2xl border border-line/15 bg-card ${flush ? "overflow-hidden" : "p-5"}`}>
+      <div className={`mb-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-2 ${flush ? "px-5 pt-4" : ""}`}>
+        <div className="min-w-0">
+          <h3 className="font-display text-[17px] font-semibold">{title}</h3>
+          {note && <p className="mt-0.5 text-xs text-muted-foreground">{note}</p>}
+        </div>
+        {aside}
       </div>
+      {children}
     </section>
   );
 }
@@ -362,7 +387,7 @@ function Stage({ icon, title, nodes, empty }: { icon: React.ReactNode; title: st
             const body = (
               <>
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="min-w-0 truncate font-medium">{n.name}</span>
+                  <span className="min-w-0 font-medium">{n.name}</span>
                   <span className={`shrink-0 text-[12px] tabular-nums ${n.cost ? "font-semibold" : "text-[var(--status-warning)]"}`}>{n.cost ?? "No cost yet"}</span>
                 </div>
                 {n.sells != null && (
@@ -394,7 +419,7 @@ function Stage({ icon, title, nodes, empty }: { icon: React.ReactNode; title: st
 
 function MoneyFigure({ label, value, note, good }: { label: string; value: string; note: string; good?: boolean }) {
   return (
-    <div className="rounded-2xl border border-line/15 bg-card px-4 py-3">
+    <div className="rounded-2xl border border-line/15 bg-card px-5 py-4">
       <p className="text-[12.5px] text-muted-foreground">{label}</p>
       <p className={`font-display text-[22px] font-bold tabular-nums ${good ? "text-success" : ""}`}>{value}</p>
       <p className="text-[11.5px] text-muted-foreground">{note}</p>

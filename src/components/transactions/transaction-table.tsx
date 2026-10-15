@@ -346,7 +346,7 @@ export function TransactionTable({
   const td = `px-3 py-3 text-center align-middle ${rule}`;
   const colCount = showPayment ? 10 : 8;
 
-  const widths = [108, 140, 96, null, 52, 100, ...(showPayment ? [104, 156] : []), 92, showPayment ? 164 : 80];
+  const widths = [100, 130, 96, null, 48, 92, ...(showPayment ? [96, 152] : []), 84, showPayment ? 164 : 80];
 
   const head = (label: string, key?: SortKey) => (
     <th scope="col" className={th}>

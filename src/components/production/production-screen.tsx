@@ -4,7 +4,7 @@ import Link from "next/link";
 
 import { useMemo, useState } from "react";
 import { Page } from "@/components/layout/page";
-import { ProcessPlan } from "@/components/production/process-plan";
+import { Panel, ProcessPlan } from "@/components/production/process-plan";
 import { EventPlanDialog } from "@/components/inventory/event-plan-dialog";
 import { PlanSettingsDialog } from "@/components/inventory/plan-settings-dialog";
 import { SeasonalBreakdown } from "@/components/inventory/seasonal-breakdown";
@@ -43,8 +43,8 @@ function fromIso(iso: string) {
 
 function TileHeader({ title, color }: { title: string; color: string }) {
   return (
-    <div className="mb-1 flex items-center gap-2 border-b border-line/10 pb-2">
-      <span className="h-2 w-2 rounded-full" style={{ background: color }} />
+    <div className="mb-1 flex items-start gap-2 border-b border-line/10 pb-2">
+      <span className="mt-[9px] h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
       <span className="font-display text-[17px] font-semibold">{title}</span>
     </div>
   );
@@ -166,12 +166,14 @@ function StockVsForecast({
   // Two bars per product, each with its own figure at the end of it. The forecast used to be a
   // thin tick on the stock bar with its number in a column far to the right — two things that
   // have to be read together, placed as far apart as the row allowed.
-  const COLS = "grid grid-cols-[minmax(0,1.2fr)_minmax(0,2.4fr)_70px_64px] items-center gap-4";
+  // On a phone the name takes its own line above its bars, so neither has to be squeezed.
+  const COLS =
+    "grid grid-cols-[minmax(0,1fr)_56px_64px] items-center gap-x-4 gap-y-1.5 min-[640px]:grid-cols-[minmax(0,1.2fr)_minmax(0,2.4fr)_70px_64px] min-[640px]:gap-y-4";
 
   return (
     <div className="flex flex-col">
       <div className={`${COLS} border-b border-line/10 pb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground`}>
-        <span>Product</span>
+        <span className="hidden min-[640px]:block">Product</span>
         <span>On hand vs. expected to sell</span>
         <span className="text-right">Spare</span>
         <span className="text-right">Confidence</span>
@@ -189,7 +191,7 @@ function StockVsForecast({
             title="Click to edit"
             className={`${COLS} -mx-2 w-[calc(100%+1rem)] rounded-lg px-2 py-2.5 text-left hover:bg-secondary`}
           >
-            <span className="truncate text-[13px] font-medium">{p.name}</span>
+            <span className="col-span-3 truncate text-[13px] font-medium min-[640px]:col-span-1">{p.name}</span>
 
             <span className="flex flex-col gap-1">
               <span className="flex items-center gap-2">
@@ -362,8 +364,7 @@ export function ProductionScreen({ section }: { section: "production" | "calenda
             the button. Everything else that can stop the plan is spelled out here. */}
         <PlanFixes fixes={fixes.filter((f) => f.id !== "no-equipment")} />
 
-        {section === "production" && <ProcessPlan />}
-
+        {/* Where things stand first — what's low, what to make, when — then the detail. */}
         <div className="grid grid-cols-1 gap-4 min-[1000px]:grid-cols-3">
           <div className={`rounded-2xl border bg-card px-5 py-4 ${low.length ? "border-danger/35" : "border-line/15"}`}>
             <TileHeader title="Running low" color="#B3261E" />
@@ -460,6 +461,8 @@ export function ProductionScreen({ section }: { section: "production" | "calenda
           </div>
         </div>
 
+        {section === "production" && <ProcessPlan />}
+
         {tab === "plan" ? (
           <div className="flex flex-col gap-4 rounded-2xl border border-line/15 bg-card p-5">
             <div className="flex flex-wrap items-center justify-between gap-4">
@@ -509,39 +512,36 @@ export function ProductionScreen({ section }: { section: "production" | "calenda
             </div>
           </div>
         ) : (
-          <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-4 rounded-2xl border border-line/15 bg-card p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-semibold">
-                  Stock on hand vs. forecast for {nextMonth} {new Date(now.getFullYear(), now.getMonth() + 1, 1).getFullYear()}
+          <>
+            <Panel
+              title={`Stock on hand vs. forecast for ${nextMonth} ${new Date(now.getFullYear(), now.getMonth() + 1, 1).getFullYear()}`}
+              note={
+                basisMonths.length
+                  ? `Fitted on ${basisMonths.join(", ")} — "What to expect each month" below shows the working`
+                  : "No complete months of sales yet — the forecast fills in as sales are logged"
+              }
+              aside={
+                <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2.5 w-3 rounded-sm bg-cacao" />
+                    On hand
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2.5 w-3 rounded-sm" style={{ background: "#E8A013" }} />
+                    {`Expected to sell in ${nextMonth}`}
+                  </span>
                 </div>
-                <div className="mt-0.5 text-xs text-muted-foreground">
-                  {basisMonths.length
-                    ? `Fitted on ${basisMonths.join(", ")} — "What to expect each month" below shows the working`
-                    : "No complete months of sales yet — the forecast fills in as sales are logged"}
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-3 rounded-sm bg-cacao" />
-                  On hand
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-3 rounded-sm" style={{ background: "#E8A013" }} />
-                  {`Expected to sell in ${nextMonth}`}
-                </span>
-              </div>
-            </div>
+              }
+            >
             <StockVsForecast
               products={products}
               forecastOf={forecastOf}
               reliabilityOf={(id) => plan.forecasts.find((f) => f.productId === id)?.reliability}
               onPick={(p) => setEditingProductId(p.id)}
             />
-          </div>
-          <SeasonalBreakdown forecasts={plan.forecasts} />
-          </div>
+            </Panel>
+            <SeasonalBreakdown forecasts={plan.forecasts} />
+          </>
         )}
       </div>
 
