@@ -250,46 +250,40 @@ function TransactionsPageInner() {
         {/* Three cards. Cash that actually moved sits beside what is still owed, each in its own
             labelled figure — never added together — and the third is earnings, as before. */}
         {exec ? (
-          <section className="grid grid-cols-1 gap-3 min-[900px]:grid-cols-3" aria-label="Money summary">
+          <section className="grid grid-cols-1 gap-3 min-[900px]:grid-cols-[1.25fr_1.25fr_0.8fr]" aria-label="Money summary">
             <SplitCard
-              icon={<ArrowDownLeft className="h-5 w-5" />}
+              icon={<ArrowDownLeft className="h-4 w-4" />}
               title="Money in & receivables"
               tone="good"
               main={{
                 label: "Money received",
                 value: summary.moneyIn,
-                note:
-                  summary.capitalIn > 0
-                    ? `Cash that came in · ${periodName} · includes ${formatPeso(summary.capitalIn)} capital put in`
-                    : `Cash that came in · ${periodName}`,
+                note: summary.capitalIn > 0 ? `Includes ${formatPeso(summary.capitalIn)} capital put in` : "Cash that came in",
               }}
               owed={{
                 label: "Receivables",
                 value: summary.receivables,
                 note: summary.overdueReceivables
                   ? `${pluralize(summary.overdueReceivables, "payment")} overdue`
-                  : "Owed by customers — not money in until paid",
+                  : "Not money in until paid",
                 alert: summary.overdueReceivables > 0,
               }}
             />
             <SplitCard
-              icon={<ArrowUpRight className="h-5 w-5" />}
+              icon={<ArrowUpRight className="h-4 w-4" />}
               title="Money out & payables"
               tone="bad"
               main={{
                 label: "Money paid",
                 value: summary.moneyOut,
-                note:
-                  summary.assetsOut > 0
-                    ? `Cash that went out · ${periodName} · includes ${formatPeso(summary.assetsOut)} for long-term assets`
-                    : `Cash that went out · ${periodName}`,
+                note: summary.assetsOut > 0 ? `Includes ${formatPeso(summary.assetsOut)} in long-term assets` : "Cash that went out",
               }}
               owed={{
                 label: "Payables",
                 value: summary.payables,
                 note: summary.overduePayables
                   ? `${pluralize(summary.overduePayables, "payment")} overdue`
-                  : "Owed to suppliers — not money out until paid",
+                  : "Not money out until paid",
                 alert: summary.overduePayables > 0,
               }}
             />
@@ -312,16 +306,16 @@ function TransactionsPageInner() {
         )}
 
         {exec && (
-          <section className="flex flex-col gap-4 rounded-2xl border border-line/15 bg-card p-5" aria-labelledby="target-title">
+          <section className="flex flex-col gap-3 rounded-2xl border border-line/15 bg-card px-4 py-3" aria-labelledby="target-title">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 id="target-title" className="text-[15px] font-semibold">
+              <h2 id="target-title" className="text-[14px] font-semibold">
                 Sales target & budget · {periodName}
               </h2>
-              <button type="button" onClick={() => setEditBudgets((v) => !v)} className="min-h-10 text-[13px] font-semibold text-cacao">
+              <button type="button" onClick={() => setEditBudgets((v) => !v)} className="min-h-8 text-[12.5px] font-semibold text-cacao">
                 {editBudgets ? "Done editing" : "Edit target & budgets"}
               </button>
             </div>
-            <div className="grid grid-cols-1 gap-5 min-[800px]:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 min-[800px]:grid-cols-2 min-[800px]:gap-8">
               <Progress label="Sales against target" value={summary.sales} goal={periodTarget} empty="No sales target set" tone="good" />
               <Progress label="Expenses against budget" value={summary.expenses} goal={periodBudget} empty="No budget set" tone="warning" />
             </div>
@@ -510,19 +504,21 @@ function SplitCard({
   const color = tone === "good" ? "text-success" : "text-danger";
   return (
     <div className={`flex flex-col rounded-2xl border bg-card ${owed.alert ? "border-danger/40" : "border-line/15"}`}>
-      <span className="flex items-center gap-2 px-5 pt-4 text-[13px] font-semibold text-muted-foreground">
+      <span className="flex items-center gap-1.5 px-4 pt-3 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">
         <span className={color}>{icon}</span>
         {title}
       </span>
-      <div className="flex flex-col gap-0.5 px-5 pb-3 pt-2">
-        <span className="text-[13px] font-semibold">{main.label}</span>
-        <span className={`font-display text-[28px] font-bold leading-tight ${color}`}>{formatPeso(main.value)}</span>
-        <span className="text-[12px] text-muted-foreground">{main.note}</span>
-      </div>
-      <div className="mt-auto flex flex-col gap-0.5 border-t border-dashed border-line/20 bg-secondary/40 px-5 py-3">
-        <span className="text-[13px] font-semibold">{owed.label}</span>
-        <span className="font-display text-[22px] font-bold leading-tight">{formatPeso(owed.value)}</span>
-        <span className={`text-[12px] ${owed.alert ? "font-semibold text-danger" : "text-muted-foreground"}`}>{owed.note}</span>
+      <div className="grid flex-1 grid-cols-2 gap-x-4 px-4 pb-3 pt-1.5">
+        <div className="flex min-w-0 flex-col">
+          <span className="text-[12.5px] font-semibold">{main.label}</span>
+          <span className={`font-display text-[24px] font-bold leading-tight ${color}`}>{formatPeso(main.value)}</span>
+          <span className="text-[11.5px] leading-snug text-muted-foreground">{main.note}</span>
+        </div>
+        <div className="flex min-w-0 flex-col border-l border-dashed border-line/25 pl-4">
+          <span className="text-[12.5px] font-semibold">{owed.label}</span>
+          <span className="font-display text-[24px] font-bold leading-tight">{formatPeso(owed.value)}</span>
+          <span className={`text-[11.5px] leading-snug ${owed.alert ? "font-semibold text-danger" : "text-muted-foreground"}`}>{owed.note}</span>
+        </div>
       </div>
     </div>
   );
@@ -554,17 +550,17 @@ function MoneyBox({
     // with the month above it so the card reads on its own.
     return (
       <div
-        className={`flex flex-col items-center justify-center gap-2 rounded-2xl border px-5 py-6 text-center text-white dark:text-ivory ${
+        className={`flex flex-col items-center justify-center gap-1 rounded-2xl border px-4 py-3 text-center text-white dark:text-ivory ${
           tone === "bad" ? "border-danger bg-danger" : "border-success bg-success"
         }`}
       >
-        {heading && <span className="font-display text-[clamp(24px,2.6vw,32px)] font-bold leading-tight tracking-wide">{heading}</span>}
-        <span className="flex items-center justify-center gap-2 text-[14px] font-semibold opacity-90">
+        {heading && <span className="font-display text-[clamp(18px,1.8vw,22px)] font-bold leading-tight tracking-wide">{heading}</span>}
+        <span className="flex items-center justify-center gap-1.5 text-[12.5px] font-semibold opacity-90 [&_svg]:h-4 [&_svg]:w-4">
           {icon}
           {label}
         </span>
-        <span className="font-display max-w-full break-words text-[clamp(32px,3.6vw,46px)] font-bold leading-none tabular-nums">{formatPeso(value)}</span>
-        <span className="mt-1 max-w-[30ch] text-[13px] opacity-90">{note}</span>
+        <span className="font-display max-w-full break-words text-[clamp(28px,2.8vw,36px)] font-bold leading-none tabular-nums">{formatPeso(value)}</span>
+        <span className="max-w-[30ch] text-[12px] opacity-90">{note}</span>
       </div>
     );
   }
@@ -583,8 +579,8 @@ function MoneyBox({
 function Progress({ label, value, goal, empty, tone }: { label: string; value: number; goal: number; empty: string; tone: "good" | "warning" }) {
   const pct = goal > 0 ? (value / goal) * 100 : 0;
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between text-[14px]">
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-[13px]">
         <span>{label}</span>
         <span className="text-muted-foreground">{goal > 0 ? `${formatPeso(value)} of ${formatPeso(goal)} · ${Math.round(pct)}%` : empty}</span>
       </div>
