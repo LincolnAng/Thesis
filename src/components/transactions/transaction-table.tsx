@@ -4,6 +4,7 @@ import { Fragment, useMemo, useState } from "react";
 import { History as HistoryIcon, Pencil, Plus } from "lucide-react";
 import { EXPENSE_CATEGORY_LABELS, PRICE_TYPE_LABELS, describePaymentMethod, formatDate, formatPeso } from "@/lib/format";
 import { dueInfo, obligationInfo, obligationKind, outstanding, paymentsOf } from "@/lib/transactions/ledger";
+import { lineSubtotal, orderTotal } from "@/lib/transactions/order-lines";
 import { QuickPay } from "@/components/transactions/obligation-dialogs";
 import type { Entry } from "@/lib/store/types";
 
@@ -40,10 +41,41 @@ function NA() {
   return <span className="font-semibold text-muted-foreground">N/A</span>;
 }
 
-/** An order's products and quantities, line by line. A single product is a list of one. */
-function productLines(e: Entry): { name: string; qty: number | null }[] {
-  if (e.lineItems?.length) return e.lineItems.map((l) => ({ name: l.name, qty: l.quantity }));
-  return [{ name: e.sku ?? "", qty: e.type === "SALE" || e.type === "WASTE" ? e.quantity : null }];
+interface ProductLine {
+  name: string;
+  qty: number | null;
+  /** This product's share of what the order came to, so the lines add back to the amount. */
+  amount: number | null;
+}
+
+/** An order's products, line by line. A single product is a list of one. */
+function productLines(e: Entry): ProductLine[] {
+  if (e.lineItems?.length) {
+    const listed = orderTotal(e.lineItems);
+    const actual = e.amount ?? listed;
+    return e.lineItems.map((l) => ({
+      name: l.name,
+      qty: l.quantity,
+      amount: listed > 0 ? Math.round((lineSubtotal(l) / listed) * actual * 100) / 100 : 0,
+    }));
+  }
+  return [{ name: e.sku ?? "", qty: e.type === "SALE" || e.type === "WASTE" ? e.quantity : null, amount: e.amount }];
+}
+
+/**
+ * One value per product, each in its own ruled slot, so every column of an order lines up
+ * product by product while it stays a single row — one entry, edited and paid as one.
+ */
+function Slots({ children }: { children: React.ReactNode[] }) {
+  return (
+    <ul className="divide-y divide-line/20">
+      {children.map((c, i) => (
+        <li key={i} className="flex h-8 items-center justify-center whitespace-nowrap">
+          {c}
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 /** The deadline of a receivable or payable, with where it stands. */
@@ -245,6 +277,24 @@ export function TransactionTable({
             const isOpen = open.has(e.id);
             const expandable = hasDetails(e, showPayment);
             const items = productLines(e);
+            const multi = items.length > 1;
+            // An order's split columns keep the same slots, so everything lines up product by product.
+            const pad = multi ? "py-1" : "";
+            const each = (node: React.ReactNode) => (multi ? <Slots>{items.map(() => node)}</Slots> : node);
+            const amountText = (v: number | null) =>
+              v == null ? "—" : `${e.type === "WASTE" ? "" : moneyIn ? "+" : "−"}${formatPeso(v)}`;
+            const modeNode = !hasPayment(e) ? (
+              <NA />
+            ) : method ? (
+              <span
+                className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 font-semibold ${method === "bank_transfer" ? "bg-[#3F6E8C]/10 text-[#3F6E8C]" : "bg-secondary text-foreground"}`}
+              >
+                {method === "bank_transfer" ? "Bank transfer" : "Cash"}
+              </span>
+            ) : (
+              <span className="text-muted-foreground">{kind ? "Not paid yet" : "—"}</span>
+            );
+            const bankNode = method === "bank_transfer" ? <span>{bank ?? "—"}</span> : <NA />;
             const toggle = () =>
               setOpen((prev) => {
                 const next = new Set(prev);
@@ -261,66 +311,44 @@ export function TransactionTable({
                     expandable ? "cursor-pointer hover:brightness-[0.98]" : ""
                   }`}
                 >
-                  <td className={`${td} whitespace-nowrap`}>
-                    <div>{formatDate(e.timestamp)}</div>
-                    {carried && <div className="text-[11px] font-semibold text-[var(--status-warning)]">Carried from {carried}</div>}
-                  </td>
+                  {/* Date */}
+                  <td className={`${td} whitespace-nowrap ${pad}`}>{each(<span>{formatDate(e.timestamp)}</span>)}</td>
+                  {/* Customer: said once for the whole order */}
                   <td className={`${td} max-w-[180px]`}>
                     <span className="line-clamp-2">{e.counterparty ?? <span className="text-muted-foreground">—</span>}</span>
+                    {carried && <div className="text-[11px] font-semibold text-[var(--status-warning)]">Carried from {carried}</div>}
                   </td>
+                  {/* Product and quantity: one slot per product */}
                   <td
-                    className={`${td} max-w-[240px] ${items.length > 1 ? "py-1" : ""}`}
+                    className={`${td} max-w-[240px] ${pad}`}
                     title={items.map((l) => l.name).join(", ") + (e.type === "EXPENSE" && e.category ? ` · ${EXPENSE_CATEGORY_LABELS[e.category] ?? e.category}` : "")}
                   >
-                    {items.length === 1 ? (
+                    {multi ? (
+                      <Slots>{items.map((l, j) => <span key={j} className="max-w-[220px] truncate">{l.name}</span>)}</Slots>
+                    ) : (
                       <span className="line-clamp-2">{items[0].name || <span className="text-muted-foreground">—</span>}</span>
-                    ) : (
-                      // Several products: each in its own ruled slot, level with its quantity in the next column.
-                      <ul className="divide-y divide-line/20">
-                        {items.map((l, j) => (
-                          <li key={j} className="h-8 truncate text-left leading-8">
-                            {l.name}
-                          </li>
-                        ))}
-                      </ul>
                     )}
                   </td>
-                  <td className={`${td} tabular-nums ${items.length > 1 ? "py-1" : ""}`}>
-                    {items.length === 1 ? (
-                      items[0].qty != null ? items[0].qty : <span className="text-muted-foreground">—</span>
+                  <td className={`${td} tabular-nums ${pad}`}>
+                    {multi ? (
+                      <Slots>{items.map((l, j) => <span key={j} className="font-semibold">{l.qty != null ? `× ${l.qty}` : "—"}</span>)}</Slots>
+                    ) : items[0].qty != null ? (
+                      items[0].qty
                     ) : (
-                      <ul className="divide-y divide-line/20">
-                        {items.map((l, j) => (
-                          <li key={j} className="h-8 font-semibold leading-8">
-                            {l.qty != null ? `× ${l.qty}` : "—"}
-                          </li>
-                        ))}
-                      </ul>
+                      <span className="text-muted-foreground">—</span>
                     )}
                   </td>
-                  <td className={`${td} whitespace-nowrap font-semibold tabular-nums ${e.type === "WASTE" ? "text-muted-foreground" : moneyIn ? "text-success" : "text-danger"}`}>
-                    {e.amount == null ? (
-                      <span className="font-normal text-muted-foreground">—</span>
+                  {/* Amount: each product's share, adding back to the order */}
+                  <td className={`${td} whitespace-nowrap font-semibold tabular-nums ${pad} ${e.type === "WASTE" ? "text-muted-foreground" : moneyIn ? "text-success" : "text-danger"}`}>
+                    {multi ? (
+                      <Slots>{items.map((l, j) => <span key={j}>{amountText(l.amount)}</span>)}</Slots>
                     ) : (
-                      `${e.type === "WASTE" ? "" : moneyIn ? "+" : "−"}${formatPeso(e.amount)}`
+                      amountText(e.amount)
                     )}
                   </td>
-                  {showPayment && (
-                    <td className={`${td} text-[12.5px]`}>
-                      {!hasPayment(e) ? (
-                        <NA />
-                      ) : method ? (
-                        <span
-                          className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 font-semibold ${method === "bank_transfer" ? "bg-[#3F6E8C]/10 text-[#3F6E8C]" : "bg-secondary text-foreground"}`}
-                        >
-                          {method === "bank_transfer" ? "Bank transfer" : "Cash"}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">{kind ? "Not paid yet" : "—"}</span>
-                      )}
-                    </td>
-                  )}
-                  {showPayment && <td className={`${td} text-[12.5px]`}>{method === "bank_transfer" ? (bank ?? "—") : <NA />}</td>}
+                  {showPayment && <td className={`${td} text-[12.5px] ${pad}`}>{each(modeNode)}</td>}
+                  {showPayment && <td className={`${td} text-[12.5px] ${pad}`}>{each(bankNode)}</td>}
+                  {/* Deadline and actions belong to the entry, not to a product: one cell, centred */}
                   {showPayment && (
                     <td className={`${td} text-[12.5px]`}>
                       {kind ? (
@@ -348,7 +376,7 @@ export function TransactionTable({
                       )}
                     </td>
                   )}
-                  <td className={`${td} whitespace-nowrap text-muted-foreground`}>{e.loggedByName ?? "—"}</td>
+                  <td className={`${td} whitespace-nowrap text-muted-foreground ${pad}`}>{each(<span>{e.loggedByName ?? "—"}</span>)}</td>
                   <td className="px-2 py-1 text-center align-middle">
                     <div className="flex items-center justify-center gap-0.5">
                       {showPayment && kind && (
