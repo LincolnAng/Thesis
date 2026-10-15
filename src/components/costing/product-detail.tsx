@@ -7,8 +7,7 @@ import { ProductPhoto, GRADIENTS } from "@/components/costing/products-screen";
 import { PriceCalculator } from "@/components/costing/price-calculator";
 import { RecipePanel } from "@/components/costing/recipe-panel";
 import { CostBuildUp } from "@/components/costing/cost-build-up";
-import { ProductExpiryStrip } from "@/components/products/product-expiry-strip";
-import { SizeStrip } from "@/components/products/size-strip";
+import { StockPanel } from "@/components/costing/stock-panel";
 import { EditProductDialog } from "@/components/stock/edit-product-dialog";
 import { useStore } from "@/lib/store/use-store";
 import { updateProduct } from "@/lib/store/store";
@@ -17,7 +16,7 @@ import { useCostContext } from "@/lib/summary/use-cost-context";
 import { effectiveProductPrice, productCostPerJar } from "@/lib/summary/recipe-cost";
 import { familiesOf, fullName } from "@/lib/summary/product-sizes";
 import { costPerUnit } from "@/lib/costing/price-calc";
-import { formatPeso, pluralize } from "@/lib/format";
+import { formatPeso } from "@/lib/format";
 import type { Product } from "@/lib/store/types";
 
 /**
@@ -328,27 +327,7 @@ export function ProductDetail({
 
           {tab === "price" && <SimplePrice product={product} unitCost={perUnit} currentPrice={price} unit={unit} />}
 
-          {tab === "stock" && (
-            <div className="-mx-4 -my-4 flex flex-col min-[700px]:-mx-5">
-              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 min-[700px]:px-5">
-                <div className="flex flex-wrap gap-x-8 gap-y-1 text-[14px]">
-                  <span>
-                    <span className="text-muted-foreground">On hand </span>
-                    <span className="font-semibold">{pluralize(product.stockQty, unit)}</span>
-                  </span>
-                  <span>
-                    <span className="text-muted-foreground">Warn when below </span>
-                    <span className="font-semibold">{product.lowStockThreshold > 0 ? pluralize(product.lowStockThreshold, unit) : "not set"}</span>
-                  </span>
-                </div>
-                <button type="button" onClick={() => setEditing(true)} className="text-[13px] font-semibold text-cacao">
-                  Change
-                </button>
-              </div>
-              <ProductExpiryStrip product={product} />
-              {family && <SizeStrip head={family.head} sizes={family.sizes} onOpen={onOpenProduct} />}
-            </div>
-          )}
+          {tab === "stock" && <StockPanel product={product} family={family} onOpenProduct={onOpenProduct} />}
         </section>
       </div>
 
