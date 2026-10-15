@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import { History as HistoryIcon, Pencil, Plus } from "lucide-react";
+import { HandCoins, History as HistoryIcon, Pencil, Plus } from "lucide-react";
 import { EXPENSE_CATEGORY_LABELS, PRICE_TYPE_LABELS, describePaymentMethod, formatDate, formatPeso } from "@/lib/format";
 import { dueInfo, obligationInfo, obligationKind, outstanding, paymentsOf } from "@/lib/transactions/ledger";
 import { lineSubtotal, orderTotal } from "@/lib/transactions/order-lines";
@@ -91,16 +91,14 @@ function Deadline({ e, action }: { e: Entry; action?: React.ReactNode }) {
         {info.status === "settled"
           ? "Paid in full"
           : info.status === "defaulted"
-            ? `Defaulted · ${formatPeso(info.remaining)} left`
-            : `${formatPeso(info.remaining)} left${
-                due.daysLeft === null
-                  ? ""
-                  : due.overdue
-                    ? ` · ${Math.abs(due.daysLeft)} day${Math.abs(due.daysLeft) === 1 ? "" : "s"} overdue`
-                    : due.daysLeft === 0
-                      ? " · due today"
-                      : ` · in ${due.daysLeft} day${due.daysLeft === 1 ? "" : "s"}`
-              }`}
+            ? "Defaulted"
+            : due.daysLeft === null
+              ? "No due date"
+              : due.overdue
+                ? `${Math.abs(due.daysLeft)} day${Math.abs(due.daysLeft) === 1 ? "" : "s"} overdue`
+                : due.daysLeft === 0
+                  ? "Due today"
+                  : `in ${due.daysLeft} day${due.daysLeft === 1 ? "" : "s"}`}
       </span>
       {action && <div className="mt-1.5">{action}</div>}
     </div>
@@ -278,6 +276,7 @@ export function TransactionTable({
             const expandable = hasDetails(e, showPayment);
             const items = productLines(e);
             const multi = items.length > 1;
+            const info = kind && showPayment ? obligationInfo(e, new Date()) : null;
             // An order's split columns keep the same slots, so everything lines up product by product.
             const pad = multi ? "py-1" : "";
             const each = (node: React.ReactNode) => (multi ? <Slots>{items.map(() => node)}</Slots> : node);
@@ -345,6 +344,15 @@ export function TransactionTable({
                     ) : (
                       amountText(e.amount)
                     )}
+                    {showPayment && kind && (
+                      <div
+                        className={`mt-0.5 text-[11.5px] font-semibold ${
+                          info && info.remaining > 0 ? (info.status === "overdue" || info.status === "defaulted" ? "text-danger" : "text-[var(--status-warning)]") : "text-success"
+                        }`}
+                      >
+                        {info && info.remaining > 0 ? `${formatPeso(info.remaining)} left` : "Paid in full"}
+                      </div>
+                    )}
                   </td>
                   {showPayment && <td className={`${td} text-[12.5px] ${pad}`}>{each(modeNode)}</td>}
                   {showPayment && <td className={`${td} text-[12.5px] ${pad}`}>{each(bankNode)}</td>}
@@ -363,10 +371,13 @@ export function TransactionTable({
                                   setPaying(paying === e.id ? null : e.id);
                                 }}
                                 aria-label={kind === "receivable" ? "Log a payment received" : "Log a payment made"}
-                                className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full bg-cacao/10 px-3.5 text-[12.5px] font-semibold text-cacao transition hover:bg-cacao/20 active:scale-95"
+                                title="Log a payment"
+                                className="relative inline-flex h-9 w-9 items-center justify-center rounded-full bg-cacao/10 text-cacao transition hover:bg-cacao/20 active:scale-90"
                               >
-                                <Plus className="h-3.5 w-3.5" strokeWidth={2.4} />
-                                Log Payment
+                                <HandCoins className="h-[18px] w-[18px]" />
+                                <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-cacao text-ivory">
+                                  <Plus className="h-2.5 w-2.5" strokeWidth={3} />
+                                </span>
                               </button>
                             ) : undefined
                           }
