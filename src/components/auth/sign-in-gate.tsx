@@ -249,7 +249,9 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
   async function handlePhoto(person: AppUser, file: File | undefined) {
     if (!file) return;
     try {
-      await setProfilePhoto(person.id, file);
+      if (!setProfilePhoto(person.id, await shrinkImage(file))) {
+        alert("Couldn't save the photo — this browser's storage is full.");
+      }
     } catch {
       alert("That file couldn't be read as a photo — try a JPG or PNG.");
     }

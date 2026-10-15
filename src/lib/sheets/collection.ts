@@ -37,20 +37,8 @@ export function createSheetCollection<T>(config: CollectionConfig<T>): SheetColl
   const idIndex = header.indexOf(idColumn);
   const deletedIndex = deletedColumn ? header.indexOf(deletedColumn) : -1;
 
-  let headerChecked = false;
-
   async function ensureExists(): Promise<void> {
     await ensureSheetExists(sheetName, header);
-    if (headerChecked) return;
-    headerChecked = true;
-    // A tab created before a column was added keeps its old, shorter header row, so the new
-    // column fills with values under a blank title. Name it — but only when every existing
-    // title matches, so a tab someone rearranged by hand is never relabelled.
-    const [current = []] = await getSheetValues(`${sheetName}!A1:${lastCol}1`);
-    const matchesSoFar = current.every((cell, i) => cell === header[i]);
-    if (current.length > 0 && current.length < header.length && matchesSoFar) {
-      await updateSheetValues(`${sheetName}!A1:${lastCol}1`, [header]);
-    }
   }
 
   async function getAllRows(): Promise<string[][]> {
