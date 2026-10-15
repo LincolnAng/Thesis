@@ -611,7 +611,7 @@ function withDay(timestamp: string, day: string): string {
 /**
  * Paid now, or owed: and for each, what the record needs. A sale or expense paid on the spot
  * says how (cash, or a named bank). One that is owed says when it is due; any part already
- * paid is entered here once, and every later payment is recorded from the Still Owed list,
+ * paid is entered here once, and every later payment is recorded from Receivables or Payables on the Transactions page,
  * where it is added to this obligation's history instead of making a second one.
  */
 function PaymentFields({
@@ -703,7 +703,7 @@ function PaymentFields({
 
           {alreadyRecorded && existingPayments.length > 1 ? (
             <p className="text-xs text-muted-foreground">
-              {formatPeso(paidSoFar(draft))} has been paid so far. Add more from the Still Owed list.
+              {formatPeso(paidSoFar(draft))} has been paid so far. Add more from Receivables or Payables on the Transactions page.
             </p>
           ) : (
             <div className="space-y-2">

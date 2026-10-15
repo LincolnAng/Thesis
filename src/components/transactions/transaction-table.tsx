@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Pencil } from "lucide-react";
+import { Banknote, ChevronDown, ChevronRight, Pencil } from "lucide-react";
 import {
   EXPENSE_CATEGORY_LABELS,
   ENTRY_TYPE_LABELS,
@@ -10,7 +10,7 @@ import {
   formatDate,
   formatPeso,
 } from "@/lib/format";
-import { dueInfo, outstanding, paidSoFar, statusOf, termOf, canBeOwed } from "@/lib/transactions/ledger";
+import { dueInfo, obligationInfo, obligationKind, outstanding, paidSoFar, paymentsOf, statusOf, termOf, canBeOwed } from "@/lib/transactions/ledger";
 import { lineSubtotal, quantitySold } from "@/lib/transactions/order-lines";
 import type { Entry } from "@/lib/store/types";
 
@@ -21,8 +21,10 @@ import type { Entry } from "@/lib/store/types";
  * Payment column for executives — and the arrow on a row opens its details: the products in a
  * multi-product order, how it was paid, and every payment made on it.
  *
- * Read-only: the pencil opens the same form that adds a transaction, which is where the money
- * rules are checked. Tap a column heading to sort by it.
+ * The pencil opens the same form that adds a transaction, which is where the money rules are
+ * checked. Receivables and payables carry their own actions — record a payment, confirm a
+ * default, move the due date — so what is owed is handled in the list it is read in. Tap a
+ * column heading to sort by it.
  */
 
 type SortKey = "date" | "qty" | "amount";
@@ -71,7 +73,7 @@ function PaymentCell({ e }: { e: Entry }) {
   return (
     <div className="flex flex-col items-center gap-0.5">
       <div className="flex flex-wrap items-center justify-center gap-1">
-        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${termChip}`}>{term === "receivable" ? "Owed to us" : "We owe"}</span>
+        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${termChip}`}>{term === "receivable" ? "Receivable" : "Payable"}</span>
         <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusChip}`}>{STATUS_TEXT[status]}</span>
       </div>
       {owed > 0 && (
@@ -90,9 +92,10 @@ function PaymentCell({ e }: { e: Entry }) {
 }
 
 /** What opens under a row: the order's products, how it was paid, and every payment. */
-function Details({ e, showPayment }: { e: Entry; showPayment: boolean }) {
+function Details({ e, showPayment, owed }: { e: Entry; showPayment: boolean; owed?: OwedActions }) {
   const lines = e.lineItems ?? [];
-  const payments = e.payments ?? [];
+  const payments = paymentsOf(e);
+  const info = obligationKind(e) ? obligationInfo(e, new Date()) : null;
   return (
     <div className="grid grid-cols-1 gap-4 px-4 py-3 text-[13px] min-[800px]:grid-cols-2">
       {lines.length > 0 && (
@@ -133,11 +136,39 @@ function Details({ e, showPayment }: { e: Entry; showPayment: boolean }) {
                   {payments.map((p, i) => (
                     <li key={i} className="text-muted-foreground">
                       {formatDate(p.date)} — {formatPeso(p.amount)} · {describePaymentMethod(p.method, p.bankName)}
+                      {p.note ? ` · ${p.note}` : ""}
                     </li>
                   ))}
                 </ul>
               ) : (
-                <span className="text-muted-foreground">No dated payments recorded yet.</span>
+                <span className="text-muted-foreground">No payments recorded yet.</span>
+              )}
+              {e.dueDateHistory?.map((c, i) => (
+                <span key={`due-${i}`} className="text-muted-foreground">
+                  Due date moved {c.from ? `from ${formatDate(c.from)} ` : ""}to {c.to ? formatDate(c.to) : "none"}
+                  {c.reason ? ` — ${c.reason}` : ""}
+                </span>
+              ))}
+              {info?.wasDefaulted && (
+                <span className="font-semibold text-danger">
+                  Marked as defaulted{e.defaultedAt ? ` on ${formatDate(e.defaultedAt)}` : ""}
+                  {info.status === "settled" ? " — since paid in full" : ""}
+                </span>
+              )}
+              {owed && info && info.status !== "settled" && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button type="button" onClick={() => owed.onPay(e)} className="min-h-10 rounded-lg bg-cacao px-4 text-[13px] font-semibold text-ivory">
+                    Record a payment
+                  </button>
+                  <button type="button" onClick={() => owed.onMoveDue(e)} className="min-h-10 rounded-lg border border-line/25 px-4 text-[13px] font-semibold">
+                    Change due date
+                  </button>
+                  {info.status === "overdue" && (
+                    <button type="button" onClick={() => owed.onDefault(e)} className="min-h-10 rounded-lg border border-danger/50 px-4 text-[13px] font-semibold text-danger">
+                      Mark as defaulted
+                    </button>
+                  )}
+                </div>
               )}
             </>
           )}
@@ -156,11 +187,19 @@ function Details({ e, showPayment }: { e: Entry; showPayment: boolean }) {
 const hasDetails = (e: Entry, showPayment: boolean) =>
   Boolean(e.lineItems?.length || e.notes || (showPayment && (canBeOwed(e) || e.type === "CAPITAL") && (termOf(e) !== "spot" || e.paymentMethod)));
 
+/** What can be done to an owed row. Executives only. */
+export interface OwedActions {
+  onPay: (entry: Entry) => void;
+  onDefault: (entry: Entry) => void;
+  onMoveDue: (entry: Entry) => void;
+}
+
 export function TransactionTable({
   rows,
   showPayment,
   onEdit,
   carriedFrom,
+  owed,
 }: {
   rows: Entry[];
   /** Executives only — employees never see who owes what. */
@@ -168,6 +207,7 @@ export function TransactionTable({
   onEdit: (entry: Entry) => void;
   /** For rows carried over from an earlier month: the month they come from, by id. */
   carriedFrom?: Map<string, string>;
+  owed?: OwedActions;
 }) {
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 } | null>(null);
   const [open, setOpen] = useState<Set<string>>(new Set());
@@ -208,7 +248,7 @@ export function TransactionTable({
   );
 
   if (rows.length === 0) {
-    return <p className="px-5 py-10 text-center text-sm text-muted-foreground">No transactions match. Try another tab, month or filter.</p>;
+    return <p className="px-5 py-10 text-center text-sm text-muted-foreground">No transactions match. Try another filter or month.</p>;
   }
 
   return (
@@ -310,6 +350,17 @@ export function TransactionTable({
                           {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                         </button>
                       )}
+                      {owed && outstanding(e) > 0 && obligationKind(e) && (
+                        <button
+                          type="button"
+                          onClick={() => owed.onPay(e)}
+                          aria-label={obligationKind(e) === "receivable" ? "Record money received" : "Record a payment made"}
+                          title="Record a payment"
+                          className="flex h-11 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
+                        >
+                          <Banknote className="h-4 w-4" />
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => onEdit(e)}
@@ -324,7 +375,7 @@ export function TransactionTable({
                 {isOpen && (
                   <tr className="border-b border-line/10 bg-secondary/40">
                     <td colSpan={colCount} className="text-left">
-                      <Details e={e} showPayment={showPayment} />
+                      <Details e={e} showPayment={showPayment} owed={owed} />
                     </td>
                   </tr>
                 )}

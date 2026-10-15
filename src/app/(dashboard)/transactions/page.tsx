@@ -16,30 +16,29 @@ import { QuickEditDialog } from "@/components/home/quick-edit-dialog";
 import { TransactionTable } from "@/components/transactions/transaction-table";
 import { TransactionDialog } from "@/components/transactions/transaction-dialog";
 import { EMPTY_FILTERS, TransactionSearch, type TransactionFilters } from "@/components/transactions/transaction-search";
-import { MovementList, ObligationList, SectionHead } from "@/components/transactions/obligation-list";
 import { DefaultDialog, DueDateDialog, RecordPaymentDialog } from "@/components/transactions/obligation-dialogs";
 import { useStore } from "@/lib/store/use-store";
 import { addEntry, deleteEntry, replaceEntry } from "@/lib/store/store";
 import { entryToDraft } from "@/lib/home/describe-entry";
 import { computeExpensesSummary } from "@/lib/summary/expenses-summary";
 import { salesTarget, setSalesTarget } from "@/lib/summary/business-config";
-import { cashMovements, isAnyInvestment, monthOf, obligations, summarize, type ObligationRow } from "@/lib/transactions/ledger";
+import { canBeOwed, cashMovements, isAnyInvestment, monthOf, obligationKind, obligations, outstanding, summarize, type ObligationRow } from "@/lib/transactions/ledger";
 import { formatPeso, pluralize } from "@/lib/format";
 import type { Entry, EntryType } from "@/lib/store/types";
 
-type Direction = "in" | "out";
-/** The filters under each side: which kinds of transaction to show. */
-type Kind = "all" | "SALE" | "EXPENSE" | "INVEST" | "WASTE";
-const IN_FILTERS: [Kind, string][] = [
+/** Which kinds of transaction the list shows. One list, never split by direction. */
+type Kind = "all" | "SALE" | "EXPENSE" | "RECEIVABLE" | "PAYABLE" | "INVEST" | "WASTE";
+const KINDS: [Kind, string][] = [
   ["all", "All"],
   ["SALE", "Sales"],
-];
-const OUT_FILTERS: [Kind, string][] = [
-  ["all", "All"],
   ["EXPENSE", "Expenses"],
+  ["RECEIVABLE", "Receivables"],
+  ["PAYABLE", "Payables"],
   ["INVEST", "Investments"],
   ["WASTE", "Spoilage"],
 ];
+// Employees see sales, everyday expenses and spoilage — never what is owed or invested.
+const EMPLOYEE_KINDS: Kind[] = ["all", "SALE", "EXPENSE", "WASTE"];
 const LEDGER_TYPES = new Set<EntryType>(["SALE", "EXPENSE", "RND", "CAPITAL", "ASSET", "WASTE"]);
 const byNewest = (a: Entry, b: Entry) => b.timestamp.localeCompare(a.timestamp);
 
@@ -49,18 +48,13 @@ function monthLabel(key: string, style: "long" | "short" = "long") {
 }
 
 /**
- * Transactions has two sides, Money In and Money Out. Each keeps what has actually changed
- * hands apart from what is still owed:
+ * Transactions: the month's money in boxes, the sales target and budget, then one list of every
+ * transaction with filters for its kind and a search bar.
  *
- *   Money In  — Money Received  ·  Still Owed to Us
- *   Money Out — Money Paid      ·  We Still Owe
- *
- * Money Out also holds Investments and Spoilage, which are not payments the business made, in
- * sections of their own. Nothing in the "still owed" lists is ever counted in the money boxes
- * above; only a payment recorded against it is, on the day it was made.
- *
- * Payables, receivables and their deadlines live here, not on a page of their own. Executives
- * handle them; employees see sales and spoilage.
+ * The boxes keep what has actually changed hands apart from what is still owed (receivables and
+ * payables). Nothing owed is ever counted as money in or out; only a payment recorded against it
+ * is, on the day it was made. Each owed row has its payment, default and due-date actions in the
+ * list itself. Executives handle those; employees see sales, everyday expenses and spoilage.
  */
 function TransactionsPageInner() {
   const { entries, categoryBudgets, businessSettings } = useStore();
@@ -69,8 +63,7 @@ function TransactionsPageInner() {
   // Arriving from a supplier's "See spending" link: show only what was paid to them.
   const supplierFilter = searchParams.get("supplier");
 
-  const [direction, setDirection] = useState<Direction>(supplierFilter ? "out" : "in");
-  const [kind, setKind] = useState<Kind>("all");
+  const [kind, setKind] = useState<Kind>(supplierFilter ? "EXPENSE" : "all");
   const [filters, setFilters] = useState<TransactionFilters>(EMPTY_FILTERS);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Entry | null>(null);
@@ -126,46 +119,45 @@ function TransactionsPageInner() {
     return true;
   };
 
-  // Which filters each side offers. Employees never see investments.
-  const filtersRow = direction === "in" ? IN_FILTERS : exec ? OUT_FILTERS : OUT_FILTERS.filter(([k]) => k !== "INVEST");
-  // A filter left over from the other side falls back to All.
-  const effectiveKind: Kind = filtersRow.some(([k]) => k === kind) ? kind : "all";
-  const showing = (k: Kind) => effectiveKind === "all" || effectiveKind === k;
-  const showCash = direction === "in" ? showing("SALE") : showing("EXPENSE");
-  const showObligations = exec && showCash;
-  const showInvestments = exec && direction === "out" && showing("INVEST");
-  const showSpoilage = direction === "out" && showing("WASTE");
-
-  const byId = useMemo(() => new Map(ledger.map((e) => [e.id, e])), [ledger]);
-  const inPeriod = (day: string) => period === "all" || day.slice(0, 7) === period;
-
-  // Money that actually changed hands in the period, on the day it did.
-  const movements = useMemo(() => cashMovements(ledger), [ledger]);
-  const movementsShown = movements.filter((m) => {
-    const e = byId.get(m.entryId);
-    return inPeriod(m.date) && !!e && matches(e);
-  });
-  const received = movementsShown.filter((m) => m.direction === "in");
-  const paid = movementsShown.filter((m) => m.direction === "out");
-
-  // What is still owed: made in the period, or made earlier and still not fully paid.
-  const owedShown = (kindOf: "receivable" | "payable") =>
-    obligations(ledger, kindOf, now).filter(
-      (r) => (period === "all" || monthOf(r.entry) === period || (monthOf(r.entry) < period && r.info.remaining > 0)) && matches(r.entry),
-    );
-  const receivables = owedShown("receivable");
-  const payables = owedShown("payable");
-  const fromLabel = (r: ObligationRow) => (period !== "all" && monthOf(r.entry) < period ? monthLabel(monthOf(r.entry)) : null);
-
-  const periodRows = (period === "all" ? ledger : ledger.filter((e) => monthOf(e) === period)).filter(matches).sort(byNewest);
-  const investmentsShown = periodRows.filter(isAnyInvestment);
-  const spoilageShown = periodRows.filter((e) => e.type === "WASTE");
-
-  const editEntry = (entryId: string) => {
-    const e = byId.get(entryId);
-    if (e) setEditing(e);
+  const kinds = exec ? KINDS : KINDS.filter(([k]) => EMPLOYEE_KINDS.includes(k));
+  const effectiveKind: Kind = kinds.some(([k]) => k === kind) ? kind : "all";
+  const inKind = (e: Entry) => {
+    switch (effectiveKind) {
+      case "all":
+        return true;
+      case "RECEIVABLE":
+        return obligationKind(e) === "receivable";
+      case "PAYABLE":
+        return obligationKind(e) === "payable";
+      case "INVEST":
+        return isAnyInvestment(e);
+      default:
+        return e.type === effectiveKind;
+    }
   };
 
+  // The list: what was made in the period, plus — for executives — earlier receivables and
+  // payables still unpaid or paid during it, so a debt isn't forgotten when the calendar turns.
+  const madeIn = (e: Entry) => period === "all" || monthOf(e) === period;
+  const earlierRows = exec && period !== "all"
+    ? ledger.filter(
+        (e) =>
+          monthOf(e) < period &&
+          canBeOwed(e) &&
+          (outstanding(e) > 0 || (e.payments ?? []).some((p) => p.date.slice(0, 7) === period)),
+      )
+    : [];
+  const carriedFrom = new Map(earlierRows.filter((e) => matches(e) && inKind(e)).map((e) => [e.id, monthLabel(monthOf(e), "short")]));
+  const rows = [
+    ...earlierRows.filter((e) => carriedFrom.has(e.id)).sort((a, b) => a.timestamp.localeCompare(b.timestamp)),
+    ...ledger.filter((e) => madeIn(e) && matches(e) && inKind(e)).sort(byNewest),
+  ];
+
+  // The obligation behind a row, for the payment, default and due-date dialogs.
+  const rowFor = (e: Entry): ObligationRow | null => {
+    const k = obligationKind(e);
+    return k ? obligations([e], k, now)[0] : null;
+  };
 
   return (
     <Page title="Transactions">
@@ -210,11 +202,11 @@ function TransactionsPageInner() {
                     : `Cash that came in · ${periodName}`,
               }}
               owed={{
-                label: "Still owed to us",
+                label: "Receivables",
                 value: summary.receivables,
                 note: summary.overdueReceivables
-                  ? `Receivables · ${pluralize(summary.overdueReceivables, "payment")} overdue`
-                  : "Receivables — not counted as money in until paid",
+                  ? `${pluralize(summary.overdueReceivables, "payment")} overdue`
+                  : "Owed by customers — not money in until paid",
                 alert: summary.overdueReceivables > 0,
               }}
             />
@@ -231,11 +223,11 @@ function TransactionsPageInner() {
                     : `Cash that went out · ${periodName}`,
               }}
               owed={{
-                label: "We still owe",
+                label: "Payables",
                 value: summary.payables,
                 note: summary.overduePayables
-                  ? `Payables · ${pluralize(summary.overduePayables, "payment")} overdue`
-                  : "Payables — not counted as money out until paid",
+                  ? `${pluralize(summary.overduePayables, "payment")} overdue`
+                  : "Owed to suppliers — not money out until paid",
                 alert: summary.overduePayables > 0,
               }}
             />
@@ -296,34 +288,10 @@ function TransactionsPageInner() {
           </section>
         )}
 
-        {/* The two sides. */}
-        <div className="grid grid-cols-2 gap-2" role="tablist" aria-label="Money in or money out">
-          {(
-            [
-              ["in", "Money In", "Received and still owed to us"],
-              ["out", "Money Out", "Paid and still owed by us"],
-            ] as const
-          ).map(([d, label, hint]) => (
-            <button
-              key={d}
-              type="button"
-              role="tab"
-              aria-selected={direction === d}
-              onClick={() => setDirection(d)}
-              className={`min-h-[64px] rounded-2xl border px-4 py-2 text-left transition ${
-                direction === d ? "border-cacao bg-cacao text-ivory shadow-sm" : "border-line/20 bg-card hover:bg-secondary/50"
-              }`}
-            >
-              <span className="block font-display text-[20px] font-semibold">{label}</span>
-              <span className={`block text-[13px] ${direction === d ? "text-ivory/85" : "text-muted-foreground"}`}>{hint}</span>
-            </button>
-          ))}
-        </div>
-
-        {/* The existing filters, with the add button beside them. */}
+        {/* One list: filter by kind, with the add button beside it. */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex w-fit max-w-full gap-1.5 overflow-x-auto rounded-[10px] bg-secondary p-1" role="group" aria-label="Kind of transaction">
-            {filtersRow.map(([k, label]) => (
+            {kinds.map(([k, label]) => (
               <button
                 key={k}
                 type="button"
@@ -370,78 +338,39 @@ function TransactionsPageInner() {
           </div>
         )}
 
-        {/* Money In */}
-        {direction === "in" && (
-          <>
-            <section className="space-y-3" aria-labelledby="received-title">
-              <SectionHead
-                title="Money Received"
-                note={`Cash and bank transfers that have actually come in · ${periodName}`}
-              />
-              <MovementList rows={received} direction="in" total={received.reduce((s, m) => s + m.amount, 0)} onEdit={editEntry} />
-            </section>
-            {showObligations && (
-              <section className="space-y-3">
-                <SectionHead
-                  title="Still Owed to Us"
-                  note="Money customers have not paid yet. It only counts as received once a payment is recorded."
-                />
-                <ObligationList
-                  rows={receivables}
-                  kind="receivable"
-                  canAct={exec}
-                  fromLabel={fromLabel}
-                  onPay={setPaying}
-                  onDefault={setDefaulting}
-                  onMoveDue={setMovingDue}
-                  onEdit={(r) => setEditing(r.entry)}
-                />
-              </section>
-            )}
-          </>
+        {effectiveKind === "INVEST" && (
+          <p className="text-[13px] text-muted-foreground">
+            Two kinds, kept apart from sales and expenses: <span className="font-semibold">money put in</span> by an owner or
+            investor (money in, but not a sale) and <span className="font-semibold">things bought to keep</span> — machinery, a
+            freezer (money out when paid, but not an everyday expense). Neither counts in money earned. Older investments recorded
+            before this split were funded by the owners and stay out of money in and out.
+          </p>
         )}
 
-        {/* Money Out */}
-        {direction === "out" && (
-          <>
-            {exec && showCash && (
-              <section className="space-y-3">
-                <SectionHead title="Money Paid" note={`Cash and bank transfers that have actually gone out · ${periodName}`} />
-                <MovementList rows={paid} direction="out" total={paid.reduce((s, m) => s + m.amount, 0)} onEdit={editEntry} />
-              </section>
-            )}
-            {showObligations && (
-              <section className="space-y-3">
-                <SectionHead title="We Still Owe" note="Money we have not paid yet. It only counts as paid once a payment is recorded." />
-                <ObligationList
-                  rows={payables}
-                  kind="payable"
-                  canAct={exec}
-                  fromLabel={fromLabel}
-                  onPay={setPaying}
-                  onDefault={setDefaulting}
-                  onMoveDue={setMovingDue}
-                  onEdit={(r) => setEditing(r.entry)}
-                />
-              </section>
-            )}
-            {showInvestments && (
-              <section className="space-y-3">
-                <SectionHead
-                  title="Investments"
-                  note="Money put in by an owner or investor, and things bought to keep — machinery, a freezer. Kept apart from sales and expenses; neither counts in money earned."
-                />
-                <TransactionTable rows={investmentsShown} showPayment={exec} onEdit={setEditing} />
-              </section>
-            )}
-            {showSpoilage && (
-              <section className="space-y-3">
-                <SectionHead title="Spoilage" note="Stock that was lost. No cash moved, so it isn't in Money Paid." />
-                <TransactionTable rows={spoilageShown} showPayment={exec} onEdit={setEditing} />
-              </section>
-            )}
-          </>
-        )}
+        <div className="overflow-hidden rounded-2xl border border-line/15 bg-card">
+          <TransactionTable
+            rows={rows}
+            showPayment={exec}
+            onEdit={setEditing}
+            carriedFrom={carriedFrom}
+            owed={
+              exec
+                ? {
+                    onPay: (e) => setPaying(rowFor(e)),
+                    onDefault: (e) => setDefaulting(rowFor(e)),
+                    onMoveDue: (e) => setMovingDue(rowFor(e)),
+                  }
+                : undefined
+            }
+          />
+          <div className="flex flex-wrap justify-between gap-2 border-t border-line/10 px-4 py-2.5 text-xs text-muted-foreground">
+            <span>Press the arrow on a row for its details, or the pencil to change it.</span>
+            <span>
+              Showing {rows.length} {rows.length === 1 ? "row" : "rows"}
+              {carriedFrom.size > 0 ? ` · ${carriedFrom.size} from earlier months` : ""}
+            </span>
+          </div>
+        </div>
       </div>
 
       {adding && (
@@ -542,14 +471,19 @@ function MoneyBox({
 }) {
   const color = tone === "good" ? "text-success" : tone === "bad" ? "text-danger" : "text-foreground";
   if (filled) {
+    // The headline figure: green (red only when the month lost money), centred in its card.
     return (
-      <div className={`flex flex-col gap-1 rounded-2xl border px-5 py-4 text-white ${tone === "bad" ? "border-danger bg-danger" : "border-success bg-success"}`}>
-        <span className="flex items-center gap-2 text-[13px] font-semibold text-white/90">
+      <div
+        className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl border px-5 py-5 text-center text-white dark:text-ivory ${
+          tone === "bad" ? "border-danger bg-danger" : "border-success bg-success"
+        }`}
+      >
+        <span className="flex items-center justify-center gap-2 text-[14px] font-semibold opacity-90">
           {icon}
           {label}
         </span>
-        <span className="font-display text-[28px] font-bold">{formatPeso(value)}</span>
-        <span className="text-[12.5px] text-white/90">{note}</span>
+        <span className="font-display text-[clamp(28px,3.4vw,38px)] font-bold leading-tight tabular-nums">{formatPeso(value)}</span>
+        <span className="max-w-[28ch] text-[12.5px] opacity-90">{note}</span>
       </div>
     );
   }
