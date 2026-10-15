@@ -37,6 +37,10 @@ export function EntryCard({
         )}
       </div>
       <p className="text-sm text-foreground">{detail}</p>
+      <p className="text-xs text-muted-foreground">
+        Status: <span className="font-semibold text-[var(--status-good)]">saved</span> ·{" "}
+        {new Date(draft.timestamp).toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" })}
+      </p>
       <div className="flex gap-3 pt-0.5">
         <button onClick={onEdit} className="text-xs font-medium text-muted-foreground underline decoration-dotted">
           Edit

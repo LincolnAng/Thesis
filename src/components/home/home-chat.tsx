@@ -204,7 +204,10 @@ export function HomeChat() {
     await askAdvisor(message.rawText);
   }
 
-  async function handleSubmit(override?: string, opts: { freshChat?: boolean; skipGate?: boolean } = {}) {
+  async function handleSubmit(
+    override?: string,
+    opts: { freshChat?: boolean; skipGate?: boolean; mode?: "ask" | "log" } = {},
+  ) {
     if (!ready) return; // still loading history from Sheets — don't guess which chat this belongs to
     const rawText = (override ?? input).trim();
     if (!rawText) return;
@@ -228,7 +231,11 @@ export function HomeChat() {
     // never seen this phrasing.
     const guess = classifyIntent(rawText);
     let intent = guess.intent;
-    if (!guess.confident) {
+    // Chosen "Log" on the start screen: she is recording something, so it goes straight to the
+    // logging assistant (which still shows it for checking before saving), never to advice.
+    if (opts.mode === "log") {
+      intent = "transaction";
+    } else if (!guess.confident) {
       setSubmitting(true);
       const triaged = await requestTriage(rawText, state.products.map((p) => p.name));
       setSubmitting(false);
@@ -495,7 +502,7 @@ export function HomeChat() {
       <div className="mx-auto w-full max-w-[760px]">
         {toolbar}
         <div className="pt-[6vh]">
-          <ChatLanding onSubmit={(text) => void handleSubmit(text)} disabled={!ready || submitting} />
+          <ChatLanding onSubmit={(text, mode) => void handleSubmit(text, { mode })} disabled={!ready || submitting} />
         </div>
       </div>
     );

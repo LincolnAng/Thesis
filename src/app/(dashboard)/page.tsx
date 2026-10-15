@@ -1,305 +1,93 @@
 "use client";
 
-import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
-import { useMemo } from "react";
-import Link from "next/link";
-import { ArrowLeftRight, Box, CalendarDays, CircleDollarSign, Tag, Users, type LucideIcon } from "lucide-react";
+import { useMemo, useState } from "react";
+import { BarChart3, ChevronUp } from "lucide-react";
 import { Page } from "@/components/layout/page";
 import { HomeChat } from "@/components/home/home-chat";
-import { SimpleToday } from "@/components/simple/simple-today";
-import { Bar } from "@/components/summary/bar";
-import { StatTile } from "@/components/data-table/stat-tile";
-import { ProfitWaterfall } from "@/components/summary/profit-waterfall";
-import { ProfitOverlayChart } from "@/components/summary/profit-overlay-chart";
-import { ChartGrid } from "@/components/layout/containers";
-import { CogsPercentChart } from "@/components/summary/cogs-percent-chart";
-import { ExpensesCategoryChart } from "@/components/summary/expenses-category-chart";
-import { ProfitableProductsList } from "@/components/summary/profitable-products-list";
-import { SupplierPriceSummaryChart } from "@/components/summary/supplier-price-summary-chart";
+import { TodayGlance } from "@/components/home/today-glance";
+import { Headliners } from "@/components/home/headliners";
+import { AdvancedAnalytics } from "@/components/home/advanced-analytics";
+import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 import { useStore } from "@/lib/store/use-store";
-import { currentMonthLabel, formatPeso, pluralize } from "@/lib/format";
-import { forecastAll } from "@/lib/summary/forecast";
-import { productCostPerJar, effectiveProductPrice } from "@/lib/summary/recipe-cost";
-import { eventPlan } from "@/lib/summary/business-config";
-import { setSectionHidden, useSectionHidden, type HomeSection } from "@/lib/home/glance-visibility";
-import type { BusinessEvent, Entry, Product } from "@/lib/store/types";
-import type { CostContext } from "@/lib/summary/recipe-cost";
-import { computeSalesSummary } from "@/lib/summary/sales-summary";
-import { computeExpensesSummary, monthlyExpensesByCategory } from "@/lib/summary/expenses-summary";
-import { computeMonthlyProfitTrend, computeProductMarginRanking } from "@/lib/summary/profit-summary";
-import { useViewMode } from "@/lib/summary/view-mode";
 import { useCostContext } from "@/lib/summary/use-cost-context";
+import { productCostPerJar } from "@/lib/summary/recipe-cost";
+import { allStandings } from "@/lib/summary/material-stock";
+import { cacaoUtilizationPct } from "@/lib/summary/business-config";
+import { forecastAll } from "@/lib/summary/forecast";
+import { computeGlance, computeHeadliners, type TodayInputs } from "@/lib/home/today";
+import type { Product } from "@/lib/store/types";
 
-interface Tile {
-  href: string;
-  icon: LucideIcon;
-  label: string;
-  value: string;
-  note: string;
-  tone?: "good" | "bad";
-  valueTone?: "good" | "bad";
-}
-
-function monthKey(iso: string) {
-  return iso.slice(0, 7);
-}
-
-function buildTiles(
-  entries: Entry[],
-  products: Product[],
-  events: BusinessEvent[],
-  settings: Parameters<typeof eventPlan>[0],
-  costCtx: CostContext,
-): Tile[] {
-  const now = new Date();
-  const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const lastMonth = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
-  const money = (list: Entry[], type: "SALE" | "EXPENSE") =>
-    list.filter((e) => e.type === type).reduce((s, e) => s + (e.amount ?? 0), 0);
-
-  const thisMonth = entries.filter((e) => monthKey(e.timestamp) === month);
-  const prevMonth = entries.filter((e) => monthKey(e.timestamp) === lastMonth);
-  const inflow = money(thisMonth, "SALE");
-  const outflow = money(thisMonth, "EXPENSE");
-  const profit = inflow - outflow;
-  const lastProfit = prevMonth.length ? money(prevMonth, "SALE") - money(prevMonth, "EXPENSE") : null;
-  const sales = thisMonth.filter((e) => e.type === "SALE");
-  const expenseCount = thisMonth.filter((e) => e.type === "EXPENSE").length;
-  const buyers = [...new Set(sales.map((e) => e.counterparty).filter((c): c is string => !!c))];
-
-  const forecasts = forecastAll(products, entries, now);
-  const low = products
-    .map((p) => ({ p, need: forecasts.find((f) => f.productId === p.id)?.forecastQty ?? 0 }))
-    .filter(({ p, need }) => p.stockQty <= p.lowStockThreshold || p.stockQty < need)
-    .sort((a, b) => a.p.stockQty / Math.max(1, a.need) - b.p.stockQty / Math.max(1, b.need));
-
-  const today = now.toISOString().slice(0, 10);
-  const next = events
-    .filter((e) => e.status === "open" && e.startDate && e.startDate.slice(0, 10) > today)
-    .sort((a, b) => (a.startDate ?? "").localeCompare(b.startDate ?? ""))[0];
-  const daysAway = next?.startDate ? Math.ceil((new Date(next.startDate).getTime() - now.getTime()) / 86400000) : 0;
-  const bringing = next ? Object.values(eventPlan(settings, next.id)).reduce((s, n) => s + n, 0) : 0;
-
-  const margins = products
-    .map((p) => {
-      const cost = productCostPerJar(p, costCtx);
-      const price = effectiveProductPrice(p, cost);
-      return { p, price, pct: price > 0 ? ((price - cost.costPerJar) / price) * 100 : 0 };
-    })
-    .sort((a, b) => b.pct - a.pct);
-  const best = margins[0];
-  const pctOfSales = inflow > 0 ? Math.round((profit / inflow) * 100) : 0;
-
-  return [
-    {
-      href: "/transactions",
-      icon: ArrowLeftRight,
-      label: "Transactions — this month",
-      value: `${formatPeso(inflow)} in · ${formatPeso(outflow)} out`,
-      note: `${pluralize(sales.length, "sale")} · ${pluralize(expenseCount, "expense")} logged`,
-    },
-    {
-      href: "/transactions",
-      icon: CircleDollarSign,
-      label: "Profit — this month",
-      value: formatPeso(profit),
-      valueTone: profit >= 0 ? "good" : "bad",
-      note:
-        lastProfit === null
-          ? `${pctOfSales}% of sales`
-          : `${profit >= lastProfit ? "↑" : "↓"} ${formatPeso(Math.abs(profit - lastProfit))} vs last month · ${pctOfSales}% of sales`,
-      tone: profit >= 0 && (lastProfit === null || profit >= lastProfit) ? "good" : "bad",
-    },
-    low.length
-      ? {
-          href: "/production",
-          icon: Box,
-          label: "Inventory — running low",
-          value: `${low[0].p.name}: ${low[0].p.stockQty} left`,
-          note: low.length > 1 ? `+ ${low.slice(1, 3).map((l) => l.p.name).join(", ")}${low.length > 3 ? ` +${low.length - 3} more` : ""}` : "Restock soon",
-          tone: "bad",
-        }
-      : { href: "/production", icon: Box, label: "Production", value: "Stock looks healthy", note: "Covers next month's forecast", tone: "good" },
-    {
-      href: "/people",
-      icon: Users,
-      label: "People — this month",
-      value: `${pluralize(sales.length, "order")} · ${pluralize(buyers.length, "customer")}`,
-      note: buyers.length ? `${buyers.slice(0, 2).join(", ")}${buyers.length > 2 ? ` +${buyers.length - 2} more` : ""}` : "No orders yet",
-    },
-    next
-      ? {
-          href: "/people?tab=events",
-          icon: CalendarDays,
-          label: "Events — coming up",
-          value: next.name,
-          note: `${pluralize(daysAway, "day")} away${bringing ? ` · bringing ${bringing}` : ""}`,
-        }
-      : { href: "/people?tab=events", icon: CalendarDays, label: "Events", value: "Nothing planned", note: "Add one under People → Events" },
-    best
-      ? {
-          href: "/costing?view=pricing",
-          icon: Tag,
-          label: "Pricing — best margin",
-          value: `${best.p.name} — ${formatPeso(best.price)}`,
-          note: `${Math.round(best.pct)}% margin`,
-          tone: best.pct >= 15 ? "good" : "bad",
-        }
-      : { href: "/costing?view=pricing", icon: Tag, label: "Pricing", value: "No products yet", note: "Add products first" },
-  ];
-}
-
-/** A Home section with a Hide link; once hidden, a single "Show …" button brings it back. */
-function HideableSection({ section, title, children }: { section: HomeSection; title: string; children: React.ReactNode }) {
-  const hidden = useSectionHidden(section);
-  if (hidden) {
-    return (
-      <div className="flex justify-center">
-        <button
-          type="button"
-          onClick={() => setSectionHidden(section, false)}
-          className="rounded-full border border-line/15 bg-card px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground"
-        >
-          Show {title.split(" · ")[0].toLowerCase()}
-        </button>
-      </div>
-    );
-  }
-  return (
-    <section className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{title}</h2>
-        <button type="button" onClick={() => setSectionHidden(section, true)} className="text-xs font-semibold text-muted-foreground hover:text-foreground">
-          Hide
-        </button>
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function TodayAtAGlance({ tiles }: { tiles: Tile[] }) {
-  return (
-    <HideableSection section="glance" title="Today at a glance">
-      <div className="grid grid-cols-1 gap-[18px] min-[700px]:grid-cols-2 min-[1100px]:grid-cols-3">
-        {tiles.map((t) => {
-          const alert = t.tone === "bad" && t.icon === Box;
-          return (
-            <Link
-              key={t.label}
-              href={t.href}
-              className={`flex flex-col gap-2.5 rounded-2xl border bg-card p-[22px] transition hover:shadow-sm ${alert ? "border-danger/35" : "border-line/15"}`}
-            >
-              <span className={`flex h-11 w-11 items-center justify-center rounded-xl ${alert ? "bg-danger/10" : "bg-cacao/10"}`}>
-                <t.icon className={`h-[21px] w-[21px] ${alert ? "text-danger" : "text-cacao"}`} strokeWidth={1.8} />
-              </span>
-              <span className="text-sm font-semibold text-muted-foreground">{t.label}</span>
-              <span
-                className={`font-display text-[19px] font-semibold ${t.valueTone === "good" ? "text-success" : t.valueTone === "bad" ? "text-danger" : ""}`}
-              >
-                {t.value}
-              </span>
-              <span className={`text-[13px] font-semibold ${t.tone === "good" ? "text-success" : t.tone === "bad" ? "text-danger" : "text-muted-foreground"}`}>
-                {t.note}
-              </span>
-            </Link>
-          );
-        })}
-      </div>
-    </HideableSection>
-  );
-}
-
+/**
+ * Home answers three things before anyone types: how the business is doing (Today at a
+ * glance), what needs attention (the headliners), and — through BAi above them — whatever she
+ * wants to ask or log. No charts by default: they live behind Advanced, the only page that
+ * has one. Employees see the stock and production side; money stays with executives.
+ */
 export default function HomePage() {
-  const { entries, products, suppliers, categoryBudgets, events, businessSettings } = useStore();
-  const [chosenMode] = useViewMode();
-  // Employees get the plain Today cards: the Advanced overview is profit, margins and costs.
+  const { entries, products, rawMaterials, businessSettings } = useStore();
   const exec = isExecutive(useCurrentUser());
-  const viewMode = exec ? chosenMode : "simple";
   const costCtx = useCostContext();
+  const [advanced, setAdvanced] = useState(false);
 
-  const sales = useMemo(
-    () => computeSalesSummary(entries, products, costCtx),
-    [entries, products, costCtx],
-  );
-  const expenses = useMemo(() => computeExpensesSummary(entries, categoryBudgets), [entries, categoryBudgets]);
-  const profitTrend = useMemo(
-    () => computeMonthlyProfitTrend(entries, products, costCtx),
-    [entries, products, costCtx],
-  );
-  const marginRanking = useMemo(
-    () => computeProductMarginRanking(entries, products, costCtx),
-    [entries, products, costCtx],
-  );
-  const expensesByCategory = useMemo(() => monthlyExpensesByCategory(entries), [entries]);
-  const profitThisMonth = profitTrend[profitTrend.length - 1];
-  const netProfit = profitThisMonth?.netProfit ?? 0;
-  const cogsPct = profitThisMonth?.cogsPct ?? 0;
-  const expensesPct = sales.revenue > 0 ? (expenses.total / sales.revenue) * 100 : 0;
+  const inputs = useMemo<TodayInputs>(() => {
+    const now = new Date();
+    const utilization = cacaoUtilizationPct(businessSettings) / 100;
+    const lowMaterials = allStandings(entries, products, rawMaterials, utilization)
+      .map((s) => ({ s, threshold: s.material.reorderPoint ?? s.material.lowStockThreshold }))
+      .filter(({ s, threshold }) => threshold > 0 && s.onHand <= threshold)
+      .map(({ s, threshold }) => ({
+        name: s.material.name,
+        onHand: Math.max(0, Math.round(s.onHand * 100) / 100),
+        threshold,
+        unit: s.material.unit,
+      }));
+    return {
+      now,
+      role: exec ? "executive" : "employee",
+      entries,
+      products,
+      // A product with no recipe, or an ingredient with no price, has no cost yet — never zero.
+      costPerUnit: (p: Product) => {
+        const cost = productCostPerJar(p, costCtx);
+        return cost.batchTotal > 0 && cost.unpriced.length === 0 ? cost.costPerJar : null;
+      },
+      lowMaterials,
+      outlook: forecastAll(products, entries, now).map((f) => ({
+        productId: f.productId,
+        productName: f.productName,
+        forecastQty: f.forecastQty,
+      })),
+    };
+  }, [entries, products, rawMaterials, businessSettings, costCtx, exec]);
 
-  const tiles = useMemo(
-    () => buildTiles(entries, products, events, businessSettings, costCtx),
-    [entries, products, events, businessSettings, costCtx],
-  );
+  const glance = useMemo(() => computeGlance(inputs), [inputs]);
+  const headliners = useMemo(() => computeHeadliners(inputs), [inputs]);
 
   return (
-    <Page title="Home" hideModeToggle={!exec}>
-    <div className="space-y-14 pb-4">
-      <HomeChat />
-
-      {viewMode === "simple" ? (
-        <HideableSection section="today" title="Today">
-          <SimpleToday />
-        </HideableSection>
-      ) : (
-        <TodayAtAGlance tiles={tiles} />
-      )}
-
-      {viewMode === "advanced" && (
-        <HideableSection section="overview" title={`Business overview · ${currentMonthLabel()}`}>
-          <ProfitWaterfall
-            revenue={sales.revenue}
-            cogs={profitThisMonth?.cogs ?? 0}
-            expenses={expenses.total}
-            netProfit={netProfit}
-            periodLabel={currentMonthLabel()}
-          />
-
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatTile label="Gross margin" value={`${Math.round(sales.grossMarginPct)}%`} sub="this month" />
-          </div>
-
-          <div className="space-y-4 rounded-2xl border border-border bg-card p-4">
-            <h2 className="text-sm font-semibold text-muted-foreground">Financial health</h2>
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-foreground">Ingredient cost (COGS)</span>
-                <span className="text-muted-foreground">{Math.round(cogsPct)}% of revenue</span>
-              </div>
-              <Bar pct={cogsPct} tone="warning" />
-            </div>
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-foreground">Other expenses</span>
-                <span className="text-muted-foreground">{Math.round(expensesPct)}% of revenue</span>
-              </div>
-              <Bar pct={expensesPct} tone="warning" />
-            </div>
-          </div>
-
-          <ProfitOverlayChart data={profitTrend} />
-
-          <ChartGrid>
-            <CogsPercentChart data={profitTrend} />
-            <ExpensesCategoryChart data={expensesByCategory} />
-            <SupplierPriceSummaryChart suppliers={suppliers} />
-            <ProfitableProductsList rows={marginRanking} />
-          </ChartGrid>
-        </HideableSection>
-      )}
-
-    </div>
+    <Page
+      title="Home"
+      right={
+        exec ? (
+          <button
+            type="button"
+            onClick={() => setAdvanced((a) => !a)}
+            aria-pressed={advanced}
+            className={`flex items-center gap-1.5 rounded-[10px] border px-3.5 py-2 text-[13px] font-semibold transition ${
+              advanced ? "border-cacao bg-cacao text-ivory" : "border-line/20 bg-card text-foreground hover:bg-secondary"
+            }`}
+          >
+            {advanced ? <ChevronUp className="h-4 w-4" /> : <BarChart3 className="h-4 w-4" />}
+            {advanced ? "Hide advanced" : "Advanced"}
+          </button>
+        ) : undefined
+      }
+    >
+      <div className="space-y-12 pb-4">
+        <HomeChat />
+        <TodayGlance glance={glance} />
+        <Headliners items={headliners} />
+        {exec && advanced && <AdvancedAnalytics />}
+      </div>
     </Page>
   );
 }

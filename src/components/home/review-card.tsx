@@ -36,13 +36,21 @@ export function ReviewCard({
   const needsProduct = draft.type === "SALE" && !matchedProduct;
 
   const rows: Array<{ field: string; label: string; value: string | null }> = [
-    { field: "amount", label: "Amount", value: draft.amount == null ? null : formatPeso(draft.amount) },
+    { field: "type", label: "Transaction type", value: ENTRY_TYPE_LABELS[draft.type] ?? draft.type },
+    { field: "amount", label: "Total amount", value: draft.amount == null ? null : formatPeso(draft.amount) },
     { field: "quantity", label: "How many", value: draft.quantity == null ? null : String(draft.quantity) },
     { field: "unit", label: "Unit", value: draft.unit },
     { field: "sku", label: "Product", value: draft.sku },
     { field: "counterparty", label: draft.type === "SALE" ? "Buyer" : "Paid to", value: draft.counterparty },
     { field: "notes", label: "Note", value: draft.notes ?? null },
+    {
+      field: "date",
+      label: "Date",
+      value: new Date(draft.timestamp).toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" }),
+    },
   ];
+  // Type and date are always worked out, never something she has to have said.
+  const alwaysKnown = new Set(["type", "date"]);
 
   return (
     <div className="w-full max-w-sm space-y-3 rounded-2xl border border-border bg-card p-3">
@@ -50,7 +58,7 @@ export function ReviewCard({
         <p className="text-sm font-semibold text-foreground">
           {ENTRY_TYPE_LABELS[draft.type] ?? draft.type} — check this before I save it
         </p>
-        <p className="text-xs text-muted-foreground">Nothing has been recorded yet.</p>
+        <p className="text-xs text-muted-foreground">Status: pending confirmation — nothing has been recorded yet.</p>
       </div>
 
       <ul className="space-y-1.5">
@@ -60,7 +68,7 @@ export function ReviewCard({
             {row.value ? (
               <span className="flex items-baseline gap-1.5 text-right">
                 <span className="font-medium text-foreground">{row.value}</span>
-                {!isStated(row.field) && (
+                {!isStated(row.field) && !alwaysKnown.has(row.field) && (
                   <span className="rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
                     guess
                   </span>
