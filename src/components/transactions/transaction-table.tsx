@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, Banknote, HandCoins, History as HistoryIcon, Landmark, Pencil } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, HandCoins, History as HistoryIcon, Pencil } from "lucide-react";
 import { EXPENSE_CATEGORY_LABELS, PRICE_TYPE_LABELS, formatDate, formatPeso } from "@/lib/format";
 import { dueInfo, methodOf, obligationInfo, obligationKind, outstanding, paymentsOf } from "@/lib/transactions/ledger";
 import { lineSubtotal, orderTotal } from "@/lib/transactions/order-lines";
@@ -12,9 +12,10 @@ import type { Entry } from "@/lib/store/types";
  * Every recorded transaction, one row each, in one fixed set of columns — the same for sales,
  * expenses, receivables and payables:
  *
- *   Date · Customer / Supplier · Product · Qty · Amount · Paid by · Status · Recorded by
+ *   Date · Customer / Supplier · Product · Qty · Amount · Mode of payment · Status · Recorded by
  *
- * Paid by is how the money moved — Cash, or a bank transfer and which bank.
+ * Every cell is centred and ruled off from the next. Mode of payment is how the money moved —
+ * Cash, or the bank or wallet it went through (BDO, GCash).
  *
  * Status is one pill: green Paid, yellow Partially Paid (or Unpaid, Due today) with what is left
  * written small beneath it, soft red Overdue or Defaulted. Amounts stay plain dark text — the pill
@@ -242,14 +243,15 @@ export function TransactionTable({
     });
   }, [rows, sort]);
 
-  // A real table, sized to its contents, every cell centred under its heading. Long item and
-  // name text wraps within a sensible width instead of stretching the table.
-  const th = "whitespace-nowrap px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wide text-muted-foreground";
-  const td = "px-3 py-3 text-left align-middle";
+  // A real table, sized to its contents, every cell centred under its heading and ruled off from
+  // its neighbours. Long item and name text wraps within a sensible width instead of stretching it.
+  const rule = "border-r border-line/15 last:border-r-0";
+  const th = `px-3 py-2.5 text-center text-[11px] font-bold uppercase leading-tight tracking-wide text-muted-foreground ${rule}`;
+  const td = `px-3 py-3 text-center align-middle ${rule}`;
   const colCount = showPayment ? 9 : 7;
 
-  const head = (label: string, key?: SortKey, right?: boolean) => (
-    <th scope="col" className={`${th} ${right ? "!text-right" : ""}`}>
+  const head = (label: string, key?: SortKey) => (
+    <th scope="col" className={`${th} ${label.length > 12 ? "max-w-[96px]" : "whitespace-nowrap"}`}>
       {key ? (
         <button
           type="button"
@@ -278,9 +280,9 @@ export function TransactionTable({
             {head("Date", "date")}
             {head("Customer / Supplier")}
             {head("Product")}
-            {head("Qty", undefined, true)}
-            {head("Amount", "amount", true)}
-            {showPayment && head("Paid by")}
+            {head("Qty")}
+            {head("Amount", "amount")}
+            {showPayment && head("Mode of payment")}
             {showPayment && head("Status")}
             {head("Recorded by")}
             <th scope="col" className={th}>
@@ -329,22 +331,21 @@ export function TransactionTable({
                       </span>
                     ))}
                   </td>
-                  <td className={`${td} text-right tabular-nums`}>
+                  <td className={`${td} tabular-nums`}>
                     {items.map((l, j) => (
                       <span key={j} className="block leading-6">
                         {l.qty ?? "\u00a0"}
                       </span>
                     ))}
                   </td>
-                  <td className={`${td} whitespace-nowrap text-right tabular-nums ${e.type === "WASTE" ? "text-muted-foreground" : "text-foreground"}`}>
+                  <td className={`${td} whitespace-nowrap tabular-nums ${e.type === "WASTE" ? "text-muted-foreground" : "text-foreground"}`}>
                     {e.amount != null ? formatPeso(e.amount) : null}
                   </td>
                   {showPayment && (
-                    <td className={`${td} whitespace-nowrap text-[12.5px]`}>
+                    <td className={`${td} whitespace-nowrap`}>
                       {paidBy(e, showPayment).map((m) => (
-                        <span key={`${m.method}${m.bank}`} className="flex items-center gap-1.5 leading-6">
-                          {m.method === "bank_transfer" ? <Landmark className="h-3.5 w-3.5 text-muted-foreground" /> : <Banknote className="h-3.5 w-3.5 text-muted-foreground" />}
-                          {m.method === "bank_transfer" ? (m.bank ? `${m.bank} transfer` : "Bank transfer") : "Cash"}
+                        <span key={`${m.method}${m.bank}`} className="block leading-6" title={m.method === "bank_transfer" ? "Bank transfer" : undefined}>
+                          {m.method === "bank_transfer" ? (m.bank ?? "Bank transfer") : "Cash"}
                         </span>
                       ))}
                     </td>
@@ -352,7 +353,7 @@ export function TransactionTable({
                   {showPayment && (
                     <td className={td}>
                       {status && (
-                        <div className="flex flex-col items-start gap-1">
+                        <div className="flex flex-col items-center gap-1">
                           <span
                             title={payTip}
                             className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-[12px] font-semibold ${PILL[status.tone]}`}
@@ -362,7 +363,7 @@ export function TransactionTable({
                           {kind && (
                             <span
                               title={kind === "receivable" ? "A receivable: a customer owes us" : "A payable: we owe a supplier"}
-                              className={`flex items-center gap-1 whitespace-nowrap px-2.5 text-[12px] tabular-nums ${kind === "receivable" ? "text-success" : "text-danger"}`}
+                              className={`flex items-center gap-1 whitespace-nowrap text-[12px] tabular-nums ${kind === "receivable" ? "text-success" : "text-danger"}`}
                             >
                               {kind === "receivable" ? <ArrowDownLeft className="h-3 w-3" strokeWidth={2.4} /> : <ArrowUpRight className="h-3 w-3" strokeWidth={2.4} />}
                               {status.left > 0
@@ -376,9 +377,9 @@ export function TransactionTable({
                       )}
                     </td>
                   )}
-                  <td className={`${td} whitespace-nowrap text-muted-foreground`}>{e.loggedByName}</td>
-                  <td className="px-2 py-1 text-right align-middle">
-                    <div className="flex items-center justify-end gap-1">
+                  <td className={`${td} whitespace-nowrap`}>{e.loggedByName}</td>
+                  <td className="px-2 py-1 text-center align-middle">
+                    <div className="flex items-center justify-center gap-1">
                       {canPay && (
                         <button
                           type="button"
