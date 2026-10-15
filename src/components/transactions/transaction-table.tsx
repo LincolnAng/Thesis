@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import { Banknote, ChevronDown, ChevronRight, Pencil } from "lucide-react";
+import { BanknoteArrowDown, BanknoteArrowUp, ChevronDown, ChevronRight, Pencil } from "lucide-react";
 import { EXPENSE_CATEGORY_LABELS, PRICE_TYPE_LABELS, describePaymentMethod, formatDate, formatPeso } from "@/lib/format";
 import { dueInfo, obligationInfo, obligationKind, outstanding, paymentsOf } from "@/lib/transactions/ledger";
 import { expandOrderLines } from "@/lib/transactions/order-lines";
@@ -307,47 +307,49 @@ export function TransactionTable({
                     )}
                     <td className={`${td} whitespace-nowrap text-muted-foreground`}>{row.loggedByName ?? "—"}</td>
                     {first && (
-                    <td rowSpan={group.length} className="px-1 py-1 text-center align-middle">
-                      <div className="flex items-center justify-center gap-0.5">
-                        {hasDetails(origin, showPayment) && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setOpen((prev) => {
-                                const next = new Set(prev);
-                                if (next.has(origin.id)) next.delete(origin.id);
-                                else next.add(origin.id);
-                                return next;
-                              })
-                            }
-                            aria-expanded={isOpen}
-                            aria-label={isOpen ? "Hide details" : "Show details"}
-                            className="flex h-11 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
-                          >
-                            {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                          </button>
-                        )}
-                        {owed && kind && outstanding(origin) > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => owed.onPay(origin)}
-                            aria-label={kind === "receivable" ? "Record money received" : "Record a payment made"}
-                            title="Record a payment"
-                            className="flex h-11 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
-                          >
-                            <Banknote className="h-4 w-4" />
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => onEdit(origin)}
-                          aria-label="Change this transaction"
-                          className="flex h-11 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
+                      <td rowSpan={group.length} className="px-2 py-1 text-center align-middle">
+                        <div className="flex flex-col items-center gap-1">
+                          {owed && kind && outstanding(origin) > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => owed.onPay(origin)}
+                              aria-label={kind === "receivable" ? "Record a payment received" : "Record a payment made"}
+                              className="inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-lg bg-cacao px-3 text-[12.5px] font-semibold text-ivory transition hover:brightness-110 active:scale-[0.97]"
+                            >
+                              {kind === "receivable" ? <BanknoteArrowDown className="h-4 w-4" /> : <BanknoteArrowUp className="h-4 w-4" />}
+                              Record a payment
+                            </button>
+                          )}
+                          <div className="flex items-center justify-center gap-0.5">
+                            {hasDetails(origin, showPayment) && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setOpen((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(origin.id)) next.delete(origin.id);
+                                    else next.add(origin.id);
+                                    return next;
+                                  })
+                                }
+                                aria-expanded={isOpen}
+                                aria-label={isOpen ? "Hide details" : "Show details"}
+                                className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
+                              >
+                                {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => onEdit(origin)}
+                              aria-label="Change this transaction"
+                              className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </td>
                     )}
                   </tr>
                 ))}
