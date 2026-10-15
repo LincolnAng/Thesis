@@ -240,6 +240,13 @@ export const STATUS_LABELS: Record<ObligationStatus, string> = {
   settled: "Paid in full",
 };
 
+/** How it was (or last was) paid: the transaction's own method, else its latest payment's. */
+export function methodOf(e: Entry): { method: string | null; bank: string | null } {
+  if (e.paymentMethod) return { method: e.paymentMethod, bank: e.bankName ?? null };
+  const last = paymentsOf(e).at(-1);
+  return last?.method ? { method: last.method, bank: last.bankName } : { method: null, bank: null };
+}
+
 // ── Cash movements ─────────────────────────────────────────────────────────
 
 /** One actual receipt or payment: money that really changed hands, on the day it did. */

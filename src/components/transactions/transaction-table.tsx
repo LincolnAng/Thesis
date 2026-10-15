@@ -3,7 +3,7 @@
 import { Fragment, useMemo, useState } from "react";
 import { HandCoins, History as HistoryIcon, Pencil } from "lucide-react";
 import { EXPENSE_CATEGORY_LABELS, PRICE_TYPE_LABELS, describePaymentMethod, formatDate, formatPeso } from "@/lib/format";
-import { dueInfo, obligationInfo, obligationKind, outstanding, paymentsOf } from "@/lib/transactions/ledger";
+import { dueInfo, methodOf, obligationInfo, obligationKind, outstanding, paymentsOf } from "@/lib/transactions/ledger";
 import { lineSubtotal, orderTotal } from "@/lib/transactions/order-lines";
 import { QuickPay } from "@/components/transactions/obligation-dialogs";
 import type { Entry } from "@/lib/store/types";
@@ -26,13 +26,6 @@ import type { Entry } from "@/lib/store/types";
  */
 
 type SortKey = "date" | "amount" | "due";
-
-/** How it was (or last was) paid: the transaction's own method, else its latest payment's. */
-function methodOf(e: Entry): { method: string | null; bank: string | null } {
-  if (e.paymentMethod) return { method: e.paymentMethod, bank: e.bankName ?? null };
-  const last = paymentsOf(e).at(-1);
-  return last?.method ? { method: last.method, bank: last.bankName } : { method: null, bank: null };
-}
 
 /** Money moves in these types; spoilage and older owner-funded investments carry no payment. */
 const hasPayment = (e: Entry) => e.type === "SALE" || e.type === "EXPENSE" || e.type === "CAPITAL" || e.type === "ASSET";

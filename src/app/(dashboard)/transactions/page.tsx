@@ -22,8 +22,21 @@ import { addEntry, deleteEntry, replaceEntry } from "@/lib/store/store";
 import { entryToDraft } from "@/lib/home/describe-entry";
 import { computeExpensesSummary } from "@/lib/summary/expenses-summary";
 import { salesTarget, setSalesTarget } from "@/lib/summary/business-config";
-import { canBeOwed, cashMovements, isAnyInvestment, monthOf, obligationKind, obligations, outstanding, summarize, type ObligationRow } from "@/lib/transactions/ledger";
-import { formatPeso, pluralize } from "@/lib/format";
+import {
+  canBeOwed,
+  cashMovements,
+  dayOf,
+  isAnyInvestment,
+  methodOf,
+  monthOf,
+  obligationInfo,
+  obligationKind,
+  obligations,
+  outstanding,
+  summarize,
+  type ObligationRow,
+} from "@/lib/transactions/ledger";
+import { EXPENSE_CATEGORY_LABELS, formatPeso, pluralize } from "@/lib/format";
 import type { Entry, EntryType } from "@/lib/store/types";
 
 /** Which kinds of transaction the list shows. One list, never split by direction. */
@@ -101,6 +114,8 @@ function TransactionsPageInner() {
       products: uniq(ledger.flatMap((e) => (e.lineItems?.length ? e.lineItems.map((l) => l.name) : [e.sku]))),
       people: uniq(ledger.map((e) => e.counterparty)),
       recorders: uniq(ledger.map((e) => e.loggedByName)),
+      banks: uniq(ledger.map((e) => methodOf(e).bank)),
+      categories: uniq(ledger.filter((e) => e.type === "EXPENSE").map((e) => e.category)).map((c): [string, string] => [c, EXPENSE_CATEGORY_LABELS[c] ?? c]),
     };
   }, [ledger]);
 
@@ -110,6 +125,40 @@ function TransactionsPageInner() {
     if (filters.product && e.sku !== filters.product && !e.lineItems?.some((l) => l.name === filters.product)) return false;
     if (filters.person && e.counterparty !== filters.person) return false;
     if (filters.recordedBy && e.loggedByName !== filters.recordedBy) return false;
+    if (filters.priceType && !(e.type === "SALE" && (e.priceType ?? "standard") === filters.priceType)) return false;
+    if (filters.category && e.category !== filters.category) return false;
+    // Payment characteristics. Spoilage and older owner-funded investments have none to match.
+    if (filters.status || filters.method || filters.bank) {
+      if (e.type !== "SALE" && e.type !== "EXPENSE" && e.type !== "ASSET" && e.type !== "CAPITAL") return false;
+      if (filters.method || filters.bank) {
+        const how = methodOf(e);
+        if (filters.method && how.method !== filters.method) return false;
+        if (filters.bank && how.bank !== filters.bank) return false;
+      }
+      if (filters.status) {
+        const owed = obligationKind(e) !== null;
+        const info = owed ? obligationInfo(e, now) : null;
+        const ok =
+          filters.status === "spot"
+            ? !owed
+            : !info
+              ? false
+              : filters.status === "pending"
+                ? info.status !== "settled" && !info.partlyPaid
+                : filters.status === "partial"
+                  ? info.partlyPaid
+                  : filters.status === "settled"
+                    ? info.status === "settled"
+                    : info.status === filters.status; // overdue, defaulted
+        if (!ok) return false;
+      }
+    }
+    const day = dayOf(e.timestamp);
+    if (filters.dateFrom && day < filters.dateFrom) return false;
+    if (filters.dateTo && day > filters.dateTo) return false;
+    const amount = e.amount ?? 0;
+    if (filters.minAmount && amount < Number(filters.minAmount)) return false;
+    if (filters.maxAmount && amount > Number(filters.maxAmount)) return false;
     const q = filters.text.trim().toLowerCase();
     if (q) {
       const hay = [e.sku, e.counterparty, e.rawText, e.notes, e.loggedByName, e.bankName].join(" ").toLowerCase();
@@ -141,8 +190,9 @@ function TransactionsPageInner() {
 
   // The list: what was made in the period, plus — for executives — earlier receivables and
   // payables still unpaid or paid during it, so a debt isn't forgotten when the calendar turns.
-  const madeIn = (e: Entry) => period === "all" || monthOf(e) === period;
-  const earlierRows = exec && period !== "all"
+  const rangeOn = Boolean(filters.dateFrom || filters.dateTo);
+  const madeIn = (e: Entry) => rangeOn || period === "all" || monthOf(e) === period;
+  const earlierRows = exec && period !== "all" && !rangeOn
     ? ledger.filter(
         (e) =>
           monthOf(e) < period &&
@@ -323,7 +373,16 @@ function TransactionsPageInner() {
           </button>
         </div>
 
-        <TransactionSearch value={filters} onChange={setFilters} products={choices.products} people={choices.people} recorders={choices.recorders} />
+        <TransactionSearch
+          value={filters}
+          onChange={setFilters}
+          products={choices.products}
+          people={choices.people}
+          recorders={choices.recorders}
+          banks={choices.banks}
+          categories={choices.categories}
+          showPayment={exec}
+        />
 
         {supplierFilter && (
           <div className="flex items-center gap-2 rounded-xl bg-secondary px-4 py-2 text-[13px]">
