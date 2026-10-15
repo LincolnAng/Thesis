@@ -3,12 +3,18 @@
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ChipGroup } from "@/components/ui/chip-group";
+import { Banknote, Landmark } from "lucide-react";
+import { Segmented, type Choice } from "@/components/ui/segmented";
 
 /** Banks named most often here. Anything else can be typed — only the name is kept, never an account. */
 export const COMMON_BANKS = ["BDO", "BPI", "Metrobank", "Landbank", "PNB", "Security Bank", "UnionBank", "RCBC", "China Bank"];
 
 export const METHOD_LABELS: Record<string, string> = { cash: "Cash", bank_transfer: "Bank transfer" };
+
+const METHOD_CHOICES: Choice<"cash" | "bank_transfer">[] = [
+  { value: "cash", label: "Cash", icon: Banknote },
+  { value: "bank_transfer", label: "Bank transfer", icon: Landmark },
+];
 
 /** "Cash", or "Bank transfer · BDO". Older payments without a method read "Not recorded". */
 export function methodText(method: string | null | undefined, bankName: string | null | undefined): string {
@@ -37,16 +43,19 @@ export function MethodFields({
 
   return (
     <div className="space-y-2">
-      <Label className="text-[13px] font-semibold text-foreground">{label}</Label>
-      <ChipGroup
-        options={["cash", "bank_transfer"]}
-        value={method ?? ""}
-        labels={METHOD_LABELS}
+      {label && <Label className="text-[13px] font-semibold text-foreground">{label}</Label>}
+      <Segmented
+        ariaLabel={label || "How it was paid"}
+        value={(method as "cash" | "bank_transfer" | null) ?? "cash"}
+        choices={METHOD_CHOICES}
         onChange={(v) => onChange({ method: v, bankName: v === "bank_transfer" ? bankName : null })}
       />
       {method === "bank_transfer" && (
         <div className="space-y-2 rounded-xl border border-line/15 p-2.5">
-          <Label className="text-xs text-muted-foreground">Which bank?</Label>
+          <Label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Landmark className="h-3.5 w-3.5" />
+            Which bank?
+          </Label>
           <div className="flex flex-wrap gap-1.5">
             {COMMON_BANKS.map((b) => (
               <button

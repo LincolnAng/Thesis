@@ -1,7 +1,23 @@
 "use client";
 
 import { useState } from "react";
-import { BanknoteArrowDown, BanknoteArrowUp, Check } from "lucide-react";
+import {
+  BanknoteArrowDown,
+  BanknoteArrowUp,
+  CalendarCheck,
+  CalendarDays,
+  Check,
+  CircleCheck,
+  CircleDot,
+  Hourglass,
+  Package,
+  Receipt,
+  StickyNote,
+  Store,
+  TriangleAlert,
+  User,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -106,10 +122,11 @@ export function RecordPaymentDialog({
   }
 
   const chip = (on: boolean) =>
-    `min-h-9 rounded-full border px-3.5 text-[13px] font-semibold transition active:scale-95 ${
+    `inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3.5 text-[13px] font-semibold transition active:scale-95 ${
       on ? "border-cacao bg-cacao text-ivory" : "border-line/25 bg-card hover:border-cacao hover:text-cacao"
     }`;
   const half = Math.round((remaining / 2) * 100) / 100;
+  const overpaid = valid && typed > remaining + 0.005;
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -123,35 +140,40 @@ export function RecordPaymentDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-5">
-          {/* 1. What is being paid */}
+        <div className="space-y-4">
+          {/* Who and what, and where it stands */}
           <div className="space-y-2.5 rounded-xl bg-secondary/60 p-3.5">
-            <div>
-              <p className="text-[15px] font-semibold">{who}</p>
-              {entry.sku && <p className="text-[13px] text-muted-foreground">{entry.sku}</p>}
-            </div>
+            <p className="flex items-center gap-2 text-[15px] font-semibold">
+              {incoming ? <User className="h-4 w-4 shrink-0 text-muted-foreground" /> : <Store className="h-4 w-4 shrink-0 text-muted-foreground" />}
+              <span className="truncate">{who}</span>
+              {entry.sku && (
+                <span className="flex min-w-0 items-center gap-1 text-[13px] font-normal text-muted-foreground">
+                  <Package className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{entry.sku}</span>
+                </span>
+              )}
+            </p>
             <div className="h-2 overflow-hidden rounded-full bg-line/15" aria-hidden>
               <div className="h-full rounded-full bg-success" style={{ width: `${pct}%` }} />
             </div>
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Total</p>
-                <p className="text-[14px] font-semibold tabular-nums">{formatPeso(total)}</p>
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{incoming ? "Received" : "Paid"}</p>
-                <p className="text-[14px] font-semibold tabular-nums text-success">{formatPeso(paidBefore)}</p>
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Still owed</p>
-                <p className="text-[14px] font-bold tabular-nums">{formatPeso(remaining)}</p>
-              </div>
+            <div className="grid grid-cols-3 gap-2 text-center text-[14px] font-semibold tabular-nums">
+              <span className="flex items-center justify-center gap-1.5" title="Total">
+                <Receipt className="h-4 w-4 text-muted-foreground" aria-label="Total" />
+                {formatPeso(total)}
+              </span>
+              <span className="flex items-center justify-center gap-1.5 text-success" title={incoming ? "Received" : "Paid"}>
+                <CircleCheck className="h-4 w-4" aria-label={incoming ? "Received" : "Paid"} />
+                {formatPeso(paidBefore)}
+              </span>
+              <span className="flex items-center justify-center gap-1.5" title="Still owed">
+                <Hourglass className="h-4 w-4 text-[var(--status-warning)]" aria-label="Still owed" />
+                {formatPeso(remaining)}
+              </span>
             </div>
           </div>
 
-          {/* 2. How much */}
+          {/* How much */}
           <div className="space-y-2">
-            <Label className="text-[13px] font-semibold">{incoming ? `How much did ${who} pay?` : `How much did you pay ${who}?`}</Label>
             <div className="relative">
               <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[18px] font-semibold text-muted-foreground">₱</span>
               <Input
@@ -159,75 +181,84 @@ export function RecordPaymentDialog({
                 value={amount}
                 onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
                 aria-label="Amount"
-                className="h-14 pl-9 text-[22px] font-bold tabular-nums"
+                className="h-14 pl-9 pr-28 text-[22px] font-bold tabular-nums"
               />
+              <span
+                className={`pointer-events-none absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-1 text-[12.5px] font-semibold ${
+                  overpaid ? "text-danger" : leftAfter === 0 && valid ? "text-success" : "text-muted-foreground"
+                }`}
+                aria-live="polite"
+              >
+                {overpaid ? (
+                  <>
+                    <TriangleAlert className="h-3.5 w-3.5" /> Too much
+                  </>
+                ) : valid && leftAfter === 0 ? (
+                  <>
+                    <CircleCheck className="h-3.5 w-3.5" /> Settled
+                  </>
+                ) : valid ? (
+                  <>
+                    <Hourglass className="h-3.5 w-3.5" /> {formatPeso(leftAfter)} left
+                  </>
+                ) : null}
+              </span>
             </div>
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => setAmount(String(remaining))} className={chip(valid && Math.abs(typed - remaining) < 0.005)}>
-                Everything · {formatPeso(remaining)}
+                <CircleCheck className="h-4 w-4" />
+                All
               </button>
               {half > 0 && half < remaining && (
                 <button type="button" onClick={() => setAmount(String(half))} className={chip(valid && Math.abs(typed - half) < 0.005)}>
-                  Half · {formatPeso(half)}
+                  <CircleDot className="h-4 w-4" />
+                  Half
                 </button>
               )}
             </div>
-            <p className={`text-[13px] ${valid && typed > remaining + 0.005 ? "font-semibold text-danger" : "text-muted-foreground"}`} aria-live="polite">
-              {!valid
-                ? "Type how much came in."
-                : typed > remaining + 0.005
-                  ? `More than the ${formatPeso(remaining)} still owed.`
-                  : leftAfter > 0
-                    ? `${formatPeso(leftAfter)} will still be owed after this.`
-                    : "This settles it — nothing will be owed."}
-            </p>
           </div>
 
-          {/* 3. When */}
-          <div className="space-y-2">
-            <Label className="text-[13px] font-semibold">When?</Label>
-            <div className="flex flex-wrap items-center gap-2">
-              <button type="button" onClick={() => setDate(today)} className={chip(date === today)}>
-                Today
+          {/* When */}
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => setDate(today)} className={chip(date === today)}>
+              <CalendarCheck className="h-4 w-4" />
+              Today
+            </button>
+            {yesterday >= earliest && (
+              <button type="button" onClick={() => setDate(yesterday)} className={chip(date === yesterday)}>
+                <CalendarDays className="h-4 w-4" />
+                Yesterday
               </button>
-              {yesterday >= earliest && (
-                <button type="button" onClick={() => setDate(yesterday)} className={chip(date === yesterday)}>
-                  Yesterday
-                </button>
-              )}
-              <Input type="date" value={date} max={today} min={earliest} onChange={(e) => setDate(e.target.value)} aria-label="Date of payment" className="h-9 w-auto min-w-[150px] flex-1" />
-            </div>
+            )}
+            <Input type="date" value={date} max={today} min={earliest} onChange={(e) => setDate(e.target.value)} aria-label="Date of payment" className="h-9 w-auto min-w-[150px] flex-1" />
           </div>
 
-          {/* 4. How */}
-          <MethodFields
-            method={method}
-            bankName={bankName}
-            label="How was it paid?"
-            onChange={(n) => (setMethod(n.method), setBankName(n.bankName))}
-          />
+          {/* How */}
+          <MethodFields method={method} bankName={bankName} label="" onChange={(n) => (setMethod(n.method), setBankName(n.bankName))} />
 
-          {/* 5. Anything to remember */}
+          {/* A note, if wanted */}
           {showNote ? (
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Note</Label>
-              <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. GCash ref 1234, paid by her sister" className="h-10" autoFocus />
+            <div className="relative">
+              <StickyNote className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note — e.g. GCash ref 1234" className="h-10 pl-9" autoFocus />
             </div>
           ) : (
-            <button type="button" onClick={() => setShowNote(true)} className="text-[13px] font-semibold text-cacao">
-              + Add a note
+            <button type="button" onClick={() => setShowNote(true)} className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-cacao">
+              <StickyNote className="h-4 w-4" />
+              Add a note
             </button>
           )}
 
           {(error || problem) && <ErrorLine text={error ?? problem ?? ""} />}
 
           <div className="flex gap-2">
-            <Button variant="ghost" className="h-12 px-5" onClick={onClose}>
+            <Button variant="ghost" className="h-12 gap-1.5 px-4" onClick={onClose}>
+              <X className="h-4 w-4" />
               Cancel
             </Button>
             <Button className="h-12 flex-1 gap-2 text-[15px]" disabled={saving || !valid || !!problem} onClick={() => void save()}>
               <Check className="h-4 w-4" strokeWidth={2.4} />
-              {saving ? "Saving…" : valid ? `Record ${formatPeso(typed)} ${incoming ? "received" : "paid"}` : "Record payment"}
+              {saving ? "Saving…" : valid ? `${formatPeso(typed)} ${incoming ? "received" : "paid"}` : "Record"}
             </Button>
           </div>
         </div>
