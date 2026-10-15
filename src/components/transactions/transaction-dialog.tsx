@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Minus, Plus } from "lucide-react";
+import { Banknote, Check, CircleCheck, Clock, HandCoins, Heart, Boxes, Landmark, Minus, PackageX, Plus, Receipt, ShoppingBag, Tag, Wrench, type LucideIcon } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CustomerNameInput } from "@/components/customers/customer-name-input";
 import { SupplierNameInput } from "@/components/suppliers/supplier-name-input";
@@ -20,6 +20,75 @@ import { PAYROLL_CATEGORIES } from "@/lib/auth/permissions";
 import { currentUser } from "@/lib/auth/current-user";
 import type { Entry, OrderLine, PaymentMethod, PriceType, Product } from "@/lib/store/types";
 import type { EntryDraft } from "@/lib/home/describe-entry";
+
+interface Choice<T extends string> {
+  value: T;
+  label: string;
+  icon: LucideIcon;
+}
+
+/** The big decisions: equal tiles, icon over label, one row. */
+function Tiles<T extends string>({ choices, value, onChange, ariaLabel }: { choices: Choice<T>[]; value: T; onChange: (v: T) => void; ariaLabel: string }) {
+  return (
+    <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${choices.length}, minmax(0, 1fr))` }} role="radiogroup" aria-label={ariaLabel}>
+      {choices.map(({ value: v, label, icon: Icon }) => {
+        const on = value === v;
+        return (
+          <button
+            key={v}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            onClick={() => onChange(v)}
+            className={`flex h-[68px] flex-col items-center justify-center gap-1 rounded-xl border text-[13px] font-semibold transition active:scale-[0.97] ${
+              on ? "border-cacao bg-cacao text-ivory shadow-sm" : "border-line/20 bg-card hover:border-cacao/50 hover:bg-secondary/50"
+            }`}
+          >
+            <Icon className="h-5 w-5" strokeWidth={1.9} />
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** The short either/or choices: one connected bar of equal segments, icon beside the label. */
+function Segmented<T extends string>({ choices, value, onChange, ariaLabel }: { choices: Choice<T>[]; value: T; onChange: (v: T) => void; ariaLabel: string }) {
+  return (
+    <div className="flex w-full gap-1 rounded-xl bg-secondary p-1" role="radiogroup" aria-label={ariaLabel}>
+      {choices.map(({ value: v, label, icon: Icon }) => {
+        const on = value === v;
+        return (
+          <button
+            key={v}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            onClick={() => onChange(v)}
+            className={`flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1 text-center text-[13px] font-semibold leading-tight transition active:scale-[0.97] ${
+              on ? "bg-cacao text-ivory shadow-sm" : "text-muted-foreground hover:bg-card/70"
+            }`}
+          >
+            <Icon className="h-4 w-4 shrink-0" strokeWidth={1.9} />
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+const KIND_ICON: Record<Kind, LucideIcon> = { sale: ShoppingBag, expense: Receipt, investment: Landmark, spoilage: PackageX };
+const PRICE_CHOICES: Choice<Exclude<PriceType, null>>[] = [
+  { value: "standard", label: "Regular", icon: Tag },
+  { value: "friend", label: "Friend", icon: Heart },
+  { value: "wholesale", label: "Wholesale", icon: Boxes },
+];
+const METHOD_CHOICES: Choice<PaymentMethod>[] = [
+  { value: "cash", label: "Cash", icon: Banknote },
+  { value: "bank_transfer", label: "Bank transfer", icon: Landmark },
+];
 
 /** A payment the ledger refused (more than is owed, a future date…), shown to the person as is. */
 class PaymentRefused extends Error {}
@@ -357,8 +426,6 @@ export function TransactionDialog({
   // --- pieces ----------------------------------------------------------------------------
   const field = "h-11 w-full rounded-lg border border-input bg-transparent px-3 text-[15px] outline-none focus:border-cacao";
   const label = "text-[13px] font-semibold text-muted-foreground";
-  const chip = (on: boolean) =>
-    `min-h-11 rounded-full border px-4 text-[14px] font-semibold transition ${on ? "border-cacao bg-cacao text-ivory" : "border-line/20 bg-card"}`;
 
   // Plain render helpers, not components: a component defined in here would be a new type on
   // every keystroke, and React would remount its input and drop the cursor.
@@ -370,13 +437,7 @@ export function TransactionDialog({
   );
 
   const methodPicker = (value: PaymentMethod, onChange: (m: PaymentMethod) => void) => (
-    <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="How it was paid">
-      {(["cash", "bank_transfer"] as const).map((m) => (
-        <button key={m} type="button" role="radio" aria-checked={value === m} onClick={() => onChange(m)} className={chip(value === m)}>
-          {m === "cash" ? "Cash" : "Bank transfer"}
-        </button>
-      ))}
-    </div>
+    <Segmented ariaLabel="How it was paid" value={value} onChange={onChange} choices={METHOD_CHOICES} />
   );
 
   const owedSoFar = e ? outstanding(e) : 0;
@@ -399,13 +460,12 @@ export function TransactionDialog({
           {/* What kind */}
           <div className="flex flex-col gap-1.5">
             <span className={label}>What happened?</span>
-            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Kind of transaction">
-              {kinds.map((k) => (
-                <button key={k} type="button" role="radio" aria-checked={kind === k} onClick={() => setKind(k)} className={chip(kind === k)}>
-                  {KIND_LABEL[k]}
-                </button>
-              ))}
-            </div>
+            <Tiles
+              ariaLabel="Kind of transaction"
+              value={kind}
+              onChange={setKind}
+              choices={kinds.map((k) => ({ value: k, label: KIND_LABEL[k], icon: KIND_ICON[k] }))}
+            />
           </div>
 
           {kind === "investment" && (
@@ -414,19 +474,26 @@ export function TransactionDialog({
               <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2">
                 {(
                   [
-                    ["capital", "Money put in", "An owner or investor adds money to the business"],
-                    ["asset", "Something bought to keep", "Machinery, a freezer, equipment"],
+                    ["capital", "Money put in", "An owner or investor adds money to the business", HandCoins],
+                    ["asset", "Something bought to keep", "Machinery, a freezer, equipment", Wrench],
                   ] as const
-                ).map(([k, title, hint]) => (
+                ).map(([k, title, hint, Icon]) => (
                   <button
                     key={k}
                     type="button"
                     onClick={() => setInvKind(k)}
                     aria-pressed={invKind === k}
-                    className={`min-h-11 rounded-xl border p-3 text-left transition ${invKind === k ? "border-cacao bg-cacao/[0.06]" : "border-line/20"}`}
+                    className={`flex min-h-[68px] items-center gap-3 rounded-xl border p-3 text-left transition active:scale-[0.98] ${
+                      invKind === k ? "border-cacao bg-cacao/[0.08] shadow-sm" : "border-line/20 bg-card hover:border-cacao/50"
+                    }`}
                   >
-                    <span className="block text-[14px] font-semibold">{title}</span>
-                    <span className="block text-[12px] text-muted-foreground">{hint}</span>
+                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${invKind === k ? "bg-cacao text-ivory" : "bg-secondary text-muted-foreground"}`}>
+                      <Icon className="h-5 w-5" strokeWidth={1.9} />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[14px] font-semibold">{title}</span>
+                      <span className="block text-[12px] text-muted-foreground">{hint}</span>
+                    </span>
                   </button>
                 ))}
               </div>
@@ -438,19 +505,7 @@ export function TransactionDialog({
             <>
               <div className="flex flex-col gap-1.5">
                 <span className={label}>Price type</span>
-                <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Price type">
-                  {(
-                    [
-                      ["standard", "Regular price"],
-                      ["friend", "Friend price"],
-                      ["wholesale", "Wholesale price"],
-                    ] as const
-                  ).map(([k, text]) => (
-                    <button key={k} type="button" role="radio" aria-checked={priceType === k} onClick={() => changePriceType(k)} className={chip(priceType === k)}>
-                      {text}
-                    </button>
-                  ))}
-                </div>
+                <Segmented ariaLabel="Price type" value={priceType} onChange={changePriceType} choices={PRICE_CHOICES} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <span className={label}>Products in this order</span>
@@ -492,7 +547,7 @@ export function TransactionDialog({
                                 type="button"
                                 aria-label={`Fewer ${name}`}
                                 onClick={() => patchLine(p.id, { qty: String(Math.max(1, num(line.qty) - 1)) })}
-                                className="flex h-11 w-11 items-center justify-center rounded-lg border border-line/20"
+                                className="flex h-9 w-9 items-center justify-center rounded-lg border border-line/20 transition hover:border-cacao hover:text-cacao active:scale-90"
                               >
                                 <Minus className="h-4 w-4" />
                               </button>
@@ -501,13 +556,13 @@ export function TransactionDialog({
                                 aria-label={`How many ${name}`}
                                 value={line.qty}
                                 onChange={(ev) => patchLine(p.id, { qty: ev.target.value.replace(/[^0-9.]/g, "") })}
-                                className="h-11 w-16 rounded-lg border border-input bg-transparent text-center text-[15px]"
+                                className="h-9 w-14 rounded-lg border border-input bg-transparent text-center text-[15px]"
                               />
                               <button
                                 type="button"
                                 aria-label={`More ${name}`}
                                 onClick={() => patchLine(p.id, { qty: String(num(line.qty) + 1) })}
-                                className="flex h-11 w-11 items-center justify-center rounded-lg border border-line/20"
+                                className="flex h-9 w-9 items-center justify-center rounded-lg border border-line/20 transition hover:border-cacao hover:text-cacao active:scale-90"
                               >
                                 <Plus className="h-4 w-4" />
                               </button>
@@ -648,14 +703,15 @@ export function TransactionDialog({
             <fieldset className="flex flex-col gap-3 rounded-xl border border-line/15 p-3.5">
               <legend className="px-1 text-[13px] font-semibold">Payment</legend>
               {owedKind && (
-                <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="When it is paid">
-                  <button type="button" role="radio" aria-checked={when === "now"} onClick={() => setWhen("now")} className={chip(when === "now")}>
-                    Paid now
-                  </button>
-                  <button type="button" role="radio" aria-checked={when === "later"} onClick={() => setWhen("later")} className={chip(when === "later")}>
-                    {kind === "sale" ? "Customer pays later" : "We pay later"}
-                  </button>
-                </div>
+                <Segmented
+                  ariaLabel="When it is paid"
+                  value={when}
+                  onChange={setWhen}
+                  choices={[
+                    { value: "now", label: "Paid now", icon: CircleCheck },
+                    { value: "later", label: kind === "sale" ? "Customer pays later" : "We pay later", icon: Clock },
+                  ]}
+                />
               )}
               <div className="flex flex-col gap-1">
                 <span className={label}>{when === "later" && owedKind ? "Will be paid by" : "Paid by"}</span>
@@ -753,15 +809,20 @@ export function TransactionDialog({
             </div>
           ) : (
             <div className="flex gap-2">
-              <button type="button" onClick={requestClose} className="min-h-11 flex-1 rounded-[10px] border border-line/20 px-4 text-[15px] font-semibold">
+              <button
+                type="button"
+                onClick={requestClose}
+                className="min-h-10 flex-1 rounded-[10px] border border-line/20 px-4 text-[14px] font-semibold transition hover:bg-secondary active:scale-[0.98]"
+              >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={save}
                 disabled={saving}
-                className="min-h-11 flex-1 rounded-[10px] bg-cacao px-4 text-[15px] font-semibold text-ivory disabled:opacity-50"
+                className="flex min-h-10 flex-1 items-center justify-center gap-2 rounded-[10px] bg-cacao px-4 text-[14px] font-semibold text-ivory transition hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
               >
+                <Check className="h-4 w-4" strokeWidth={2.2} />
                 {saving ? "Saving…" : "Save"}
               </button>
             </div>
