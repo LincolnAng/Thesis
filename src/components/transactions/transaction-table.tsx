@@ -4,27 +4,24 @@ import { Fragment, useMemo, useState } from "react";
 import { Pencil, Plus } from "lucide-react";
 import { EXPENSE_CATEGORY_LABELS, PRICE_TYPE_LABELS, describePaymentMethod, formatDate, formatPeso } from "@/lib/format";
 import { dueInfo, obligationInfo, obligationKind, outstanding, paymentsOf } from "@/lib/transactions/ledger";
-import { expandOrderLines } from "@/lib/transactions/order-lines";
 import { QuickPay } from "@/components/transactions/obligation-dialogs";
 import type { Entry } from "@/lib/store/types";
 
 /**
- * Every recorded transaction, in one fixed set of columns — the same for sales, expenses,
- * receivables and payables, so what is owed reads exactly like what was paid:
+ * Every recorded transaction, one row each, in one fixed set of columns — the same for sales,
+ * expenses, receivables and payables, so what is owed reads exactly like what was paid:
  *
- *   Date · Customer / Supplier · Product · Qty · Amount · Mode of payment · Bank · Deadline · Recorded by
+ *   Date · Customer / Supplier · Product · Qty · Amount · Mode of payment · Bank · Deadline ·
+ *   History · Recorded by
  *
- * One row per product. An order of several products is several rows, each with its own product,
- * quantity and share of the amount, and the customer's name on every one. The deadline (and what
- * is left to pay) and the action buttons are one cell spanning the order's rows, centred, so a
- * balance isn't counted per product. Rows of one order are striped together so they read as
- * one block.
+ * An order of several products is still one row: its products are listed top to bottom in the
+ * Product cell with their quantities lined up beside them, and the Amount is the order's total.
  *
- * Only executives see the payment columns; an employee's copy has no payment data at all.
- * Pressing a row opens what it can't show (payments on something owed, the price type, a note)
- * and the pencil opens the form that adds a transaction, which is where the money rules are
- * checked. Receivables and payables carry their own actions — record a payment, confirm a
- * default, move the due date. Tap a column heading to sort by it.
+ * History is always in view for receivables and payables: each payment (date, how, amount), each
+ * time the deadline moved, and a default — newest last, the latest few shown. Only executives
+ * see the payment columns; an employee's copy has no payment data at all. Pressing a row opens
+ * the full history, the price type, a note and the actions, and the pencil opens the form that
+ * adds a transaction, which is where the money rules are checked. Tap a column heading to sort.
  */
 
 type SortKey = "date" | "amount" | "due";
@@ -44,6 +41,52 @@ function NA() {
   return <span className="font-semibold text-muted-foreground">N/A</span>;
 }
 
+interface HistoryEvent {
+  at: string;
+  label: string;
+  amount?: number;
+  bad?: boolean;
+}
+
+/** Everything that has happened to an obligation, oldest first: payments, deadline moves, a default. */
+function historyOf(e: Entry): HistoryEvent[] {
+  const out: HistoryEvent[] = [];
+  for (const p of paymentsOf(e)) {
+    const how = p.method === "bank_transfer" ? (p.bankName ?? "Bank") : p.method === "cash" ? "Cash" : "";
+    out.push({ at: p.date, label: `${formatDate(p.date)}${how ? ` · ${how}` : ""}`, amount: p.amount });
+  }
+  for (const c of e.dueDateHistory ?? []) out.push({ at: c.changedAt, label: `Due moved to ${c.to ? formatDate(c.to) : "no date"}` });
+  if (e.defaultedAt) out.push({ at: e.defaultedAt, label: `Defaulted ${formatDate(e.defaultedAt)}`, bad: true });
+  return out.sort((a, b) => a.at.localeCompare(b.at));
+}
+
+const HISTORY_SHOWN = 3;
+
+/** The last few events of an obligation, always visible; the rest are one press away. */
+function History({ e }: { e: Entry }) {
+  const events = historyOf(e);
+  if (events.length === 0) return <span className="text-muted-foreground">No payments yet</span>;
+  const shown = events.slice(-HISTORY_SHOWN);
+  const hidden = events.length - shown.length;
+  return (
+    <div className="flex flex-col items-center gap-0.5">
+      {hidden > 0 && <span className="text-[11px] text-muted-foreground">+{hidden} earlier</span>}
+      {shown.map((ev, i) => (
+        <span key={i} className={`whitespace-nowrap ${ev.bad ? "font-semibold text-danger" : "text-muted-foreground"}`}>
+          {ev.label}
+          {ev.amount != null && <span className="ml-1.5 font-semibold tabular-nums text-success">{formatPeso(ev.amount)}</span>}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** An order's products and quantities, line by line. A single product is a list of one. */
+function productLines(e: Entry): { name: string; qty: number | null }[] {
+  if (e.lineItems?.length) return e.lineItems.map((l) => ({ name: l.name, qty: l.quantity }));
+  return [{ name: e.sku ?? "", qty: e.type === "SALE" || e.type === "WASTE" ? e.quantity : null }];
+}
+
 /** The deadline of a receivable or payable, with where it stands. */
 function Deadline({ e, action }: { e: Entry; action?: React.ReactNode }) {
   const now = new Date();
@@ -53,7 +96,6 @@ function Deadline({ e, action }: { e: Entry; action?: React.ReactNode }) {
   return (
     <div className="flex flex-col items-center gap-0.5">
       <span className={bad ? "font-semibold text-danger" : "font-semibold"}>{e.dueDate ? formatDate(e.dueDate) : "No date set"}</span>
-      <div className="flex flex-wrap items-center justify-center gap-1.5">
       <span className={`text-[11.5px] ${bad ? "font-semibold text-danger" : "text-muted-foreground"}`}>
         {info.status === "settled"
           ? "Paid in full"
@@ -69,8 +111,7 @@ function Deadline({ e, action }: { e: Entry; action?: React.ReactNode }) {
                       : ` · in ${due.daysLeft} day${due.daysLeft === 1 ? "" : "s"}`
               }`}
       </span>
-      {action}
-      </div>
+      {action && <div className="mt-1.5">{action}</div>}
     </div>
   );
 }
@@ -130,7 +171,7 @@ function Details({ e, showPayment, owed, onPay }: { e: Entry; showPayment: boole
             <div className="mt-1 flex flex-wrap gap-2">
               <button type="button" onClick={onPay} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line/25 px-3 text-[13px] font-medium transition hover:border-cacao hover:text-cacao">
                 <Plus className="h-4 w-4" />
-                Record a payment
+                Log Payment
               </button>
               <button type="button" onClick={() => owed.onMoveDue(e)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line/25 px-3 text-[13px] font-medium transition hover:border-cacao hover:text-cacao">
                 Change due date
@@ -158,15 +199,6 @@ export interface OwedActions {
   onMoveDue: (entry: Entry) => void;
 }
 
-/** One product's row: the transaction it belongs to, its own product/quantity/amount, and where it sits in the order. */
-interface ProductRow {
-  key: string;
-  origin: Entry;
-  row: Entry;
-  first: boolean;
-  last: boolean;
-}
-
 export function TransactionTable({
   rows,
   showPayment,
@@ -187,20 +219,13 @@ export function TransactionTable({
   // The order whose payment form is showing under its rows.
   const [paying, setPaying] = useState<string | null>(null);
 
-  // Orders are sorted as a whole, then opened out into their products.
-  const groups = useMemo(() => {
-    let ordered = rows;
-    if (sort) {
-      const val = (e: Entry) => (sort.key === "date" ? e.timestamp : sort.key === "due" ? (e.dueDate ?? "") : (e.amount ?? 0));
-      ordered = [...rows].sort((a, b) => {
-        const x = val(a);
-        const y = val(b);
-        return (x < y ? -1 : x > y ? 1 : 0) * sort.dir;
-      });
-    }
-    return ordered.map((origin) => {
-      const expanded = expandOrderLines([origin]);
-      return expanded.map<ProductRow>((row, i) => ({ key: row.id, origin, row, first: i === 0, last: i === expanded.length - 1 }));
+  const sorted = useMemo(() => {
+    if (!sort) return rows;
+    const val = (e: Entry) => (sort.key === "date" ? e.timestamp : sort.key === "due" ? (e.dueDate ?? "") : (e.amount ?? 0));
+    return [...rows].sort((a, b) => {
+      const x = val(a);
+      const y = val(b);
+      return (x < y ? -1 : x > y ? 1 : 0) * sort.dir;
     });
   }, [rows, sort]);
 
@@ -208,7 +233,7 @@ export function TransactionTable({
   // name text wraps within a sensible width instead of stretching the table.
   const th = "whitespace-nowrap px-3 py-2.5 text-center text-[11px] font-bold uppercase tracking-wide text-muted-foreground";
   const td = "px-3 py-2 text-center align-middle";
-  const colCount = showPayment ? 10 : 7;
+  const colCount = showPayment ? 11 : 7;
 
   const head = (label: string, key?: SortKey) => (
     <th scope="col" className={th}>
@@ -245,6 +270,7 @@ export function TransactionTable({
             {showPayment && head("Mode of payment")}
             {showPayment && head("Bank")}
             {showPayment && head("Deadline", "due")}
+            {showPayment && head("History")}
             {head("Recorded by")}
             <th scope="col" className={th}>
               <span className="sr-only">Actions</span>
@@ -252,141 +278,145 @@ export function TransactionTable({
           </tr>
         </thead>
         <tbody>
-          {groups.map((group, gi) => {
-            const origin = group[0].origin;
-            const carried = carriedFrom?.get(origin.id);
-            const kind = obligationKind(origin);
-            const overdue = showPayment && !!kind && dueInfo(origin, new Date()).overdue;
-            const moneyIn = origin.type === "SALE" || origin.type === "CAPITAL";
-            const { method, bank } = methodOf(origin);
-            const isOpen = open.has(origin.id);
-            const expandable = hasDetails(origin, showPayment);
+          {sorted.map((e, i) => {
+            const carried = carriedFrom?.get(e.id);
+            const kind = obligationKind(e);
+            const overdue = showPayment && !!kind && dueInfo(e, new Date()).overdue;
+            const moneyIn = e.type === "SALE" || e.type === "CAPITAL";
+            const { method, bank } = methodOf(e);
+            const isOpen = open.has(e.id);
+            const expandable = hasDetails(e, showPayment);
+            const items = productLines(e);
             const toggle = () =>
               setOpen((prev) => {
                 const next = new Set(prev);
-                if (next.has(origin.id)) next.delete(origin.id);
-                else next.add(origin.id);
+                if (next.has(e.id)) next.delete(e.id);
+                else next.add(e.id);
                 return next;
               });
-            const stripe = overdue ? "bg-danger/[0.05]" : gi % 2 === 0 ? "bg-card" : "bg-[#FBFAF7] dark:bg-secondary/30";
             return (
-              <Fragment key={origin.id}>
-                {group.map(({ key, row, first, last }) => (
-                  // Rows of one order share a stripe and only the last carries a rule, so they read as a block.
-                  <tr
-                    key={key}
-                    onClick={expandable ? toggle : undefined}
-                    aria-expanded={expandable ? isOpen : undefined}
-                    className={`${stripe} ${last ? "border-b border-line/5" : ""} ${expandable ? "cursor-pointer hover:brightness-[0.98]" : ""}`}
+              <Fragment key={e.id}>
+                <tr
+                  onClick={expandable ? toggle : undefined}
+                  aria-expanded={expandable ? isOpen : undefined}
+                  className={`border-b border-line/5 ${overdue ? "bg-danger/[0.05]" : i % 2 === 0 ? "bg-card" : "bg-[#FBFAF7] dark:bg-secondary/30"} ${
+                    expandable ? "cursor-pointer hover:brightness-[0.98]" : ""
+                  }`}
+                >
+                  <td className={`${td} whitespace-nowrap`}>
+                    <div>{formatDate(e.timestamp)}</div>
+                    {carried && <div className="text-[11px] font-semibold text-[var(--status-warning)]">Carried from {carried}</div>}
+                  </td>
+                  <td className={`${td} max-w-[180px]`}>
+                    <span className="line-clamp-2">{e.counterparty ?? <span className="text-muted-foreground">—</span>}</span>
+                  </td>
+                  <td
+                    className={`${td} max-w-[220px]`}
+                    title={items.map((l) => l.name).join(", ") + (e.type === "EXPENSE" && e.category ? ` · ${EXPENSE_CATEGORY_LABELS[e.category] ?? e.category}` : "")}
                   >
-                    <td className={`${td} whitespace-nowrap`}>
-                      <div>{formatDate(row.timestamp)}</div>
-                      {first && carried && <div className="text-[11px] font-semibold text-[var(--status-warning)]">Carried from {carried}</div>}
-                    </td>
-                    <td className={`${td} max-w-[180px]`}>
-                      <span className="line-clamp-2">{row.counterparty ?? <span className="text-muted-foreground">—</span>}</span>
-                    </td>
-                    <td
-                      className={`${td} max-w-[220px]`}
-                      title={row.type === "EXPENSE" && row.category ? `${row.sku ?? ""} · ${EXPENSE_CATEGORY_LABELS[row.category] ?? row.category}` : (row.sku ?? "")}
-                    >
-                      <span className="line-clamp-2">{row.sku ?? <span className="text-muted-foreground">—</span>}</span>
-                    </td>
-                    <td className={`${td} tabular-nums`}>
-                      {row.quantity != null && (row.type === "SALE" || row.type === "WASTE") ? row.quantity : <span className="text-muted-foreground">—</span>}
-                    </td>
-                    <td
-                      className={`${td} whitespace-nowrap font-semibold tabular-nums ${row.type === "WASTE" ? "text-muted-foreground" : moneyIn ? "text-success" : "text-danger"}`}
-                    >
-                      {row.amount == null ? (
-                        <span className="font-normal text-muted-foreground">—</span>
+                    {items.length === 1 ? (
+                      <span className="line-clamp-2">{items[0].name || <span className="text-muted-foreground">—</span>}</span>
+                    ) : (
+                      // Several products: one per line, in step with their quantities beside them.
+                      <ul>
+                        {items.map((l, j) => (
+                          <li key={j} className="h-5 truncate leading-5">
+                            {l.name}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </td>
+                  <td className={`${td} tabular-nums`}>
+                    {items.length === 1 ? (
+                      items[0].qty != null ? items[0].qty : <span className="text-muted-foreground">—</span>
+                    ) : (
+                      <ul>
+                        {items.map((l, j) => (
+                          <li key={j} className="h-5 leading-5">
+                            {l.qty ?? "—"}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </td>
+                  <td className={`${td} whitespace-nowrap font-semibold tabular-nums ${e.type === "WASTE" ? "text-muted-foreground" : moneyIn ? "text-success" : "text-danger"}`}>
+                    {e.amount == null ? (
+                      <span className="font-normal text-muted-foreground">—</span>
+                    ) : (
+                      `${e.type === "WASTE" ? "" : moneyIn ? "+" : "−"}${formatPeso(e.amount)}`
+                    )}
+                  </td>
+                  {showPayment && (
+                    <td className={`${td} text-[12.5px]`}>
+                      {!hasPayment(e) ? (
+                        <NA />
+                      ) : method ? (
+                        <span
+                          className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 font-semibold ${method === "bank_transfer" ? "bg-[#3F6E8C]/10 text-[#3F6E8C]" : "bg-secondary text-foreground"}`}
+                        >
+                          {method === "bank_transfer" ? "Bank transfer" : "Cash"}
+                        </span>
                       ) : (
-                        `${row.type === "WASTE" ? "" : moneyIn ? "+" : "−"}${formatPeso(row.amount)}`
+                        <span className="text-muted-foreground">{kind ? "Not paid yet" : "—"}</span>
                       )}
                     </td>
-                    {showPayment && (
-                      <td className={`${td} text-[12.5px]`}>
-                        {!hasPayment(origin) ? (
-                          <NA />
-                        ) : method ? (
-                          <span
-                            className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 font-semibold ${method === "bank_transfer" ? "bg-[#3F6E8C]/10 text-[#3F6E8C]" : "bg-secondary text-foreground"}`}
-                          >
-                            {method === "bank_transfer" ? "Bank transfer" : "Cash"}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">{kind ? "Not paid yet" : "—"}</span>
-                        )}
-                      </td>
-                    )}
-                    {showPayment && <td className={`${td} text-[12.5px]`}>{method === "bank_transfer" ? (bank ?? "—") : <NA />}</td>}
-                    {/* The deadline and the actions belong to the whole order: one cell spanning its rows, centred. */}
-                    {showPayment && first && (
-                      <td rowSpan={group.length} className={`${td} text-[12.5px]`}>
-                        {kind ? (
-                          <Deadline
-                            e={origin}
-                            action={
-                              owed && outstanding(origin) > 0 ? (
-                                <button
-                                  type="button"
-                                  onClick={(ev) => {
-                                    ev.stopPropagation();
-                                    setPaying(paying === origin.id ? null : origin.id);
-                                  }}
-                                  aria-label={kind === "receivable" ? "Record a payment received" : "Record a payment made"}
-                                  className="inline-flex items-center gap-0.5 rounded-full bg-cacao/10 px-2 py-0.5 text-[11.5px] font-semibold text-cacao transition hover:bg-cacao/20 active:scale-95"
-                                >
-                                  <Plus className="h-3 w-3" strokeWidth={2.4} />
-                                  Pay
-                                </button>
-                              ) : undefined
-                            }
-                          />
-                        ) : (
-                          <NA />
-                        )}
-                      </td>
-                    )}
-                    <td className={`${td} whitespace-nowrap text-muted-foreground`}>{row.loggedByName ?? "—"}</td>
-                    {first && (
-                      <td rowSpan={group.length} className="px-2 py-1 text-center align-middle">
-                        <div className="flex flex-col items-center gap-1">
-                          <div className="flex items-center justify-center gap-0.5">
-                            <button
-                              type="button"
-                              onClick={(ev) => {
-                                ev.stopPropagation();
-                                onEdit(origin);
-                              }}
-                              aria-label="Change this transaction"
-                              className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-                {paying === origin.id && owed && kind && (
+                  )}
+                  {showPayment && <td className={`${td} text-[12.5px]`}>{method === "bank_transfer" ? (bank ?? "—") : <NA />}</td>}
+                  {showPayment && (
+                    <td className={`${td} text-[12.5px]`}>
+                      {kind ? (
+                        <Deadline
+                          e={e}
+                          action={
+                            owed && outstanding(e) > 0 ? (
+                              <button
+                                type="button"
+                                onClick={(ev) => {
+                                  ev.stopPropagation();
+                                  setPaying(paying === e.id ? null : e.id);
+                                }}
+                                aria-label={kind === "receivable" ? "Log a payment received" : "Log a payment made"}
+                                className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full bg-cacao/10 px-3.5 text-[12.5px] font-semibold text-cacao transition hover:bg-cacao/20 active:scale-95"
+                              >
+                                <Plus className="h-3.5 w-3.5" strokeWidth={2.4} />
+                                Log Payment
+                              </button>
+                            ) : undefined
+                          }
+                        />
+                      ) : (
+                        <NA />
+                      )}
+                    </td>
+                  )}
+                  {showPayment && <td className={`${td} text-[12px]`}>{kind ? <History e={e} /> : <NA />}</td>}
+                  <td className={`${td} whitespace-nowrap text-muted-foreground`}>{e.loggedByName ?? "—"}</td>
+                  <td className="px-2 py-1 text-center align-middle">
+                    <button
+                      type="button"
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        onEdit(e);
+                      }}
+                      aria-label="Change this transaction"
+                      className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                  </td>
+                </tr>
+                {paying === e.id && owed && kind && (
                   <tr className="border-b border-line/10 bg-secondary/40">
                     <td colSpan={colCount} className="text-left">
-                      <QuickPay
-                        entry={origin}
-                        kind={kind}
-                        remaining={outstanding(origin)}
-                        onClose={() => setPaying(null)}
-                        onSaved={owed.onSaved}
-                      />
+                      <QuickPay entry={e} kind={kind} remaining={outstanding(e)} onClose={() => setPaying(null)} onSaved={owed.onSaved} />
                     </td>
                   </tr>
                 )}
                 {isOpen && (
                   <tr className="border-b border-line/10 bg-secondary/40">
                     <td colSpan={colCount} className="text-left">
-                      <Details e={origin} showPayment={showPayment} owed={owed} onPay={() => setPaying(origin.id)} />
+                      <Details e={e} showPayment={showPayment} owed={owed} onPay={() => setPaying(e.id)} />
                     </td>
                   </tr>
                 )}
