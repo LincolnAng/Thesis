@@ -4,21 +4,17 @@ import { useState } from "react";
 import { Sparkles } from "lucide-react";
 
 /**
- * Offered when a question is too vague to answer well.
+ * Offered when a question names a topic but not a decision ("help me with pricing").
  *
- * The owner's prompts are often a topic rather than a question, and the answer that comes back
- * is correspondingly general — but still warm and confident, so there is nothing to notice. This
- * card makes the vagueness visible and offers versions written against her real products and
- * figures.
+ * The answer to a topic is correspondingly general — but still warm and confident, so there is
+ * nothing to notice. This card makes that visible and offers sharper versions written against
+ * her real products and figures.
  *
- * Three rules it must keep:
- * - It blocks. There is no "send it anyway", because the answer to a general question reads
- *   exactly like the answer to a good one and she has no way to tell them apart.
- * - It always leaves a way through. "Others" takes her own words, and the moment what she has
- *   written is specific enough it goes straight to the advisor unrewritten. She can ask
- *   anything; she cannot ask it vaguely.
- * - It explains itself. "I'd be guessing which product you mean" is a reason she can learn from;
- *   a bare list of alternatives is not.
+ * It suggests; it does not block. It used to have no "send it anyway", and in practice that
+ * stopped ordinary questions — anything short, or about a product the gate's word list had never
+ * heard of — from being answered at all. BAi is meant to take any question, so "Ask as I wrote
+ * it" always sends her own words unchanged. The card still explains itself, because "I'd be
+ * guessing which product you mean" is a reason she can learn from.
  */
 
 export function PromptGateCard({
@@ -28,6 +24,7 @@ export function PromptGateCard({
   resolved,
   onPick,
   onRefine,
+  onAskAsIs,
   refining,
 }: {
   rawText: string;
@@ -36,6 +33,8 @@ export function PromptGateCard({
   resolved?: boolean;
   onPick: (text: string) => void;
   onRefine: (extra: string) => void;
+  /** Send the question exactly as she wrote it. */
+  onAskAsIs: () => void;
   refining?: boolean;
 }) {
   const [showOther, setShowOther] = useState(false);
@@ -54,12 +53,11 @@ export function PromptGateCard({
       <div className="flex items-start gap-2">
         <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-cacao" />
         <div className="min-w-0">
-          <p className="text-[13px] font-semibold">That one&apos;s too general — pick a sharper question</p>
+          <p className="text-[13px] font-semibold">Want a sharper answer?</p>
           <p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">
             {`You asked "${rawText}". `}
             {reasons.length > 0 ? `${reasons[0].charAt(0).toUpperCase()}${reasons[0].slice(1)}, ` : ""}
-            and a general question gets a general answer that still sounds confident. Pick one of these, or add a few
-            words of your own.
+            so the answer may be general. Pick one of these for a more specific one, or ask it as you wrote it.
           </p>
         </div>
       </div>
@@ -106,10 +104,17 @@ export function PromptGateCard({
         <div className="flex flex-wrap items-center gap-3 border-t border-line/10 pt-2.5">
           <button
             type="button"
+            onClick={onAskAsIs}
+            className="rounded-[10px] bg-cacao px-3.5 py-2 text-xs font-semibold text-ivory"
+          >
+            Ask as I wrote it
+          </button>
+          <button
+            type="button"
             onClick={() => setShowOther(true)}
             className="text-[12px] font-semibold text-cacao hover:underline"
           >
-            None of these — let me add detail
+            Add detail instead
           </button>
         </div>
       )}

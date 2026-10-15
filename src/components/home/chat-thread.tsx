@@ -63,6 +63,7 @@ export function ChatThread({
   onRetry,
   onGatePick,
   onGateRefine,
+  onGateAskAsIs,
   refiningGateId,
   isLookingUp,
   isTyping = false,
@@ -79,6 +80,7 @@ export function ChatThread({
   onRetry: (text: string) => void;
   onGatePick: (messageId: string, text: string) => void;
   onGateRefine: (messageId: string, extra: string) => void;
+  onGateAskAsIs: (messageId: string) => void;
   refiningGateId: string | null;
   isLookingUp?: boolean;
   /** Shows a floating "BAi is typing" bubble while a response is in flight. */
@@ -162,6 +164,7 @@ export function ChatThread({
               refining={refiningGateId === m.id}
               onPick={(text) => onGatePick(m.id, text)}
               onRefine={(extra) => onGateRefine(m.id, extra)}
+              onAskAsIs={() => onGateAskAsIs(m.id)}
             />
           )}
 

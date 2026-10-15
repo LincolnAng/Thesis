@@ -195,6 +195,15 @@ export function HomeChat() {
     await askAdvisor(combined);
   }
 
+  /** "Ask as I wrote it" — her question goes to the advisor unchanged. It is already in the
+   *  thread as her message, so only the answer is added. */
+  async function handleGateAskAsIs(messageId: string) {
+    const message = messages.find((m) => m.id === messageId);
+    if (!message || message.kind !== "prompt-gate") return;
+    replace(messageId, { ...message, resolved: true });
+    await askAdvisor(message.rawText);
+  }
+
   async function handleSubmit(override?: string, opts: { freshChat?: boolean; skipGate?: boolean } = {}) {
     if (!ready) return; // still loading history from Sheets — don't guess which chat this belongs to
     const rawText = (override ?? input).trim();
@@ -507,6 +516,7 @@ export function HomeChat() {
         onRetry={handleRetry}
         onGatePick={(id, text) => void handleGateChoice(id, text)}
         onGateRefine={(id, extra) => void handleGateRefine(id, extra)}
+        onGateAskAsIs={(id) => void handleGateAskAsIs(id)}
         refiningGateId={refiningGateId}
         isTyping={submitting}
         isLookingUp={lookingUp}
