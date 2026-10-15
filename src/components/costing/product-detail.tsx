@@ -21,10 +21,10 @@ import { formatPeso } from "@/lib/format";
  *   Recipe        what goes into ONE unit — ingredients, packaging, your time, other costs —
  *                 each with its cost, adding up to what one costs to make
  *   Price         the three ways to set a price, side by side, and what you keep
- *   Stock & sizes what's on hand, how long it keeps, the usual batch size, the other sizes
+ *   Stock & sizes what's on hand, how long it keeps, the other sizes
  *
- * Everything is per unit, because batches vary in size; the batch size is only for planning
- * production (lib/costing/per-unit).
+ * Everything is per unit, because batches vary in size. The usual batch size is set in
+ * Production, which plans in batches (lib/costing/per-unit).
  *
  * Above the tabs, the three numbers that matter — price, cost, what you keep — always in view;
  * one that isn't known yet says so and links to the tab that fills it in. Recipe and Price

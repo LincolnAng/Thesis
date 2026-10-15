@@ -324,6 +324,9 @@ export function ProductionScreen({ section }: { section: "production" | "calenda
       title={section === "calendar" ? "Calendar" : "Production"}
       right={
         <>
+          <button type="button" onClick={() => setShowSettings(true)} className="rounded-[10px] border border-line/20 bg-card px-4 py-2.5 text-[13px] font-semibold">
+            Settings
+          </button>
           <button type="button" onClick={() => setAddStockOpen(true)} className="rounded-[10px] border border-line/20 bg-card px-4 py-2.5 text-[13px] font-semibold">
             Add stock
           </button>

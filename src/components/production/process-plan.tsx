@@ -263,7 +263,7 @@ export function ProcessPlan() {
                       </td>
                       <td className="px-3 py-2">
                         {p.missingBatchSize ? (
-                          <Link href={`/costing?product=${p.productId}`} className="text-[var(--status-warning)] underline decoration-dotted">Set a batch size</Link>
+                          <span className="text-[var(--status-warning)]">Set a batch size under Settings</span>
                         ) : p.batches === 0 ? (
                           <span className="text-muted-foreground">Nothing to make</span>
                         ) : p.canMakeNow >= p.batches ? (
