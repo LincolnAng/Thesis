@@ -14,9 +14,9 @@ import type { Entry } from "@/lib/store/types";
  *   Date · Customer / Supplier · Product · Qty · Amount · Mode of payment · Bank · Deadline · Recorded by
  *
  * One row per product. An order of several products is several rows, each with its own product,
- * quantity and share of the amount; the customer and the deadline are written once, on the
- * order's first row, and left blank on the rest until the next order starts. Rows of one order
- * are striped together so they read as one block.
+ * quantity and share of the amount, and the customer's name on every one. The deadline (and what
+ * is left to pay) is written once, on the order's first row, so a balance isn't counted per
+ * product. Rows of one order are striped together so they read as one block.
  *
  * Only executives see the payment columns; an employee's copy has no payment data at all. The
  * arrow opens what the row can't show (payments on something owed, the price type, a note) and
@@ -262,7 +262,7 @@ export function TransactionTable({
                       {first && carried && <div className="text-[11px] font-semibold text-[var(--status-warning)]">Carried from {carried}</div>}
                     </td>
                     <td className={`${td} max-w-[180px]`}>
-                      {first ? <span className="line-clamp-2">{row.counterparty ?? <span className="text-muted-foreground">—</span>}</span> : null}
+                      <span className="line-clamp-2">{row.counterparty ?? <span className="text-muted-foreground">—</span>}</span>
                     </td>
                     <td
                       className={`${td} max-w-[220px]`}
