@@ -12,7 +12,7 @@ import type { Entry } from "@/lib/store/types";
  * Every recorded transaction, one row each, in one fixed set of columns — the same for sales,
  * expenses, receivables and payables, so what is owed reads exactly like what was paid:
  *
- *   Date · Customer / Supplier · Product · Qty · Amount · Mode of payment · Bank · Deadline · Recorded by
+ *   Date · Customer / Supplier · Product · Qty · Amount · Payment (mode · bank) · Deadline · Recorded by
  *
  * An order of several products is still one row: its products are listed top to bottom in the
  * Product cell with their quantities lined up beside them, and the Amount is the order's total.
@@ -38,8 +38,11 @@ const hasPayment = (e: Entry) => e.type === "SALE" || e.type === "EXPENSE" || e.
 
 /** Shown where a column doesn't apply to a row, so a blank is never mistaken for missing data. */
 function NA() {
-  return <span className="font-semibold text-muted-foreground">N/A</span>;
+  return <span className="text-[12px] font-normal text-muted-foreground/60">N/A</span>;
 }
+
+/** An order shows at most this many products in its row; the rest are listed when it is opened. */
+const MAX_SLOTS = 3;
 
 interface ProductLine {
   name: string;
@@ -68,7 +71,7 @@ function productLines(e: Entry): ProductLine[] {
  */
 function Slots({ children }: { children: React.ReactNode[] }) {
   return (
-    <ul className="divide-y divide-line/20">
+    <ul className="divide-y divide-line/10">
       {children.map((c, i) => (
         <li key={i} className="flex h-8 items-center justify-center whitespace-nowrap">
           {c}
@@ -86,7 +89,7 @@ function Deadline({ e, action }: { e: Entry; action?: React.ReactNode }) {
   const bad = info.status === "overdue" || info.status === "defaulted";
   return (
     <div className="flex flex-col items-center gap-0.5">
-      <span className={bad ? "font-semibold text-danger" : "font-semibold"}>{e.dueDate ? formatDate(e.dueDate) : "No date set"}</span>
+      <span className={bad ? "font-semibold text-danger" : ""}>{e.dueDate ? formatDate(e.dueDate) : "No date set"}</span>
       <span className={`text-[11.5px] ${bad ? "font-semibold text-danger" : "text-muted-foreground"}`}>
         {info.status === "settled"
           ? "Paid in full"
@@ -109,7 +112,7 @@ const priceTypeOf = (e: Entry) => (e.type === "SALE" && e.priceType && e.priceTy
 
 /** Whether there is anything under an order that its rows don't already show. */
 const hasDetails = (e: Entry, showPayment: boolean) =>
-  priceTypeOf(e) !== null || Boolean(e.notes) || (showPayment && obligationKind(e) !== null);
+  productLines(e).length > MAX_SLOTS || priceTypeOf(e) !== null || Boolean(e.notes) || (showPayment && obligationKind(e) !== null);
 
 /** What opens under an order: the price type, the payments on it, and a note. */
 function Details({ e, showPayment, owed, onPay }: { e: Entry; showPayment: boolean; owed?: OwedActions; onPay: () => void }) {
@@ -118,9 +121,23 @@ function Details({ e, showPayment, owed, onPay }: { e: Entry; showPayment: boole
   const payments = kind ? paymentsOf(e) : [];
   const priceType = priceTypeOf(e);
   const faint = "text-muted-foreground";
+  const items = productLines(e);
 
   return (
     <div className="flex flex-col gap-3 px-4 py-3 text-[13px] min-[800px]:flex-row min-[800px]:flex-wrap min-[800px]:gap-x-12">
+      {items.length > MAX_SLOTS && (
+        <ul className="flex min-w-[260px] flex-col gap-0.5">
+          {items.map((l, i) => (
+            <li key={i} className="flex items-baseline justify-between gap-6">
+              <span>
+                {l.name}
+                <span className={faint}>{l.qty != null ? ` × ${l.qty}` : ""}</span>
+              </span>
+              <span className="font-semibold tabular-nums">{l.amount != null ? formatPeso(l.amount) : ""}</span>
+            </li>
+          ))}
+        </ul>
+      )}
       {priceType && (
         <div>
           <span className="rounded-full bg-cacao/10 px-2 py-0.5 text-[11.5px] font-semibold text-cacao">{priceType} price</span>
@@ -222,7 +239,7 @@ export function TransactionTable({
   // name text wraps within a sensible width instead of stretching the table.
   const th = "whitespace-nowrap px-3 py-2.5 text-center text-[11px] font-bold uppercase tracking-wide text-muted-foreground";
   const td = "px-3 py-2 text-center align-middle";
-  const colCount = showPayment ? 10 : 7;
+  const colCount = showPayment ? 9 : 7;
 
   const head = (label: string, key?: SortKey) => (
     <th scope="col" className={th}>
@@ -256,8 +273,7 @@ export function TransactionTable({
             {head("Product")}
             {head("Qty")}
             {head("Amount", "amount")}
-            {showPayment && head("Mode of payment")}
-            {showPayment && head("Bank")}
+            {showPayment && head("Payment")}
             {showPayment && head("Deadline", "due")}
             {head("Recorded by")}
             <th scope="col" className={th}>
@@ -266,7 +282,7 @@ export function TransactionTable({
           </tr>
         </thead>
         <tbody>
-          {sorted.map((e, i) => {
+          {sorted.map((e) => {
             const carried = carriedFrom?.get(e.id);
             const kind = obligationKind(e);
             const overdue = showPayment && !!kind && dueInfo(e, new Date()).overdue;
@@ -276,24 +292,26 @@ export function TransactionTable({
             const expandable = hasDetails(e, showPayment);
             const items = productLines(e);
             const multi = items.length > 1;
+            const shown = items.slice(0, MAX_SLOTS);
+            const more = items.length - shown.length;
             const info = kind && showPayment ? obligationInfo(e, new Date()) : null;
-            // An order's split columns keep the same slots, so everything lines up product by product.
+            // Only product, quantity and amount repeat per product; they share the same slots so they line up.
             const pad = multi ? "py-1" : "";
-            const each = (node: React.ReactNode) => (multi ? <Slots>{items.map(() => node)}</Slots> : node);
+            const moreSlot = more > 0 ? [<span key="more" className="text-[12px] text-muted-foreground">+{more} more</span>] : [];
+            const blankSlot = more > 0 ? [<span key="blank" />] : [];
             const amountText = (v: number | null) =>
               v == null ? "—" : `${e.type === "WASTE" ? "" : moneyIn ? "+" : "−"}${formatPeso(v)}`;
-            const modeNode = !hasPayment(e) ? (
+            const paymentNode = !hasPayment(e) ? (
               <NA />
-            ) : method ? (
-              <span
-                className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 font-semibold ${method === "bank_transfer" ? "bg-[#3F6E8C]/10 text-[#3F6E8C]" : "bg-secondary text-foreground"}`}
-              >
-                {method === "bank_transfer" ? "Bank transfer" : "Cash"}
+            ) : method === "bank_transfer" ? (
+              <span>
+                Bank transfer<span className="text-muted-foreground"> · {bank ?? "—"}</span>
               </span>
+            ) : method ? (
+              <span>Cash</span>
             ) : (
               <span className="text-muted-foreground">{kind ? "Not paid yet" : "—"}</span>
             );
-            const bankNode = method === "bank_transfer" ? <span>{bank ?? "—"}</span> : <NA />;
             const toggle = () =>
               setOpen((prev) => {
                 const next = new Set(prev);
@@ -306,47 +324,64 @@ export function TransactionTable({
                 <tr
                   onClick={expandable ? toggle : undefined}
                   aria-expanded={expandable ? isOpen : undefined}
-                  className={`border-b border-line/5 ${overdue ? "bg-danger/[0.05]" : i % 2 === 0 ? "bg-card" : "bg-[#FBFAF7] dark:bg-secondary/30"} ${
-                    expandable ? "cursor-pointer hover:brightness-[0.98]" : ""
+                  className={`group border-b border-line/20 ${overdue ? "bg-danger/[0.05]" : "bg-card"} ${
+                    expandable ? "cursor-pointer hover:bg-secondary/40" : ""
                   }`}
                 >
-                  {/* Date */}
-                  <td className={`${td} whitespace-nowrap ${pad}`}>{each(<span>{formatDate(e.timestamp)}</span>)}</td>
-                  {/* Customer: said once for the whole order */}
+                  <td className={`${td} whitespace-nowrap`}>{formatDate(e.timestamp)}</td>
                   <td className={`${td} max-w-[180px]`}>
-                    <span className="line-clamp-2">{e.counterparty ?? <span className="text-muted-foreground">—</span>}</span>
+                    <span className="line-clamp-2 font-medium">{e.counterparty ?? <span className="font-normal text-muted-foreground">—</span>}</span>
                     {carried && <div className="text-[11px] font-semibold text-[var(--status-warning)]">Carried from {carried}</div>}
                   </td>
-                  {/* Product and quantity: one slot per product */}
+                  {/* Product, quantity, amount: one slot per product */}
                   <td
                     className={`${td} max-w-[240px] ${pad}`}
                     title={items.map((l) => l.name).join(", ") + (e.type === "EXPENSE" && e.category ? ` · ${EXPENSE_CATEGORY_LABELS[e.category] ?? e.category}` : "")}
                   >
                     {multi ? (
-                      <Slots>{items.map((l, j) => <span key={j} className="max-w-[220px] truncate">{l.name}</span>)}</Slots>
+                      <Slots>
+                        {[
+                          ...shown.map((l, j) => (
+                            <span key={j} className="max-w-[220px] truncate">
+                              {l.name}
+                            </span>
+                          )),
+                          ...moreSlot,
+                        ]}
+                      </Slots>
                     ) : (
                       <span className="line-clamp-2">{items[0].name || <span className="text-muted-foreground">—</span>}</span>
                     )}
                   </td>
                   <td className={`${td} tabular-nums ${pad}`}>
                     {multi ? (
-                      <Slots>{items.map((l, j) => <span key={j} className="font-semibold">{l.qty != null ? `× ${l.qty}` : "—"}</span>)}</Slots>
+                      <Slots>
+                        {[
+                          ...shown.map((l, j) => (
+                            <span key={j} className="text-muted-foreground">
+                              {l.qty != null ? `× ${l.qty}` : "—"}
+                            </span>
+                          )),
+                          ...blankSlot,
+                        ]}
+                      </Slots>
                     ) : items[0].qty != null ? (
                       items[0].qty
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}
                   </td>
-                  {/* Amount: each product's share, adding back to the order */}
                   <td className={`${td} whitespace-nowrap font-semibold tabular-nums ${pad} ${e.type === "WASTE" ? "text-muted-foreground" : moneyIn ? "text-success" : "text-danger"}`}>
                     {multi ? (
-                      <Slots>{items.map((l, j) => <span key={j}>{amountText(l.amount)}</span>)}</Slots>
+                      <Slots>
+                        {[...shown.map((l, j) => <span key={j}>{amountText(l.amount)}</span>), ...blankSlot]}
+                      </Slots>
                     ) : (
                       amountText(e.amount)
                     )}
                     {showPayment && kind && (
                       <div
-                        className={`mt-0.5 text-[11.5px] font-semibold ${
+                        className={`mt-0.5 text-[11.5px] font-medium ${
                           info && info.remaining > 0 ? (info.status === "overdue" || info.status === "defaulted" ? "text-danger" : "text-[var(--status-warning)]") : "text-success"
                         }`}
                       >
@@ -354,9 +389,7 @@ export function TransactionTable({
                       </div>
                     )}
                   </td>
-                  {showPayment && <td className={`${td} text-[12.5px] ${pad}`}>{each(modeNode)}</td>}
-                  {showPayment && <td className={`${td} text-[12.5px] ${pad}`}>{each(bankNode)}</td>}
-                  {/* Deadline and actions belong to the entry, not to a product: one cell, centred */}
+                  {showPayment && <td className={`${td} whitespace-nowrap text-[12.5px]`}>{paymentNode}</td>}
                   {showPayment && (
                     <td className={`${td} text-[12.5px]`}>
                       {kind ? (
@@ -387,9 +420,14 @@ export function TransactionTable({
                       )}
                     </td>
                   )}
-                  <td className={`${td} whitespace-nowrap text-muted-foreground ${pad}`}>{each(<span>{e.loggedByName ?? "—"}</span>)}</td>
+                  <td className={`${td} whitespace-nowrap text-muted-foreground`}>{e.loggedByName ?? "—"}</td>
                   <td className="px-2 py-1 text-center align-middle">
-                    <div className="flex items-center justify-center gap-0.5">
+                    {/* Out of sight until the row is hovered, so a long list isn't a wall of icons; always there on touch screens */}
+                    <div
+                      className={`flex items-center justify-center gap-0.5 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100 ${
+                        isOpen ? "opacity-100" : "opacity-0"
+                      }`}
+                    >
                       {showPayment && kind && (
                         <button
                           type="button"
