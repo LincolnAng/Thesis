@@ -3,14 +3,15 @@
 import type { ReactNode } from "react";
 import { useRef, useState } from "react";
 import { MaterialsPanel } from "@/components/products/materials-panel";
-import { familiesOf } from "@/lib/summary/product-sizes";
-import { Package } from "lucide-react";
+import { familiesOf, sizeTag } from "@/lib/summary/product-sizes";
+import { CircleAlert, Package } from "lucide-react";
 import { Page } from "@/components/layout/page";
 import { useCatalogUpdate } from "@/components/costing/catalog-update";
 import { AddProductDialog } from "@/components/stock/edit-product-dialog";
 import { useStore } from "@/lib/store/use-store";
 import { useCostContext } from "@/lib/summary/use-cost-context";
 import { effectiveProductPrice, productCostPerJar } from "@/lib/summary/recipe-cost";
+import { costPerUnit } from "@/lib/costing/price-calc";
 import { setProductPhoto, shrinkImage, useProductPhotos } from "@/lib/products/photos";
 import { formatPrice } from "@/lib/format";
 import type { Product } from "@/lib/store/types";
@@ -92,8 +93,9 @@ export type CostingList = "products" | "ingredient" | "supply";
  * every price is worked out from. One list per sub-tab; the carousel that used to rotate
  * through them was a second way of doing what the Costing tabs now do.
  *
- * Each product is a photo, its name, its price and one word for where it stands — Ready, or
- * what it still needs. Tapping it opens its page (`onOpenPricing`), which is where the recipe,
+ * Each card reads top to bottom: the name (with its size, if it has one), what it sells for and
+ * what it costs to make, then one badge for where it stands — a green Ready, or in amber the one
+ * thing it still needs, so a pending task stands out without looking like an error. Tapping it opens its page (`onOpenPricing`), which is where the recipe,
  * cost, price, stock, sizes and name settings live.
  */
 export function ProductsScreen({
@@ -127,6 +129,9 @@ export function ProductsScreen({
           const cost = productCostPerJar(p, costCtx);
           const price = effectiveProductPrice(p, cost);
           const noRecipe = p.recipeIngredients.length === 0 && (p.recipeComponents ?? []).length === 0;
+          const complete = cost.unpriced.length === 0 && cost.unconvertible.length === 0 && p.recipeIngredients.length > 0;
+          const unitCost = costPerUnit(cost.batchTotal, p.batchYield, complete);
+          const size = sizeTag(p.sizeLabel);
           // One word for where it stands, so a beginner can see what to do next without reading figures.
           const status = noRecipe
             ? { text: "Needs a recipe", ready: false }
@@ -141,21 +146,24 @@ export function ProductsScreen({
               className="flex flex-col overflow-hidden rounded-2xl border border-line/15 bg-card transition hover:border-cacao/40 hover:shadow-sm"
             >
               <ProductPhoto product={p} gradient={GRADIENTS[i % GRADIENTS.length]} photo={photos[p.id]} />
-              <button type="button" onClick={() => onOpenPricing(p.id)} className="flex flex-col gap-2 p-4 text-left">
-                <span className="text-[15px] font-semibold leading-tight hover:text-cacao">
+              <button type="button" onClick={() => onOpenPricing(p.id)} className="flex flex-1 flex-col gap-3 p-4 text-left">
+                <span className="text-[16px] font-bold leading-snug hover:text-cacao">
                   {p.name}
-                  {p.sizeLabel && <span className="block text-xs font-normal text-muted-foreground">{p.sizeLabel}</span>}
+                  {size && <span className="font-medium text-muted-foreground"> · {size}</span>}
                 </span>
-                <span className="flex w-full items-center justify-between gap-2">
-                  <span className="text-[15px] font-bold">{price > 0 ? formatPrice(price) : "—"}</span>
-                  <span
-                    className={`rounded-full px-2.5 py-0.5 text-[11.5px] font-semibold ${
-                      status.ready ? "bg-success/10 text-success" : "bg-[#9A6B12]/10 text-[#9A6B12]"
-                    }`}
-                  >
-                    {status.ready ? "✓ " : ""}
-                    {status.text}
-                  </span>
+                <span className="grid grid-cols-2 gap-3">
+                  <Figure label="Sells for" value={price > 0 ? formatPrice(price) : null} empty="No price set" />
+                  <Figure label="Costs to make" value={unitCost != null ? formatPrice(unitCost) : null} empty="Not worked out yet" />
+                </span>
+                <span
+                  className={`mt-auto inline-flex w-fit items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold ${
+                    status.ready
+                      ? "bg-success/10 text-success"
+                      : "bg-amber-100 text-amber-800 ring-1 ring-inset ring-amber-200 dark:bg-amber-400/15 dark:text-amber-200 dark:ring-amber-400/25"
+                  }`}
+                >
+                  {status.ready ? "✓" : <CircleAlert className="h-3.5 w-3.5" />}
+                  {status.text}
                 </span>
               </button>
             </div>
@@ -177,5 +185,19 @@ export function ProductsScreen({
 
       {adding && <AddProductDialog products={products} onClose={() => setAdding(false)} />}
     </Page>
+  );
+}
+
+/** A small labelled figure on a card, or plain words when there is nothing to show yet. */
+function Figure({ label, value, empty }: { label: string; value: string | null; empty: string }) {
+  return (
+    <span className="flex min-w-0 flex-col">
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
+      {value != null ? (
+        <span className="text-[15px] font-bold tabular-nums">{value}</span>
+      ) : (
+        <span className="text-[13px] leading-snug text-muted-foreground">{empty}</span>
+      )}
+    </span>
   );
 }

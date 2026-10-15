@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { ArrowLeft, Check, ChevronDown } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Info } from "lucide-react";
 import { Page } from "@/components/layout/page";
 import { ProductPhoto, GRADIENTS } from "@/components/costing/products-screen";
 import { PriceCalculator } from "@/components/costing/price-calculator";
@@ -15,7 +15,7 @@ import { updateProduct } from "@/lib/store/store";
 import { useProductPhotos } from "@/lib/products/photos";
 import { useCostContext } from "@/lib/summary/use-cost-context";
 import { effectiveProductPrice, productCostPerJar } from "@/lib/summary/recipe-cost";
-import { familiesOf, fullName } from "@/lib/summary/product-sizes";
+import { familiesOf, sizeTag } from "@/lib/summary/product-sizes";
 import { costPerUnit } from "@/lib/costing/price-calc";
 import { formatPeso, pluralize } from "@/lib/format";
 import type { Product } from "@/lib/store/types";
@@ -28,7 +28,9 @@ import type { Product } from "@/lib/store/types";
  *   3. What you sell it for — one question, with the markup and margin methods behind "more options"
  *
  * Only the first step that still needs doing is open; finished steps fold to a single line of
- * result, so a beginner is never looking at everything at once. Stock, shelf life and sizes sit
+ * result, so a beginner is never looking at everything at once. Each step's badge says where it
+ * stands: a green tick when done, an amber "!" on the step that needs attention now, and a grey
+ * number on a step that waits for an earlier one. Stock, shelf life and sizes sit
  * in "More about this product", out of the way until wanted.
  *
  * Executives only: the Costing page shows employees the product gallery instead, and the server
@@ -39,7 +41,7 @@ function Step({
   n,
   title,
   result,
-  done,
+  state,
   open,
   onToggle,
   children,
@@ -48,7 +50,8 @@ function Step({
   title: string;
   /** One line of what this step came to, shown when it is folded. */
   result: string;
-  done: boolean;
+  /** done: finished. attention: the step to do now. waiting: needs an earlier step first. */
+  state: "done" | "attention" | "waiting";
   open: boolean;
   onToggle: () => void;
   children: ReactNode;
@@ -57,15 +60,24 @@ function Step({
     <section className={`rounded-xl border bg-card ${open ? "border-cacao/30" : "border-line/15"}`}>
       <button type="button" onClick={onToggle} aria-expanded={open} className="flex min-h-14 w-full items-center gap-3 px-4 py-2 text-left">
         <span
+          aria-label={state === "done" ? "Done" : state === "attention" ? "Needs attention" : `Step ${n}`}
           className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[14px] font-bold ${
-            done ? "bg-success text-white dark:text-ivory" : "bg-cacao/10 text-cacao"
+            state === "done"
+              ? "bg-success text-white dark:text-ivory"
+              : state === "attention"
+                ? "bg-amber-100 text-amber-700 ring-1 ring-inset ring-amber-300 dark:bg-amber-400/15 dark:text-amber-200 dark:ring-amber-400/30"
+                : "bg-secondary text-muted-foreground"
           }`}
         >
-          {done ? <Check className="h-4 w-4" strokeWidth={3} /> : n}
+          {state === "done" ? <Check className="h-4 w-4" strokeWidth={3} /> : state === "attention" ? <span className="text-[16px] leading-none">!</span> : n}
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-[15px] font-semibold">{title}</span>
-          {!open && <span className="block truncate text-[13px] text-muted-foreground">{result}</span>}
+          {!open && (
+            <span className={`block truncate text-[13px] ${state === "attention" ? "font-medium text-amber-700 dark:text-amber-300" : "text-muted-foreground"}`}>
+              {state === "attention" ? `Needs your attention · ${result}` : result}
+            </span>
+          )}
         </span>
         <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition ${open ? "rotate-180" : ""}`} />
       </button>
@@ -226,6 +238,9 @@ export function ProductDetail({
   const perUnit = product && cost ? costPerUnit(cost.batchTotal, product.batchYield, complete) : null;
 
   const done = [hasRecipe, perUnit != null, price > 0];
+  // The first unfinished step is the one to do now; any after it wait their turn.
+  const firstOpen = done.findIndex((d) => !d);
+  const stateOf = (i: number): "done" | "attention" | "waiting" => (done[i] ? "done" : i === firstOpen ? "attention" : "waiting");
   // The first step still to do opens by itself; the rest fold to one line each.
   const [openStep, setOpenStep] = useState<number | null>(() => {
     const first = done.findIndex((d) => !d);
@@ -264,17 +279,30 @@ export function ProductDetail({
           </div>
           <div className="flex flex-col gap-1.5 px-4 py-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="font-display text-[20px] font-semibold leading-tight">{fullName(product, products)}</h2>
+              <h2 className="font-display text-[20px] font-semibold leading-tight">
+                {product.sizeOfId ? (family?.head.name ?? product.name) : product.name}
+                {sizeTag(product.sizeLabel) && <span className="font-sans text-[15px] font-medium text-muted-foreground"> · {sizeTag(product.sizeLabel)}</span>}
+              </h2>
               <button type="button" onClick={() => setEditing(true)} className="min-h-10 rounded-[10px] border border-line/20 px-3 text-[13px] font-semibold">
                 Edit details
               </button>
             </div>
             <div className="flex flex-wrap gap-x-6 gap-y-1 text-[14px]">
               <span>
-                Sells for <span className="font-bold">{price > 0 ? formatPeso(price) : "—"}</span>
+                Sells for{" "}
+                {price > 0 ? (
+                  <span className="font-bold">{formatPeso(price)}</span>
+                ) : (
+                  <Pending onClick={() => setOpenStep(3)}>Set a price</Pending>
+                )}
               </span>
               <span>
-                Costs <span className="font-bold">{perUnit != null ? formatPeso(perUnit) : "—"}</span>
+                Costs{" "}
+                {perUnit != null ? (
+                  <span className="font-bold">{formatPeso(perUnit)}</span>
+                ) : (
+                  <Pending onClick={() => setOpenStep(hasRecipe ? 2 : 1)}>Pending info</Pending>
+                )}
               </span>
               {perUnit != null && price > 0 && (
                 <span className={`font-bold ${price - perUnit >= 0 ? "text-success" : "text-danger"}`}>
@@ -290,7 +318,7 @@ export function ProductDetail({
           n={1}
           title="What goes in"
           result={hasRecipe ? `${pluralize(ingredientCount, "ingredient")} in one batch` : "Add what goes into one batch"}
-          done={done[0]}
+          state={stateOf(0)}
           open={openStep === 1}
           onToggle={() => toggle(1)}
         >
@@ -302,7 +330,7 @@ export function ProductDetail({
           n={2}
           title="What it costs"
           result={perUnit != null ? `${formatPeso(perUnit)} each to make` : "Not known yet"}
-          done={done[1]}
+          state={stateOf(1)}
           open={openStep === 2}
           onToggle={() => toggle(2)}
         >
@@ -314,7 +342,19 @@ export function ProductDetail({
               </p>
             </div>
           ) : (
-            <p className="text-[14px] text-[#9A6B12]">
+            <Callout
+              action={
+                !hasRecipe ? (
+                  <button type="button" onClick={() => setOpenStep(1)} className="font-semibold underline underline-offset-2">
+                    Go to step 1
+                  </button>
+                ) : cost.unpriced.length === 0 && cost.unconvertible.length === 0 ? (
+                  <button type="button" onClick={() => setEditing(true)} className="font-semibold underline underline-offset-2">
+                    Open Edit details
+                  </button>
+                ) : null
+              }
+            >
               {!hasRecipe
                 ? "Add what goes into one batch in step 1, and the cost will appear here."
                 : cost.unpriced.length > 0
@@ -322,14 +362,14 @@ export function ProductDetail({
                   : cost.unconvertible.length > 0
                     ? `Check the units on ${cost.unconvertible.join(", ")} — they couldn't be converted.`
                     : `Say how many ${unit}s one batch makes (under Edit details), and the cost per ${unit} will appear here.`}
-            </p>
+            </Callout>
           )}
           <More label="See how it adds up">
             <div className="grid grid-cols-2 gap-2 min-[700px]:grid-cols-4">
               <Figure label="Ingredients, per batch" value={formatPeso(cost.ingredientTotal)} />
               <Figure label="Packaging, labor & fixed" value={formatPeso(cost.packagingTotal + cost.laborTotal + cost.miscTotal)} />
               <Figure label="Batch cost" value={formatPeso(cost.batchTotal)} />
-              <Figure label={`Cost per ${unit}`} value={perUnit != null ? formatPeso(perUnit) : "—"} />
+              <Figure label={`Cost per ${unit}`} value={perUnit != null ? formatPeso(perUnit) : "Pending"} />
             </div>
             <div className="mt-3">
               <CostBreakdown product={product} cost={cost} />
@@ -342,7 +382,7 @@ export function ProductDetail({
           n={3}
           title="What you sell it for"
           result={price > 0 ? `Sells for ${formatPeso(price)}` : "Not set yet"}
-          done={done[2]}
+          state={stateOf(2)}
           open={openStep === 3}
           onToggle={() => toggle(3)}
         >
@@ -377,6 +417,32 @@ function Figure({ label, value, note }: { label: string; value: string; note?: s
       <div className="text-[11.5px] font-semibold text-muted-foreground">{label}</div>
       <div className="text-[16px] font-bold tabular-nums">{value}</div>
       {note && <div className="text-[11px] text-muted-foreground">{note}</div>}
+    </div>
+  );
+}
+
+/** A missing figure in the header: says what's missing and opens the step that fills it. */
+function Pending({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="font-semibold text-amber-700 underline decoration-amber-400 decoration-dashed underline-offset-4 hover:text-amber-800 dark:text-amber-300"
+    >
+      {children}
+    </button>
+  );
+}
+
+/** A tip about something to finish: an amber box with an info icon, so it reads as a next step, not an error. */
+function Callout({ children, action }: { children: ReactNode; action?: ReactNode }) {
+  return (
+    <div role="note" className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-3 text-[14px] text-amber-900 dark:border-amber-400/25 dark:bg-amber-400/10 dark:text-amber-100">
+      <Info className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-300" />
+      <div className="flex flex-col gap-1.5">
+        <p>{children}</p>
+        {action && <div className="text-[13px]">{action}</div>}
+      </div>
     </div>
   );
 }
