@@ -16,6 +16,7 @@ import { findProduct } from "@/lib/summary/product-match";
 import { addPayment, outstanding, paidSoFar } from "@/lib/transactions/ledger";
 import { describeOrder, lineSubtotal, orderQuantity, orderTotal } from "@/lib/transactions/order-lines";
 import { COMMON_BANKS, EXPENSE_CATEGORY_LABELS, describePaymentMethod, formatPeso } from "@/lib/format";
+import { PAYROLL_CATEGORIES } from "@/lib/auth/permissions";
 import type { Entry, OrderLine, PaymentMethod, PaymentRecord, PriceType, Product } from "@/lib/store/types";
 import type { EntryDraft } from "@/lib/home/describe-entry";
 
@@ -150,7 +151,7 @@ export function TransactionDialog({
   const [saving, setSaving] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
 
-  const kinds: Kind[] = exec ? ["sale", "expense", "investment", "spoilage"] : ["sale", "spoilage"];
+  const kinds: Kind[] = exec ? ["sale", "expense", "investment", "spoilage"] : ["sale", "expense", "spoilage"];
   const owedKind = kind === "sale" || kind === "expense" || (kind === "investment" && invKind === "asset");
   const showPayment = exec && (owedKind || (kind === "investment" && invKind === "capital"));
 
@@ -540,7 +541,10 @@ export function TransactionDialog({
                 <label className="flex flex-col gap-1">
                   <span className={label}>Category</span>
                   <select value={category} onChange={(ev) => setCategory(ev.target.value)} className={field}>
-                    {allExpenseCategories(categoryBudgets).map((c) => (
+                    {allExpenseCategories(categoryBudgets)
+                      // Salaries are the owners' to record.
+                      .filter((c) => exec || !PAYROLL_CATEGORIES.has(c.toLowerCase()))
+                      .map((c) => (
                       <option key={c} value={c}>
                         {EXPENSE_CATEGORY_LABELS[c] ?? c}
                       </option>

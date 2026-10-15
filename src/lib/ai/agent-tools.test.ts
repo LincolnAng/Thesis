@@ -19,7 +19,8 @@ function view(role: "executive" | "employee", entries: Entry[] = []): AgentView 
 
 test("employees aren't offered the executive-only tools, and are refused if they try", () => {
   const names = toolsFor("employee").map((t) => t.name);
-  for (const n of ["money_owed", "spending", "investments", "product_costing", "prepare_payment"]) assert.ok(!names.includes(n), n);
+  for (const n of ["money_owed", "investments", "product_costing", "prepare_payment"]) assert.ok(!names.includes(n), n);
+  assert.ok(names.includes("spending"));
   const out = runTool("money_owed", { direction: "owed_to_us" }, view("employee"));
   assert.ok(out.isError);
   assert.match(out.result, /Executive/);
@@ -41,8 +42,13 @@ test("an unknown product makes it ask instead of guessing", () => {
   assert.equal(out.proposal, undefined);
 });
 
-test("an employee can't prepare an expense or capital", () => {
-  for (const type of ["expense", "capital", "asset"]) {
+test("an employee can prepare an everyday expense, but not salaries, capital or assets", () => {
+  const ok = runTool("prepare_transaction", { type: "expense", description: "Fare", amount: 40, counterparty: "Jeepney", category: "transport" }, view("employee"));
+  assert.equal(ok.proposal?.kind, "transaction");
+  assert.equal(ok.proposal?.kind === "transaction" && ok.proposal.draft.paymentTerm, undefined);
+  const salary = runTool("prepare_transaction", { type: "expense", description: "Sweldo", amount: 4000, counterparty: "Khent", category: "labor" }, view("employee"));
+  assert.ok(salary.isError);
+  for (const type of ["capital", "asset"]) {
     const out = runTool("prepare_transaction", { type, amount: 100, description: "x", counterparty: "y" }, view("employee"));
     assert.ok(out.isError, type);
   }

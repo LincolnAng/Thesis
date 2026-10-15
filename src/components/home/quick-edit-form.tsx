@@ -1,5 +1,6 @@
 "use client";
 
+import { EMPLOYEE_ENTRY_TYPES, PAYROLL_CATEGORIES } from "@/lib/auth/permissions";
 import { useState } from "react";
 import { addProduct, addSupplier } from "@/lib/store/store";
 import { nameKey } from "@/lib/summary/name-match";
@@ -255,8 +256,10 @@ export function QuickEditForm({
     (draft.type === "SALE" || draft.type === "EXPENSE") && draft.amount && (draft.quantity ?? 0) > 1
       ? draft.amount / (draft.quantity as number)
       : null;
-  const typeOptions = allowedTypes ?? ENTRY_TYPES;
-  const expenseCategories = allExpenseCategories(categoryBudgets);
+  // An employee records sales, everyday expenses, spoilage and stock — never investments or
+  // salaries — so those aren't offered (the server refuses them anyway).
+  const typeOptions = (allowedTypes ?? ENTRY_TYPES).filter((t) => exec || EMPLOYEE_ENTRY_TYPES.includes(t));
+  const expenseCategories = allExpenseCategories(categoryBudgets).filter((c) => exec || !PAYROLL_CATEGORIES.has(c.toLowerCase()));
   // Only stock-moving entries can belong to an event, and only somewhere still running —
   // plus whichever event this entry is already tagged to, so editing an old one still shows it.
   const canTagEvent = draft.type === "SALE" || draft.type === "WASTE" || draft.type === "INVENTORY_OUT";

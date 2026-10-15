@@ -34,7 +34,7 @@ const TABS: [Tab, string][] = [
   ["INVEST", "Investments"],
   ["WASTE", "Spoilage"],
 ];
-const EMPLOYEE_TABS: Tab[] = ["all", "SALE", "WASTE"];
+const EMPLOYEE_TABS: Tab[] = ["all", "SALE", "EXPENSE", "WASTE"];
 const LEDGER_TYPES = new Set<EntryType>(["SALE", "EXPENSE", "RND", "CAPITAL", "ASSET", "WASTE"]);
 const inTab = (e: Entry, tab: Tab) => tab === "all" || (tab === "INVEST" ? isAnyInvestment(e) : e.type === tab);
 
@@ -219,6 +219,8 @@ function TransactionsPageInner() {
         ) : (
           <section className="grid grid-cols-1 gap-3 min-[600px]:grid-cols-2" aria-label="Sales summary">
             <MoneyBox icon={<ArrowDownLeft className="h-5 w-5" />} label="Sales" value={summary.sales} tone="good" note={`Everything sold · ${periodName}`} />
+            {/* Everyday expenses only — salaries never reach an employee's screen. */}
+            <MoneyBox icon={<ArrowUpRight className="h-5 w-5" />} label="Expenses" value={summary.expenses} tone="bad" note={`Everyday expenses · ${periodName}`} />
           </section>
         )}
 

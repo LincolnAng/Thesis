@@ -39,11 +39,13 @@ function sample(): BusinessData {
   };
 }
 
-test("employee copy hides expenses, R&D, payroll and spoilage cost", () => {
+test("employee copy shows everyday expenses but hides payroll, R&D and spoilage cost", () => {
   const out = redactForEmployee(sample(), () => 160);
-  assert.deepEqual(out.entries.map((e) => e.id), ["s1", "w1"]);
+  assert.deepEqual(out.entries.map((e) => e.id), ["s1", "w1"]); // the only expense in the sample is payroll
   assert.equal(out.entries.find((e) => e.id === "w1")?.amount, null);
   assert.equal(out.entries.find((e) => e.id === "s1")?.amount, 1500);
+  const withSupplies = { ...sample(), entries: [...sample().entries, { id: "x2", type: "EXPENSE", amount: 120, sku: "Fare", category: "transport" }] as never };
+  assert.ok(redactForEmployee(withSupplies, () => 160).entries.some((e) => e.id === "x2"));
 });
 
 test("employee copy carries the selling price but no way to work out cost or margin", () => {
@@ -74,16 +76,19 @@ test("employee can log a sale, stamped with their own name", () => {
   assert.equal(d.allow && d.item?.loggedById, "u-emp");
 });
 
-test("employee cannot log or edit expenses or R&D", () => {
-  for (const type of ["EXPENSE", "RND", "SUPPLIER"]) {
-    assert.equal(decideWrite({ role: "employee", user: me, collection: "entries", op: "append", item: { type } }).allow, false, type);
+test("employee can log an everyday expense, recorded as paid on the spot, but not payroll or R&D", () => {
+  const ok = decideWrite({ role: "employee", user: me, collection: "entries", op: "append", item: { type: "EXPENSE", category: "transport", paymentTerm: "payable", dueDate: "2026-11-01" } });
+  assert.ok(ok.allow);
+  assert.equal(ok.allow && ok.item?.paymentTerm, undefined);
+  for (const item of [{ type: "EXPENSE", category: "labor" }, { type: "EXPENSE", category: "Payroll" }, { type: "RND" }, { type: "SUPPLIER" }, { type: "CAPITAL" }, { type: "ASSET" }]) {
+    assert.equal(decideWrite({ role: "employee", user: me, collection: "entries", op: "append", item }).allow, false, JSON.stringify(item));
   }
-  const editExpense = decideWrite({ role: "employee", user: me, collection: "entries", op: "update", item: { type: "SALE" }, existing: { type: "EXPENSE" } });
-  assert.equal(editExpense.allow, false);
-  const turnIntoExpense = decideWrite({ role: "employee", user: me, collection: "entries", op: "update", item: { type: "EXPENSE" }, existing: { type: "SALE" } });
-  assert.equal(turnIntoExpense.allow, false);
-  const deleteExpense = decideWrite({ role: "employee", user: me, collection: "entries", op: "delete", existing: { type: "EXPENSE" } });
-  assert.equal(deleteExpense.allow, false);
+  const editPayroll = decideWrite({ role: "employee", user: me, collection: "entries", op: "update", item: { type: "EXPENSE", category: "transport" }, existing: { type: "EXPENSE", category: "labor" } });
+  assert.equal(editPayroll.allow, false);
+  const turnIntoPayroll = decideWrite({ role: "employee", user: me, collection: "entries", op: "update", item: { type: "EXPENSE", category: "labor" }, existing: { type: "EXPENSE", category: "transport" } });
+  assert.equal(turnIntoPayroll.allow, false);
+  const deleteRnd = decideWrite({ role: "employee", user: me, collection: "entries", op: "delete", existing: { type: "RND" } });
+  assert.equal(deleteRnd.allow, false);
 });
 
 test("employee editing spoilage keeps its real cost and original logger", () => {

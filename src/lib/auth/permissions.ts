@@ -41,8 +41,18 @@ function withoutPaymentFields<T extends object>(entry: T): T {
   return copy as T;
 }
 
-/** Entry types an employee can see and record. Everything else is money out or owner-only. */
-export const EMPLOYEE_ENTRY_TYPES: readonly EntryType[] = ["SALE", "WASTE", "INVENTORY_IN", "INVENTORY_OUT", "NOTE"];
+/** Entry types an employee can see and record. Investments (capital, assets) stay owner-only. */
+export const EMPLOYEE_ENTRY_TYPES: readonly EntryType[] = ["SALE", "EXPENSE", "WASTE", "INVENTORY_IN", "INVENTORY_OUT", "NOTE"];
+
+/**
+ * Expense categories an employee never sees or records: what people are paid. Employees can
+ * log everyday expenses — supplies, fares, packaging — but salaries stay with the owners.
+ */
+export const PAYROLL_CATEGORIES = new Set(["labor", "payroll", "salary", "salaries", "sweldo"]);
+
+export function isPayroll(entry: Pick<Entry, "type" | "category">): boolean {
+  return entry.type === "EXPENSE" && PAYROLL_CATEGORIES.has((entry.category ?? "").trim().toLowerCase());
+}
 
 /** Business settings an employee's screens need — production and calendar, nothing financial. */
 const EMPLOYEE_SETTING_KEYS = new Set([
@@ -58,8 +68,8 @@ const EMPLOYEE_SETTING_PREFIXES = ["shelfLifeDays:", "eventPlan:", "seasonality:
 /** Settings an employee may change: marking a day off on the production calendar. */
 const EMPLOYEE_WRITABLE_SETTING_KEYS = new Set(["unavailableDays"]);
 
-export function employeeCanSeeEntry(entry: Pick<Entry, "type">): boolean {
-  return EMPLOYEE_ENTRY_TYPES.includes(entry.type);
+export function employeeCanSeeEntry(entry: Pick<Entry, "type"> & { category?: string | null }): boolean {
+  return EMPLOYEE_ENTRY_TYPES.includes(entry.type) && !isPayroll({ type: entry.type, category: entry.category ?? null });
 }
 
 export function employeeCanSeeSetting(key: string): boolean {
@@ -163,13 +173,15 @@ export function decideWrite(req: WriteRequest): WriteDecision {
   switch (collection) {
     case "entries": {
       if (op === "append") {
-        if (!item || !employeeCanSeeEntry(item as Pick<Entry, "type">)) return deny("forbidden_entry_type");
-        return { allow: true, item: stamp(req) };
+        if (!item || !employeeCanSeeEntry(item as Pick<Entry, "type" | "category">)) return deny("forbidden_entry_type");
+        // Payment terms are the owners' to set: an employee's sale or expense is recorded as
+        // paid on the spot, never as a payable or receivable.
+        return { allow: true, item: withoutPaymentFields(stamp(req) ?? {}) };
       }
-      // An employee can only touch entries they could see, and can't turn one into an expense.
-      if (!existing || !employeeCanSeeEntry(existing as Pick<Entry, "type">)) return deny("forbidden");
+      // An employee can only touch entries they could see, and can't turn one into payroll.
+      if (!existing || !employeeCanSeeEntry(existing as Pick<Entry, "type" | "category">)) return deny("forbidden");
       if (op === "delete") return { allow: true };
-      if (!item || !employeeCanSeeEntry(item as Pick<Entry, "type">)) return deny("forbidden_entry_type");
+      if (!item || !employeeCanSeeEntry(item as Pick<Entry, "type" | "category">)) return deny("forbidden_entry_type");
       // Their copy of a spoilage entry has no amount (it's a cost); keep the real one.
       const merged = existing.type === "WASTE" && item.type === "WASTE" ? { ...item, amount: existing.amount } : item;
       // Who logged it isn't theirs to change, and their copy has no payment terms — keep the

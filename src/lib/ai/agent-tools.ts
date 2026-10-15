@@ -1,5 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import type { BusinessData } from "@/lib/auth/permissions";
+import { PAYROLL_CATEGORIES, type BusinessData } from "@/lib/auth/permissions";
 import type { Entry, EntryType, OrderLine, PaymentMethod, Product, Role } from "@/lib/store/types";
 import type { EntryDraft } from "@/lib/home/describe-entry";
 import type { CostContext } from "@/lib/summary/recipe-cost";
@@ -43,7 +43,8 @@ export interface ToolOutcome {
   proposal?: Proposal;
 }
 
-const EXEC_ONLY = new Set(["money_owed", "spending", "investments", "product_costing", "prepare_payment"]);
+// "spending" is open to employees: their records hold everyday expenses only, never salaries.
+const EXEC_ONLY = new Set(["money_owed", "investments", "product_costing", "prepare_payment"]);
 
 const period = {
   type: "string",
@@ -372,8 +373,11 @@ export function runTool(name: string, input: Record<string, unknown>, view: Agen
 function prepareTransaction(input: Record<string, unknown>, view: AgentView): ToolOutcome {
   const now = view.now;
   const type = String(input.type);
-  if (view.role !== "executive" && !["sale", "spoilage", "batch_made"].includes(type)) {
-    return { result: json({ error: "Your profile can record sales, spoilage and batches only." }), isError: true };
+  if (view.role !== "executive" && !["sale", "expense", "spoilage", "batch_made"].includes(type)) {
+    return { result: json({ error: "Your profile can record sales, everyday expenses, spoilage and batches only." }), isError: true };
+  }
+  if (view.role !== "executive" && type === "expense" && PAYROLL_CATEGORIES.has(String(input.category ?? "").trim().toLowerCase())) {
+    return { result: json({ error: "Salaries are recorded by an Executive." }), isError: true };
   }
   const date = /^\d{4}-\d{2}-\d{2}$/.test(String(input.date ?? "")) ? String(input.date) : today(now);
   const [y, m, d] = date.split("-").map(Number);
