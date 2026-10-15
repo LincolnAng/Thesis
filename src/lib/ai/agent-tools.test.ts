@@ -26,7 +26,7 @@ test("employees aren't offered the executive-only tools, and are refused if they
 });
 
 test("a multi-product sale is prepared as one order at catalogue prices, for confirmation only", () => {
-  const out = runTool("prepare_transaction", { type: "sale", items: [{ product: "Cacao Tablea · 150g (12 pcs)", quantity: 5 }, { product: "Tablea Ice Cream · 90g", quantity: 3 }] }, view("executive"));
+  const out = runTool("prepare_transaction", { type: "sale", counterparty: "Aling Nena", items: [{ product: "Cacao Tablea · 150g (12 pcs)", quantity: 5 }, { product: "Tablea Ice Cream · 90g", quantity: 3 }] }, view("executive"));
   assert.equal(out.proposal?.kind, "transaction");
   const draft = out.proposal?.kind === "transaction" ? out.proposal.draft : null;
   assert.equal(draft?.lineItems?.length, 2);
@@ -49,9 +49,9 @@ test("an employee can't prepare an expense or capital", () => {
 });
 
 test("an unpaid sale becomes a receivable; bank transfer needs a bank", () => {
-  const ok = runTool("prepare_transaction", { type: "sale", items: [{ product: "Tablea Ice Cream · 90g", quantity: 2 }], paid_now: false, due_date: "2026-10-30" }, view("executive"));
+  const ok = runTool("prepare_transaction", { type: "sale", counterparty: "Ana", items: [{ product: "Tablea Ice Cream · 90g", quantity: 2 }], paid_now: false, due_date: "2026-10-30" }, view("executive"));
   assert.equal(ok.proposal?.kind === "transaction" && ok.proposal.draft.paymentTerm, "receivable");
-  const noBank = runTool("prepare_transaction", { type: "expense", description: "Jars", amount: 500, method: "bank_transfer" }, view("executive"));
+  const noBank = runTool("prepare_transaction", { type: "expense", description: "Jars", amount: 500, counterparty: "Shop", method: "bank_transfer" }, view("executive"));
   assert.ok(noBank.isError);
 });
 
@@ -69,4 +69,13 @@ test("an employee's overview is sales only", () => {
   const out = JSON.parse(runTool("business_overview", { period: "this_month" }, view("employee", [entry({})])).result);
   assert.equal(out.sales, 650);
   assert.equal(out.money_earned, undefined);
+});
+
+test("a sale needs the buyer and an expense needs who was paid", () => {
+  const sale = runTool("prepare_transaction", { type: "sale", items: [{ product: "Tablea Ice Cream · 90g", quantity: 1 }] }, view("executive"));
+  assert.ok(sale.isError);
+  assert.match(sale.result, /buyer/);
+  const expense = runTool("prepare_transaction", { type: "expense", description: "Jars", amount: 500 }, view("executive"));
+  assert.ok(expense.isError);
+  assert.match(expense.result, /paid/);
 });

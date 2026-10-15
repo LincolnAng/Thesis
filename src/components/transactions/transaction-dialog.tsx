@@ -205,8 +205,10 @@ export function TransactionDialog({
       if (lines.length === 0) return "Tick at least one product.";
       if (orderLines.some((l) => !(l.quantity > 0))) return "Each ticked product needs a quantity above zero.";
       if (orderLines.some((l) => !(l.unitPrice >= 0))) return "Check the prices — they must be numbers.";
+      if (!(customer ?? "").trim()) return "Enter the buyer's name.";
     }
     if (kind === "expense" && !what.trim()) return "Say what the expense was for.";
+    if (kind === "expense" && !(party ?? "").trim()) return "Enter who was paid.";
     if (kind === "investment" && invKind === "asset" && !what.trim()) return "Name the asset — for example, Freezer.";
     if (kind === "investment" && invKind === "capital" && !(party ?? "").trim()) return "Who put the money in?";
     if ((kind === "expense" || kind === "investment") && !(num(amount) > 0)) return "Enter the amount in pesos.";
@@ -214,7 +216,7 @@ export function TransactionDialog({
       if (!lostProduct) return "Pick what was lost.";
       if (!(num(lostQty) > 0)) return "How many were lost?";
     }
-    if (showPayment && method === "bank_transfer" && when === "now" && !bank.trim()) return "Which bank was it sent through?";
+    if (showPayment && method === "bank_transfer" && !bank.trim()) return "Which bank? Pick or type the bank name.";
     if (payAmount && num(payAmount) > 0 && payMethod === "bank_transfer" && !payBank.trim()) return "Which bank was the payment sent through?";
     return null;
   }
@@ -519,8 +521,10 @@ export function TransactionDialog({
                 </div>
               </div>
               <label className="flex flex-col gap-1">
-                <span className={label}>Customer</span>
-                <CustomerNameInput value={customer} onChange={setCustomer} className={field} placeholder="Who bought it (optional)" />
+                <span className={label}>
+                  Buyer name <span className="text-danger">*</span>
+                </span>
+                <CustomerNameInput value={customer} onChange={setCustomer} className={field} placeholder="Who bought it" />
               </label>
             </>
           )}
@@ -549,8 +553,10 @@ export function TransactionDialog({
                 </label>
               </div>
               <label className="flex flex-col gap-1">
-                <span className={label}>Paid to</span>
-                <SupplierNameInput value={party} onChange={setParty} className={field} placeholder="Shop or supplier (optional)" />
+                <span className={label}>
+                  Paid to <span className="text-danger">*</span>
+                </span>
+                <SupplierNameInput value={party} onChange={setParty} className={field} placeholder="Shop or supplier" />
               </label>
             </>
           )}

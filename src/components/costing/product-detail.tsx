@@ -32,20 +32,20 @@ import { formatPeso, pluralize } from "@/lib/format";
 function Section({ title, hint, children, defaultOpen = true }: { title: string; hint?: string; children: ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <section className="rounded-2xl border border-line/15 bg-card">
+    <section className="rounded-xl border border-line/15 bg-card">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex min-h-14 w-full items-center justify-between gap-3 px-5 py-3 text-left"
+        className="flex min-h-11 w-full items-center justify-between gap-3 px-4 py-2 text-left"
       >
-        <span>
-          <span className="block font-display text-[18px] font-semibold">{title}</span>
-          {hint && <span className="block text-[13px] text-muted-foreground">{hint}</span>}
+        <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+          <span className="text-[15px] font-semibold">{title}</span>
+          {hint && <span className="text-[12.5px] text-muted-foreground">{hint}</span>}
         </span>
-        <ChevronDown className={`h-5 w-5 shrink-0 text-muted-foreground transition ${open ? "rotate-180" : ""}`} />
+        <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition ${open ? "rotate-180" : ""}`} />
       </button>
-      {open && <div className="border-t border-line/10 px-5 py-4">{children}</div>}
+      {open && <div className="border-t border-line/10 px-4 py-3">{children}</div>}
     </section>
   );
 }
@@ -79,22 +79,24 @@ export function ProductDetail({ productId, subnav, onBack }: { productId: string
 
   return (
     <Page title="Costing" subnav={subnav}>
-      <div className="flex flex-col gap-4">
+      <div className="flex max-w-[980px] flex-col gap-2.5">
         <button type="button" onClick={onBack} className="flex min-h-11 w-fit items-center gap-1.5 text-[14px] font-semibold text-cacao">
           <ArrowLeft className="h-4 w-4" /> All products
         </button>
 
         {/* 1. The product */}
-        <div className="grid grid-cols-1 overflow-hidden rounded-2xl border border-line/15 bg-card min-[700px]:grid-cols-[240px_1fr]">
-          <ProductPhoto product={product} gradient={GRADIENTS[Math.max(0, index) % GRADIENTS.length]} photo={photos[product.id]} />
-          <div className="flex flex-col gap-2 p-5">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <h2 className="font-display text-[24px] font-semibold leading-tight">{fullName(product, products)}</h2>
-              <button type="button" onClick={() => setEditing(true)} className="min-h-11 rounded-[10px] border border-line/20 px-4 text-[14px] font-semibold">
+        <div className="grid grid-cols-[96px_1fr] overflow-hidden rounded-xl border border-line/15 bg-card min-[700px]:grid-cols-[140px_1fr]">
+          <div className="[&>div]:h-full [&>div]:min-h-[96px]">
+            <ProductPhoto product={product} gradient={GRADIENTS[Math.max(0, index) % GRADIENTS.length]} photo={photos[product.id]} />
+          </div>
+          <div className="flex flex-col gap-1 px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-display text-[19px] font-semibold leading-tight">{fullName(product, products)}</h2>
+              <button type="button" onClick={() => setEditing(true)} className="min-h-10 rounded-[10px] border border-line/20 px-3 text-[13px] font-semibold">
                 Edit details
               </button>
             </div>
-            <div className="flex flex-wrap gap-x-6 gap-y-1 text-[15px]">
+            <div className="flex flex-wrap gap-x-5 gap-y-0.5 text-[13.5px]">
               <span>
                 Sells for <span className="font-semibold">{price > 0 ? formatPeso(price) : "— no price yet"}</span>
               </span>
@@ -104,7 +106,7 @@ export function ProductDetail({ productId, subnav, onBack }: { productId: string
               <span>{pluralize(product.stockQty, unit)} on hand</span>
             </div>
             {perUnit != null && price > 0 && (
-              <p className={`text-[14px] font-semibold ${price - perUnit >= 0 ? "text-success" : "text-danger"}`}>
+              <p className={`text-[13px] font-semibold ${price - perUnit >= 0 ? "text-success" : "text-danger"}`}>
                 {price - perUnit >= 0 ? `${formatPeso(price - perUnit)} profit on each ${unit}` : `Loses ${formatPeso(perUnit - price)} on each ${unit}`}
               </p>
             )}
@@ -112,12 +114,16 @@ export function ProductDetail({ productId, subnav, onBack }: { productId: string
         </div>
 
         {/* 2. Recipe */}
-        <Section title="Recipe and ingredients" hint={`What one batch takes, and how many ${unit}s it makes. Changes save as you make them.`}>
+        <Section title="Recipe and ingredients" hint="changes save as you make them">
           <RecipeEditor product={product} />
         </Section>
 
         {/* 3. Cost breakdown */}
-        <Section title="Cost breakdown" hint={`Every cost in one ${unit}, and the batch it comes from.`}>
+        <Section
+          title="Cost breakdown"
+          hint={perUnit != null ? `${formatPeso(perUnit)} per ${unit} · ${formatPeso(cost.batchTotal)} a batch` : "not fully costed yet"}
+          defaultOpen={false}
+        >
           <div className="grid grid-cols-2 gap-2 min-[700px]:grid-cols-4">
             <Figure label="Ingredients, per batch" value={formatPeso(cost.ingredientTotal)} />
             <Figure label="Packaging, labor & fixed" value={formatPeso(cost.packagingTotal + cost.laborTotal + cost.miscTotal)} />
@@ -145,7 +151,7 @@ export function ProductDetail({ productId, subnav, onBack }: { productId: string
         </Section>
 
         {/* 4. Price calculator */}
-        <Section title="Price calculator" hint="Try a price. Nothing changes until you press Save.">
+        <Section title="Price calculator" hint="nothing changes until you press Save">
           <PriceCalculator key={`${product.id}-${product.pricingMode}-${product.standardPrice}-${product.marginPercent}`} product={product} unitCost={perUnit} currentPrice={price} unit={unit} />
         </Section>
       </div>
@@ -157,10 +163,10 @@ export function ProductDetail({ productId, subnav, onBack }: { productId: string
 
 function Figure({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
-    <div className="rounded-xl bg-secondary px-3.5 py-2.5">
-      <div className="text-[12px] font-semibold text-muted-foreground">{label}</div>
-      <div className="font-display text-[20px] font-bold">{value}</div>
-      {note && <div className="text-[11.5px] text-muted-foreground">{note}</div>}
+    <div className="rounded-lg bg-secondary px-3 py-2">
+      <div className="text-[11.5px] font-semibold text-muted-foreground">{label}</div>
+      <div className="text-[16px] font-bold tabular-nums">{value}</div>
+      {note && <div className="text-[11px] text-muted-foreground">{note}</div>}
     </div>
   );
 }

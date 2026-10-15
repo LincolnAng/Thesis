@@ -73,9 +73,9 @@ export function CostSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-xl border border-line/15 bg-card p-3.5">
-      <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="font-display text-[16px] font-semibold">
+    <section className="rounded-lg border border-line/15 bg-card p-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-[14px] font-semibold">
           {title}
           {total && <span className="ml-2 font-sans text-[13px] font-semibold text-muted-foreground">{total}</span>}
         </h3>

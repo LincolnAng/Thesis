@@ -14,7 +14,7 @@ import { CustomerNameInput } from "@/components/customers/customer-name-input";
 import { SupplierNameInput } from "@/components/suppliers/supplier-name-input";
 import { ConfirmDeleteButton } from "@/components/data-table/confirm-delete-button";
 import { useStore } from "@/lib/store/use-store";
-import { EXPENSE_CATEGORY_LABELS, ENTRY_TYPE_LABELS, INVESTMENT_CATEGORIES, PRICE_TYPE_LABELS, formatPeso } from "@/lib/format";
+import { COMMON_BANKS, EXPENSE_CATEGORY_LABELS, ENTRY_TYPE_LABELS, INVESTMENT_CATEGORIES, PRICE_TYPE_LABELS, formatPeso } from "@/lib/format";
 import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 import { recordPayment } from "@/lib/transactions/ledger";
 import { spoiledValue } from "@/lib/summary/spoilage";
@@ -24,7 +24,7 @@ import { useCostContext } from "@/lib/summary/use-cost-context";
 import { effectiveProductPrice, productCostPerJar } from "@/lib/summary/recipe-cost";
 import { allExpenseCategories } from "@/lib/summary/expenses-summary";
 import type { EntryDraft } from "@/lib/home/describe-entry";
-import type { EntryType, PaymentStatus, PriceType, Product } from "@/lib/store/types";
+import type { EntryType, PaymentMethod, PaymentStatus, PriceType, Product } from "@/lib/store/types";
 import type { CostContext } from "@/lib/summary/recipe-cost";
 import { cn } from "@/lib/utils";
 
@@ -109,6 +109,10 @@ export function QuickEditForm({
   // shows up in Customers as "Unspecified item".
   const productRequired = draft.type === "SALE";
   const missingProduct = productRequired && !draft.sku;
+  // Every sale names its buyer and every expense whom it was paid to.
+  const missingParty = (draft.type === "SALE" || draft.type === "EXPENSE") && !(draft.counterparty ?? "").trim();
+  // A bank transfer names its bank.
+  const missingBank = draft.paymentMethod === "bank_transfer" && !(draft.bankName ?? "").trim();
 
   function createProduct(name: string) {
     const trimmed = name.trim();
@@ -444,13 +448,19 @@ export function QuickEditForm({
       {hasCounterparty &&
         (draft.type === "EXPENSE" || draft.type === "RND" ? (
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Paid to</Label>
+            <Label className="text-xs text-muted-foreground">
+              Paid to{draft.type === "EXPENSE" && <span className="text-destructive"> *</span>}
+            </Label>
             <SupplierNameInput value={draft.counterparty ?? null} onChange={(name) => set("counterparty", name)} />
+            {missingParty && <p className="text-xs text-destructive">Enter who was paid.</p>}
           </div>
         ) : (
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Buyer</Label>
+            <Label className="text-xs text-muted-foreground">
+              Buyer name{draft.type === "SALE" && <span className="text-destructive"> *</span>}
+            </Label>
             <CustomerNameInput value={draft.counterparty ?? null} onChange={(name) => set("counterparty", name)} />
+            {missingParty && <p className="text-xs text-destructive">Enter the buyer&apos;s name.</p>}
           </div>
         ))}
 
@@ -533,7 +543,7 @@ export function QuickEditForm({
         <Button
           size="sm"
           className={wide ? "px-8" : "flex-1"}
-          disabled={missingProduct}
+          disabled={missingProduct || missingParty || missingBank}
           onClick={() => {
             const saved = { ...draft, unit: itemUnit ?? draft.unit };
             registerNewSupplier(saved);
@@ -576,6 +586,31 @@ function PaymentFields({ draft, onChange }: { draft: EntryDraft; onChange: (patc
   return (
     <div className="space-y-2 rounded-xl border border-line/15 p-2.5">
       <Label className="text-xs text-muted-foreground">Payment</Label>
+      <ChipGroup
+        options={["cash", "bank_transfer"] as PaymentMethod[]}
+        value={draft.paymentMethod ?? "cash"}
+        labels={{ cash: "Cash", bank_transfer: "Bank transfer" }}
+        onChange={(v) => onChange({ paymentMethod: v, bankName: v === "bank_transfer" ? (draft.bankName ?? null) : null })}
+      />
+      {draft.paymentMethod === "bank_transfer" && (
+        <div className="space-y-1">
+          <Label className="text-[11px] text-muted-foreground">
+            Bank <span className="text-destructive">*</span>
+          </Label>
+          <Input
+            list="quick-edit-banks"
+            value={draft.bankName ?? ""}
+            placeholder="e.g. BDO or BPI"
+            onChange={(e) => onChange({ bankName: e.target.value || null })}
+            className="h-9"
+          />
+          <datalist id="quick-edit-banks">
+            {COMMON_BANKS.map((b) => (
+              <option key={b} value={b} />
+            ))}
+          </datalist>
+        </div>
+      )}
       <ChipGroup
         options={["spot", owedTerm]}
         value={term}

@@ -111,7 +111,7 @@ export const AGENT_TOOLS: Anthropic.Tool[] = [
   {
     name: "prepare_transaction",
     description:
-      "Prepare a new transaction for the person to check and confirm. Nothing is saved until they press Confirm. Use only when they ask to record something and you have what's required; if something required is missing, ask them instead of guessing. A sale needs at least one product and quantity (several products make one order); an expense or asset needs what it was for and the amount; capital needs who put it in and the amount; spoilage and batch_made need a product and quantity.",
+      "Prepare a new transaction for the person to check and confirm. Nothing is saved until they press Confirm. Use only when they ask to record something and you have what's required; if something required is missing, ask them instead of guessing. A sale needs at least one product and quantity (several products make one order) and the buyer's name; an expense needs what it was for, the amount and who was paid; an asset needs what was bought and the amount; capital needs who put it in and the amount; spoilage and batch_made need a product and quantity.",
     input_schema: {
       type: "object",
       properties: {
@@ -404,6 +404,7 @@ function prepareTransaction(input: Record<string, unknown>, view: AgentView): To
 
   if (type === "sale") {
     if (items.length === 0) return fail("Which products, and how many of each?");
+    if (!draft.counterparty) return fail("Who bought it? A sale needs the buyer's name.");
     const lines: OrderLine[] = [];
     for (const it of items) {
       const p = pick(it);
@@ -433,6 +434,7 @@ function prepareTransaction(input: Record<string, unknown>, view: AgentView): To
     stated.push("sku", "quantity");
   } else if (type === "expense" || type === "asset") {
     const what = String(input.description ?? "").trim();
+    if (type === "expense" && !draft.counterparty) return fail("Who was it paid to? An expense needs the name of who was paid.");
     if (!what) return fail(type === "asset" ? "What was bought?" : "What was the expense for?");
     if (!(Number(input.amount) > 0)) return fail("How much was it?");
     Object.assign(draft, { type: type === "asset" ? "ASSET" : "EXPENSE", sku: what, amount: r2(Number(input.amount)), category: type === "expense" ? String(input.category ?? "misc") : null });

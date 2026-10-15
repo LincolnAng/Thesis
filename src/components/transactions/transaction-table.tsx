@@ -53,8 +53,7 @@ function TypeChip({ e }: { e: Entry }) {
 function PaymentCell({ e }: { e: Entry }) {
   const term = termOf(e);
   if (!canBeOwed(e) && e.type !== "CAPITAL") return <span className="text-muted-foreground">—</span>;
-  const method = describePaymentMethod(e.paymentMethod, e.bankName);
-  if (term === "spot") return <span className="text-muted-foreground">Paid{method ? ` · ${method}` : ""}</span>;
+  if (term === "spot") return <span className="text-muted-foreground">{e.type === "CAPITAL" ? "Received" : "Paid"}</span>;
 
   const status = statusOf(e) ?? "pending";
   const due = dueInfo(e, new Date());
@@ -183,9 +182,9 @@ export function TransactionTable({
     });
   }, [rows, sort]);
 
-  // Date · Type · Item · Qty sold · Customer / Supplier · Category · Amount · [Payment] · Logged by · actions
+  // Date · Type · Item · Qty sold · Customer / Supplier · Category · Amount · [Mode of payment · Payment] · Logged by · actions
   const columns = showPayment
-    ? "grid-cols-[108px_118px_minmax(0,1.2fr)_76px_minmax(0,1fr)_110px_112px_190px_96px_72px]"
+    ? "grid-cols-[108px_118px_minmax(0,1.2fr)_76px_minmax(0,1fr)_110px_112px_128px_180px_96px_72px]"
     : "grid-cols-[108px_118px_minmax(0,1.2fr)_76px_minmax(0,1fr)_110px_112px_96px_72px]";
 
   const head = (label: string, key?: SortKey, right?: boolean) => (
@@ -212,7 +211,7 @@ export function TransactionTable({
 
   return (
     <div className="overflow-x-auto">
-      <div className={showPayment ? "min-w-[1120px]" : "min-w-[920px]"}>
+      <div className={showPayment ? "min-w-[1250px]" : "min-w-[920px]"}>
         <div className={`grid ${columns} gap-1 border-b border-line/15 bg-secondary px-2`}>
           {head("Date", "date")}
           {head("Type")}
@@ -221,6 +220,7 @@ export function TransactionTable({
           {head("Customer / Supplier")}
           {head("Category")}
           {head("Amount", "amount", true)}
+          {showPayment && head("Mode of payment")}
           {showPayment && head("Payment")}
           {head("Logged by")}
           {head("")}
@@ -263,6 +263,17 @@ export function TransactionTable({
                 <div className={`px-1 text-right font-semibold tabular-nums ${moneyIn ? "text-success" : "text-danger"}`}>
                   {e.amount == null ? <span className="font-normal text-muted-foreground">—</span> : `${moneyIn ? "+" : "−"}${formatPeso(e.amount)}`}
                 </div>
+                {showPayment && (
+                  <div className="px-1 text-[12.5px]">
+                    {e.paymentMethod ? (
+                      <span className={`inline-block rounded-full px-2 py-0.5 font-semibold ${e.paymentMethod === "bank_transfer" ? "bg-[#3F6E8C]/10 text-[#3F6E8C]" : "bg-secondary text-foreground"}`}>
+                        {describePaymentMethod(e.paymentMethod, e.bankName)}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </div>
+                )}
                 {showPayment && (
                   <div className="px-1">
                     <PaymentCell e={e} />

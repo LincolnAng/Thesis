@@ -21,9 +21,9 @@ const MODE_FOR_SAVE: Record<CalcMode, PricingMode> = { price: "manual", markup: 
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
-    <div className="rounded-xl bg-secondary px-3.5 py-2.5">
-      <div className="text-[12px] font-semibold text-muted-foreground">{label}</div>
-      <div className={`font-display text-[20px] font-bold ${tone ?? ""}`}>{value}</div>
+    <div className="rounded-lg bg-secondary px-3 py-2">
+      <div className="text-[11.5px] font-semibold text-muted-foreground">{label}</div>
+      <div className={`text-[16px] font-bold tabular-nums ${tone ?? ""}`}>{value}</div>
     </div>
   );
 }
@@ -50,7 +50,6 @@ export function PriceCalculator({
     String(startingMode(product) === "price" ? currentPrice || "" : product.marginPercent || ""),
   );
   const [friend, setFriend] = useState(product.friendPrice ? String(product.friendPrice) : "");
-  const [wholesale, setWholesale] = useState(product.wholesalePrice ? String(product.wholesalePrice) : "");
   const [saved, setSaved] = useState<string | null>(null);
 
   const typed = Number(value);
@@ -59,7 +58,7 @@ export function PriceCalculator({
   const changed =
     price != null &&
     (Math.abs(price - currentPrice) >= 0.01 || MODE_FOR_SAVE[mode] !== product.pricingMode || (mode !== "price" && typed !== product.marginPercent));
-  const tiersChanged = Number(friend || 0) !== product.friendPrice || Number(wholesale || 0) !== product.wholesalePrice;
+  const tiersChanged = Number(friend || 0) !== product.friendPrice;
 
   function switchMode(next: CalcMode) {
     // Carry the price on screen into the new way of describing it, so switching never jumps.
@@ -81,15 +80,16 @@ export function PriceCalculator({
   }
 
   function saveTiers() {
-    updateProduct(product.id, { friendPrice: Number(friend || 0), wholesalePrice: Number(wholesale || 0) });
-    setSaved("Saved the friend and wholesale prices.");
+    // Only the friend price is set here; a wholesale price saved before stays in the records.
+    updateProduct(product.id, { friendPrice: Number(friend || 0) });
+    setSaved("Saved the friend price.");
   }
 
   const field = "h-11 rounded-lg border border-input bg-transparent px-3 text-[15px] outline-none focus:border-cacao";
 
   return (
-    <div className="flex flex-col gap-4">
-      <p className="text-[14px]">
+    <div className="flex flex-col gap-3">
+      <p className="text-[13.5px]">
         Selling now for <span className="font-semibold">{currentPrice > 0 ? formatPeso(currentPrice) : "— no price yet"}</span>
         {product.pricingMode !== "manual" && currentPrice > 0 && (
           <span className="text-muted-foreground">
@@ -116,7 +116,7 @@ export function PriceCalculator({
               aria-checked={mode === m}
               onClick={() => switchMode(m)}
               disabled={m !== "price" && unitCost == null}
-              className={`min-h-11 rounded-full border px-4 text-[14px] font-semibold transition disabled:opacity-40 ${
+              className={`min-h-10 rounded-full border px-3.5 text-[13px] font-semibold transition disabled:opacity-40 ${
                 mode === m ? "border-cacao bg-cacao text-ivory" : "border-line/20 bg-card"
               }`}
             >
@@ -178,13 +178,12 @@ export function PriceCalculator({
         </button>
       </div>
 
-      <div className="flex flex-col gap-2 border-t border-line/10 pt-4">
+      <div className="flex flex-col gap-2 border-t border-line/10 pt-3">
         <span className="text-[13px] font-semibold text-muted-foreground">Other prices</span>
         <div className="flex flex-wrap items-end gap-3">
           {(
             [
               ["Friend price", friend, setFriend],
-              ["Wholesale price", wholesale, setWholesale],
             ] as const
           ).map(([label, v, set]) => {
             const tier = evaluate(v === "" ? null : Number(v), unitCost);
@@ -212,7 +211,7 @@ export function PriceCalculator({
             disabled={!tiersChanged}
             className="mb-5 min-h-11 rounded-[10px] border border-line/20 px-4 text-[14px] font-semibold disabled:opacity-40"
           >
-            Save these prices
+            Save friend price
           </button>
         </div>
       </div>
