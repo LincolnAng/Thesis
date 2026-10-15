@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { ArrowLeft, Check, ChevronDown, Info } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, Info } from "lucide-react";
 import { Page } from "@/components/layout/page";
 import { ProductPhoto, GRADIENTS } from "@/components/costing/products-screen";
 import { PriceCalculator } from "@/components/costing/price-calculator";
@@ -15,74 +15,101 @@ import { updateProduct } from "@/lib/store/store";
 import { useProductPhotos } from "@/lib/products/photos";
 import { useCostContext } from "@/lib/summary/use-cost-context";
 import { effectiveProductPrice, productCostPerJar } from "@/lib/summary/recipe-cost";
-import { familiesOf, sizeTag } from "@/lib/summary/product-sizes";
+import { familiesOf, fullName } from "@/lib/summary/product-sizes";
 import { costPerUnit } from "@/lib/costing/price-calc";
 import { formatPeso, pluralize } from "@/lib/format";
 import type { Product } from "@/lib/store/types";
 
 /**
- * One product's costing as three steps, in the order a person thinks it through:
+ * One product's costing, laid out the way a beginner thinks it through, without hiding any figure:
  *
- *   1. What goes in         — the recipe: what one batch takes
- *   2. What it costs        — one number, with the working behind a "see the details"
- *   3. What you sell it for — one question, with the markup and margin methods behind "more options"
+ *   ┌ header: photo, name, Edit details ───────────────────────────┐
+ *   │ 1 What goes in → 2 What it costs → 3 What you sell it for    │  ← a stepper: where you are,
+ *   │ ┌ the open step ────────────────┐ ┌ At a glance ───────────┐ │    what is done (✓)
+ *   │ │ one job, with Back / Next      │ │ sells for, costs, keeps │ │
+ *   │ └────────────────────────────────┘ │ batch, stock, shelf    │ │
+ *   │                                    │ life, sizes            │ │
+ *   └────────────────────────────────────┴────────────────────────┘
  *
- * Only the first step that still needs doing is open; finished steps fold to a single line of
- * result, so a beginner is never looking at everything at once. Each step's badge says where it
- * stands: a green tick when done, an amber "!" on the step that needs attention now, and a grey
- * number on a step that waits for an earlier one. Stock, shelf life and sizes sit
- * in "More about this product", out of the way until wanted.
+ * Only one step shows at a time, and each ends with a button to the next, so the page reads as
+ * a short path rather than a wall of panels. Every number about the product sits in "At a
+ * glance" beside it, always visible; anything not known yet says so in words and links to the
+ * step that fills it in.
  *
  * Executives only: the Costing page shows employees the product gallery instead, and the server
  * never sends an employee recipe costs to begin with (lib/auth/permissions).
  */
 
-function Step({
-  n,
-  title,
-  result,
-  state,
-  open,
-  onToggle,
-  children,
-}: {
-  n: number;
-  title: string;
-  /** One line of what this step came to, shown when it is folded. */
-  result: string;
-  /** done: finished. attention: the step to do now. waiting: needs an earlier step first. */
-  state: "done" | "attention" | "waiting";
-  open: boolean;
-  onToggle: () => void;
-  children: ReactNode;
-}) {
+const STEPS = [
+  { title: "What goes in", hint: "The ingredients and work that go into one batch." },
+  { title: "What it costs", hint: "What it costs you to make one, worked out from step 1." },
+  { title: "What you sell it for", hint: "Your selling price, and what you keep on each one." },
+] as const;
+
+/** The three steps across the top: each says whether it's done, and opens when tapped. */
+function Stepper({ step, done, results, onPick }: { step: number; done: boolean[]; results: string[]; onPick: (n: number) => void }) {
   return (
-    <section className={`rounded-xl border bg-card ${open ? "border-cacao/30" : "border-line/15"}`}>
-      <button type="button" onClick={onToggle} aria-expanded={open} className="flex min-h-14 w-full items-center gap-3 px-4 py-2 text-left">
-        <span
-          aria-label={state === "done" ? "Done" : state === "attention" ? "Needs attention" : `Step ${n}`}
-          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[14px] font-bold ${
-            state === "done"
-              ? "bg-success text-white dark:text-ivory"
-              : state === "attention"
-                ? "bg-amber-100 text-amber-700 ring-1 ring-inset ring-amber-300 dark:bg-amber-400/15 dark:text-amber-200 dark:ring-amber-400/30"
-                : "bg-secondary text-muted-foreground"
-          }`}
-        >
-          {state === "done" ? <Check className="h-4 w-4" strokeWidth={3} /> : state === "attention" ? <span className="text-[16px] leading-none">!</span> : n}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-[15px] font-semibold">{title}</span>
-          {!open && (
-            <span className={`block truncate text-[13px] ${state === "attention" ? "font-medium text-amber-700 dark:text-amber-300" : "text-muted-foreground"}`}>
-              {state === "attention" ? `Needs your attention · ${result}` : result}
-            </span>
-          )}
-        </span>
-        <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition ${open ? "rotate-180" : ""}`} />
-      </button>
-      {open && <div className="border-t border-line/10 px-4 py-4">{children}</div>}
-    </section>
+    <ol className="grid grid-cols-3 gap-2">
+      {STEPS.map((s, i) => {
+        const n = i + 1;
+        const active = step === n;
+        return (
+          <li key={s.title}>
+            <button
+              type="button"
+              onClick={() => onPick(n)}
+              aria-current={active ? "step" : undefined}
+              className={`flex h-full w-full items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition ${
+                active ? "border-cacao bg-cacao/[0.06]" : "border-line/15 bg-card hover:border-cacao/40"
+              }`}
+            >
+              <span
+                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[13px] font-bold ${
+                  done[i] ? "bg-success text-white dark:text-ivory" : active ? "bg-cacao text-ivory" : "bg-secondary text-muted-foreground"
+                }`}
+              >
+                {done[i] ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : n}
+              </span>
+              <span className="min-w-0">
+                <span className={`block text-[13.5px] font-semibold leading-tight ${active ? "text-cacao" : ""}`}>{s.title}</span>
+                <span className="mt-0.5 hidden truncate text-[12px] text-muted-foreground min-[600px]:block">{results[i]}</span>
+              </span>
+            </button>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/** A note about something still to do — calm, with the way to fix it. */
+function Note({ children, action }: { children: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="flex gap-2.5 rounded-lg bg-secondary px-3.5 py-3 text-[14px]">
+      <Info className="mt-0.5 h-4 w-4 shrink-0 text-cacao" />
+      <div className="flex flex-col gap-1">
+        <p>{children}</p>
+        {action}
+      </div>
+    </div>
+  );
+}
+
+/** One line of "At a glance": a label, and its figure or what's missing. */
+function Glance({ label, value, missing, onFix, tone }: { label: string; value?: string | null; missing?: string; onFix?: () => void; tone?: "good" | "bad" }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 py-1.5">
+      <span className="text-[13px] text-muted-foreground">{label}</span>
+      {value != null ? (
+        <span className={`text-[14px] font-semibold tabular-nums ${tone === "good" ? "text-success" : tone === "bad" ? "text-danger" : ""}`}>{value}</span>
+      ) : onFix ? (
+        <button type="button" onClick={onFix} className="text-[13px] font-medium text-cacao underline decoration-dotted underline-offset-4">
+          {missing}
+        </button>
+      ) : (
+        <span className="text-[13px] text-muted-foreground">{missing}</span>
+      )}
+    </div>
   );
 }
 
@@ -238,13 +265,10 @@ export function ProductDetail({
   const perUnit = product && cost ? costPerUnit(cost.batchTotal, product.batchYield, complete) : null;
 
   const done = [hasRecipe, perUnit != null, price > 0];
-  // The first unfinished step is the one to do now; any after it wait their turn.
-  const firstOpen = done.findIndex((d) => !d);
-  const stateOf = (i: number): "done" | "attention" | "waiting" => (done[i] ? "done" : i === firstOpen ? "attention" : "waiting");
-  // The first step still to do opens by itself; the rest fold to one line each.
-  const [openStep, setOpenStep] = useState<number | null>(() => {
+  // Opens on the first step still to do; once all three are done, on the price.
+  const [step, setStep] = useState(() => {
     const first = done.findIndex((d) => !d);
-    return first === -1 ? null : first + 1;
+    return first === -1 ? 3 : first + 1;
   });
 
   if (!product || !cost) {
@@ -261,149 +285,141 @@ export function ProductDetail({
   }
 
   const unit = (product.unit || "jar").replace(/s$/, "");
-  const toggle = (n: number) => setOpenStep((cur) => (cur === n ? null : n));
   const family = familiesOf(products).find((f) => f.head.id === product.id || f.sizes.some((s) => s.id === product.id));
   const ingredientCount = product.recipeIngredients.length + (product.recipeComponents ?? []).length;
+  const keep = perUnit != null && price > 0 ? price - perUnit : null;
+  const results = [
+    hasRecipe ? `${pluralize(ingredientCount, "ingredient")} in one batch` : "Not added yet",
+    perUnit != null ? `${formatPeso(perUnit)} each to make` : "Not known yet",
+    price > 0 ? `Sells for ${formatPeso(price)}` : "Not set yet",
+  ];
+  const go = (n: number) => {
+    setStep(n);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const nav = (
+    <div className="mt-5 flex items-center justify-between gap-3 border-t border-line/10 pt-4">
+      {step > 1 ? (
+        <button type="button" onClick={() => go(step - 1)} className="flex min-h-10 items-center gap-1 text-[13px] font-semibold text-muted-foreground hover:text-cacao">
+          <ArrowLeft className="h-4 w-4" /> {STEPS[step - 2].title}
+        </button>
+      ) : (
+        <span />
+      )}
+      {step < 3 && (
+        <button type="button" onClick={() => go(step + 1)} className="flex min-h-10 items-center gap-1.5 rounded-[10px] bg-cacao px-4 text-[13px] font-semibold text-ivory">
+          Next: {STEPS[step].title} <ArrowRight className="h-4 w-4" />
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <Page title="Costing" subnav={subnav}>
-      <div className="flex max-w-[760px] flex-col gap-3">
-        <button type="button" onClick={onBack} className="flex min-h-11 w-fit items-center gap-1.5 text-[14px] font-semibold text-cacao">
+      <div className="flex max-w-[1100px] flex-col gap-4">
+        <button type="button" onClick={onBack} className="flex min-h-10 w-fit items-center gap-1.5 text-[14px] font-semibold text-cacao">
           <ArrowLeft className="h-4 w-4" /> All products
         </button>
 
-        {/* The product, in one glance */}
-        <div className="grid grid-cols-[96px_1fr] overflow-hidden rounded-xl border border-line/15 bg-card min-[700px]:grid-cols-[140px_1fr]">
-          <div className="[&>div]:h-full [&>div]:min-h-[96px]">
+        {/* Who this is */}
+        <div className="flex items-center gap-4 overflow-hidden rounded-xl border border-line/15 bg-card pr-4">
+          <div className="w-[88px] shrink-0 self-stretch min-[700px]:w-[120px] [&>div]:h-full [&>div]:min-h-[88px]">
             <ProductPhoto product={product} gradient={GRADIENTS[Math.max(0, index) % GRADIENTS.length]} photo={photos[product.id]} />
           </div>
-          <div className="flex flex-col gap-1.5 px-4 py-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="font-display text-[20px] font-semibold leading-tight">
-                {product.sizeOfId ? (family?.head.name ?? product.name) : product.name}
-                {sizeTag(product.sizeLabel) && <span className="font-sans text-[15px] font-medium text-muted-foreground"> · {sizeTag(product.sizeLabel)}</span>}
-              </h2>
-              <button type="button" onClick={() => setEditing(true)} className="min-h-10 rounded-[10px] border border-line/20 px-3 text-[13px] font-semibold">
-                Edit details
-              </button>
-            </div>
-            <div className="flex flex-wrap gap-x-6 gap-y-1 text-[14px]">
-              <span>
-                Sells for{" "}
-                {price > 0 ? (
-                  <span className="font-bold">{formatPeso(price)}</span>
-                ) : (
-                  <Pending onClick={() => setOpenStep(3)}>Set a price</Pending>
-                )}
-              </span>
-              <span>
-                Costs{" "}
-                {perUnit != null ? (
-                  <span className="font-bold">{formatPeso(perUnit)}</span>
-                ) : (
-                  <Pending onClick={() => setOpenStep(hasRecipe ? 2 : 1)}>Pending info</Pending>
-                )}
-              </span>
-              {perUnit != null && price > 0 && (
-                <span className={`font-bold ${price - perUnit >= 0 ? "text-success" : "text-danger"}`}>
-                  {price - perUnit >= 0 ? `Keeps ${formatPeso(price - perUnit)}` : `Loses ${formatPeso(perUnit - price)}`}
-                </span>
-              )}
-            </div>
+          <div className="min-w-0 flex-1 py-3">
+            <h2 className="font-display text-[22px] font-semibold leading-tight">{fullName(product, products)}</h2>
+            <p className="text-[13px] text-muted-foreground">
+              Sold by the {unit} · {done.filter(Boolean).length} of 3 steps done
+            </p>
           </div>
+          <button type="button" onClick={() => setEditing(true)} className="min-h-10 shrink-0 rounded-[10px] border border-line/20 px-3 text-[13px] font-semibold">
+            Edit details
+          </button>
         </div>
 
-        {/* 1. What goes in */}
-        <Step
-          n={1}
-          title="What goes in"
-          result={hasRecipe ? `${pluralize(ingredientCount, "ingredient")} in one batch` : "Add what goes into one batch"}
-          state={stateOf(0)}
-          open={openStep === 1}
-          onToggle={() => toggle(1)}
-        >
-          <RecipeEditor product={product} />
-        </Step>
+        <Stepper step={step} done={done} results={results} onPick={setStep} />
 
-        {/* 2. What it costs */}
-        <Step
-          n={2}
-          title="What it costs"
-          result={perUnit != null ? `${formatPeso(perUnit)} each to make` : "Not known yet"}
-          state={stateOf(1)}
-          open={openStep === 2}
-          onToggle={() => toggle(2)}
-        >
-          {perUnit != null ? (
-            <div>
-              <p className="font-display text-[30px] font-bold leading-tight tabular-nums">{formatPeso(perUnit)}</p>
-              <p className="text-[14px] text-muted-foreground">
-                to make one {unit}. A batch costs {formatPeso(cost.batchTotal)} and makes {pluralize(product.batchYield, unit)}.
-              </p>
-            </div>
-          ) : (
-            <Callout
-              action={
-                !hasRecipe ? (
-                  <button type="button" onClick={() => setOpenStep(1)} className="font-semibold underline underline-offset-2">
-                    Go to step 1
-                  </button>
-                ) : cost.unpriced.length === 0 && cost.unconvertible.length === 0 ? (
-                  <button type="button" onClick={() => setEditing(true)} className="font-semibold underline underline-offset-2">
-                    Open Edit details
-                  </button>
-                ) : null
-              }
-            >
-              {!hasRecipe
-                ? "Add what goes into one batch in step 1, and the cost will appear here."
-                : cost.unpriced.length > 0
-                  ? `We can't work out the cost yet — no price for ${cost.unpriced.join(", ")}. Log a purchase of it to price it.`
-                  : cost.unconvertible.length > 0
-                    ? `Check the units on ${cost.unconvertible.join(", ")} — they couldn't be converted.`
-                    : `Say how many ${unit}s one batch makes (under Edit details), and the cost per ${unit} will appear here.`}
-            </Callout>
-          )}
-          <More label="See how it adds up">
-            <div className="grid grid-cols-2 gap-2 min-[700px]:grid-cols-4">
-              <Figure label="Ingredients, per batch" value={formatPeso(cost.ingredientTotal)} />
-              <Figure label="Packaging, labor & fixed" value={formatPeso(cost.packagingTotal + cost.laborTotal + cost.miscTotal)} />
-              <Figure label="Batch cost" value={formatPeso(cost.batchTotal)} />
-              <Figure label={`Cost per ${unit}`} value={perUnit != null ? formatPeso(perUnit) : "Pending"} />
-            </div>
-            <div className="mt-3">
-              <CostBreakdown product={product} cost={cost} />
-            </div>
-          </More>
-        </Step>
+        <div className="grid grid-cols-1 items-start gap-4 min-[1000px]:grid-cols-[minmax(0,1fr)_300px]">
+          {/* The open step */}
+          <section className="rounded-xl border border-line/15 bg-card px-4 py-4 min-[700px]:px-5">
+            <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">Step {step} of 3</p>
+            <h3 className="font-display text-[19px] font-semibold">{STEPS[step - 1].title}</h3>
+            <p className="mb-4 text-[13px] text-muted-foreground">{STEPS[step - 1].hint}</p>
 
-        {/* 3. What you sell it for */}
-        <Step
-          n={3}
-          title="What you sell it for"
-          result={price > 0 ? `Sells for ${formatPeso(price)}` : "Not set yet"}
-          state={stateOf(2)}
-          open={openStep === 3}
-          onToggle={() => toggle(3)}
-        >
-          <SimplePrice product={product} unitCost={perUnit} currentPrice={price} unit={unit} />
-        </Step>
+            {step === 1 && <RecipeEditor product={product} />}
 
-        {/* Everything else, out of the way */}
-        <details className="rounded-xl border border-line/15 bg-card">
-          <summary className="flex min-h-12 cursor-pointer items-center justify-between px-4 text-[14px] font-semibold marker:content-none">
-            More about this product
-            <span className="text-[13px] font-normal text-muted-foreground">{pluralize(product.stockQty, unit)} on hand · shelf life · sizes</span>
-          </summary>
-          <div className="border-t border-line/10">
-            <ProductExpiryStrip product={product} />
-            {family && (
-              <div className="border-t border-line/10">
-                <SizeStrip head={family.head} sizes={family.sizes} onOpen={onOpenProduct} />
-              </div>
+            {step === 2 && (
+              <>
+                {perUnit != null ? (
+                  <div>
+                    <p className="font-display text-[30px] font-bold leading-tight tabular-nums">{formatPeso(perUnit)}</p>
+                    <p className="text-[14px] text-muted-foreground">
+                      to make one {unit}. A batch costs {formatPeso(cost.batchTotal)} and makes {pluralize(product.batchYield, unit)}.
+                    </p>
+                  </div>
+                ) : (
+                  <Note
+                    action={
+                      !hasRecipe ? (
+                        <button type="button" onClick={() => go(1)} className="w-fit text-[13px] font-semibold text-cacao">
+                          Go to step 1 →
+                        </button>
+                      ) : cost.unpriced.length === 0 && cost.unconvertible.length === 0 ? (
+                        <button type="button" onClick={() => go(1)} className="w-fit text-[13px] font-semibold text-cacao">
+                          Set it in step 1 →
+                        </button>
+                      ) : null
+                    }
+                  >
+                    {!hasRecipe
+                      ? "Add what goes into one batch in step 1, and the cost will appear here."
+                      : cost.unpriced.length > 0
+                        ? `We can't work out the cost yet — there's no price for ${cost.unpriced.join(", ")}. Log a purchase of it in Transactions to price it.`
+                        : cost.unconvertible.length > 0
+                          ? `Check the units on ${cost.unconvertible.join(", ")} — they couldn't be converted.`
+                          : `Say how many ${unit}s one batch makes ("One batch makes" in step 1), and the cost per ${unit} will appear here.`}
+                  </Note>
+                )}
+                <div className="mt-4 grid grid-cols-2 gap-2 min-[700px]:grid-cols-4">
+                  <Figure label="Ingredients, per batch" value={formatPeso(cost.ingredientTotal)} />
+                  <Figure label="Packaging, labor & fixed" value={formatPeso(cost.packagingTotal + cost.laborTotal + cost.miscTotal)} />
+                  <Figure label="Batch cost" value={formatPeso(cost.batchTotal)} />
+                  <Figure label={`Cost per ${unit}`} value={perUnit != null ? formatPeso(perUnit) : "Not known yet"} />
+                </div>
+                <More label="See it line by line">
+                  <CostBreakdown product={product} cost={cost} />
+                </More>
+              </>
             )}
-          </div>
-        </details>
+
+            {step === 3 && <SimplePrice product={product} unitCost={perUnit} currentPrice={price} unit={unit} />}
+
+            {nav}
+          </section>
+
+          {/* Every figure about the product, always in view */}
+          <aside className="flex flex-col overflow-hidden rounded-xl border border-line/15 bg-card min-[1000px]:sticky min-[1000px]:top-4">
+            <div className="px-4 pb-2 pt-3">
+              <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">At a glance</p>
+              <Glance label="Sells for" value={price > 0 ? formatPeso(price) : null} missing="Set a price" onFix={() => go(3)} />
+              <Glance label={`Costs to make one`} value={perUnit != null ? formatPeso(perUnit) : null} missing="Not known yet" onFix={() => go(hasRecipe ? 2 : 1)} />
+              <Glance
+                label="You keep on each"
+                value={keep != null ? `${formatPeso(keep)}${price > 0 ? ` (${Math.round((keep / price) * 100)}%)` : ""}` : null}
+                missing="Needs cost and price"
+                tone={keep == null ? undefined : keep >= 0 ? "good" : "bad"}
+              />
+            </div>
+            <div className="border-t border-line/10 px-4 py-2">
+              <Glance label="One batch makes" value={product.batchYield > 0 ? pluralize(product.batchYield, unit) : null} missing="Not set" onFix={() => go(1)} />
+              <Glance label="One batch costs" value={hasRecipe ? formatPeso(cost.batchTotal) : null} missing="Not known yet" onFix={() => go(1)} />
+              <Glance label="On hand" value={pluralize(product.stockQty, unit)} />
+              <Glance label="Warn when below" value={product.lowStockThreshold > 0 ? pluralize(product.lowStockThreshold, unit) : null} missing="Not set" onFix={() => setEditing(true)} />
+            </div>
+            <ProductExpiryStrip product={product} />
+            {family && <SizeStrip head={family.head} sizes={family.sizes} onOpen={onOpenProduct} />}
+          </aside>
+        </div>
       </div>
 
       {editing && <EditProductDialog key={product.id} product={product} products={products} onClose={() => setEditing(false)} />}
@@ -417,32 +433,6 @@ function Figure({ label, value, note }: { label: string; value: string; note?: s
       <div className="text-[11.5px] font-semibold text-muted-foreground">{label}</div>
       <div className="text-[16px] font-bold tabular-nums">{value}</div>
       {note && <div className="text-[11px] text-muted-foreground">{note}</div>}
-    </div>
-  );
-}
-
-/** A missing figure in the header: says what's missing and opens the step that fills it. */
-function Pending({ onClick, children }: { onClick: () => void; children: ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="font-semibold text-amber-700 underline decoration-amber-400 decoration-dashed underline-offset-4 hover:text-amber-800 dark:text-amber-300"
-    >
-      {children}
-    </button>
-  );
-}
-
-/** A tip about something to finish: an amber box with an info icon, so it reads as a next step, not an error. */
-function Callout({ children, action }: { children: ReactNode; action?: ReactNode }) {
-  return (
-    <div role="note" className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-3 text-[14px] text-amber-900 dark:border-amber-400/25 dark:bg-amber-400/10 dark:text-amber-100">
-      <Info className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-300" />
-      <div className="flex flex-col gap-1.5">
-        <p>{children}</p>
-        {action && <div className="text-[13px]">{action}</div>}
-      </div>
     </div>
   );
 }

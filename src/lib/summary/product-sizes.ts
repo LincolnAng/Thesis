@@ -41,16 +41,6 @@ export function sizeName(product: Product): string {
   return product.sizeLabel?.trim() || "Standard";
 }
 
-/**
- * A size label as a reader takes it in. A bare number ("5") says nothing on its own, so it is
- * shown as "Size 5"; anything with words or a unit in it ("250g", "gift box") stays as typed.
- */
-export function sizeTag(label: string | null | undefined): string | null {
-  const t = label?.trim();
-  if (!t) return null;
-  return /^\d+(\.\d+)?$/.test(t) ? `Size ${t}` : t;
-}
-
 /** What to call it on a screen that does not. */
 export function fullName(product: Product, products: Product[]): string {
   if (!product.sizeOfId) return product.sizeLabel ? `${product.name} · ${product.sizeLabel}` : product.name;
