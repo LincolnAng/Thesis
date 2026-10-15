@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo, useState } from "react";
 import { ArrowDownLeft, ArrowUpRight, HandCoins, History as HistoryIcon, Pencil } from "lucide-react";
-import { EXPENSE_CATEGORY_LABELS, PRICE_TYPE_LABELS, formatDate, formatPeso } from "@/lib/format";
+import { ENTRY_TYPE_LABELS, EXPENSE_CATEGORY_LABELS, PRICE_TYPE_LABELS, formatDate, formatPeso } from "@/lib/format";
 import { dueInfo, methodOf, obligationInfo, obligationKind, outstanding, paymentsOf } from "@/lib/transactions/ledger";
 import { lineSubtotal, orderTotal } from "@/lib/transactions/order-lines";
 import { PaymentLine, QuickPay } from "@/components/transactions/obligation-dialogs";
@@ -12,7 +12,7 @@ import type { Entry } from "@/lib/store/types";
  * Every recorded transaction, one row each, in one fixed set of columns — the same for sales,
  * expenses, receivables and payables:
  *
- *   Date · Customer / Supplier · Product · Qty · Amount · Mode of payment · Status · Recorded by
+ *   Date · Customer / Supplier · Type · Product · Qty · Amount · Mode of payment · Status · Recorded by
  *
  * Every cell is centred and ruled off from the next. Mode of payment is how the money moved —
  * Cash, or the bank or wallet it went through (BDO, GCash).
@@ -82,6 +82,24 @@ function paidBy(e: Entry, showPayment: boolean): { method: string; bank: string 
     return [...seen.values()];
   }
   return e.paymentMethod ? [{ method: e.paymentMethod, bank: e.bankName ?? null }] : [];
+}
+
+/** What kind of transaction a row is, in one word. */
+function typeLabel(e: Entry): string {
+  switch (e.type) {
+    case "SALE":
+      return "Sale";
+    case "EXPENSE":
+      return "Expense";
+    case "CAPITAL":
+    case "ASSET":
+    case "RND":
+      return "Investment";
+    case "WASTE":
+      return "Spoilage";
+    default:
+      return ENTRY_TYPE_LABELS[e.type] ?? e.type;
+  }
 }
 
 type Tone = "good" | "warn" | "bad";
@@ -289,7 +307,7 @@ export function TransactionTable({
   const rule = "border-r border-line/15 last:border-r-0";
   const th = `px-3 py-2.5 text-center text-[11px] font-bold uppercase leading-tight tracking-wide text-muted-foreground ${rule}`;
   const td = `px-3 py-3 text-center align-middle ${rule}`;
-  const colCount = showPayment ? 9 : 7;
+  const colCount = showPayment ? 10 : 8;
 
   const head = (label: string, key?: SortKey) => (
     <th scope="col" className={`${th} ${label.length > 12 ? "max-w-[96px]" : "whitespace-nowrap"}`}>
@@ -320,6 +338,7 @@ export function TransactionTable({
           <tr>
             {head("Date", "date")}
             {head("Customer / Supplier")}
+            {head("Type")}
             {head("Product")}
             {head("Qty")}
             {head("Amount", "amount")}
@@ -359,6 +378,7 @@ export function TransactionTable({
                     <span className="block truncate font-medium">{e.counterparty}</span>
                     {carried && <div className="text-[11px] font-semibold text-[var(--status-warning)]">Carried from {carried}</div>}
                   </td>
+                  <td className={`${td} whitespace-nowrap`}>{typeLabel(e)}</td>
                   {/* Every product in the order, one per line, each with its own quantity on the same line next door. */}
                   <td
                     className={`${td} max-w-[260px]`}
@@ -423,7 +443,7 @@ export function TransactionTable({
                       {showPayment && (
                         <ActionIcon
                           icon={HandCoins}
-                          label="Pay"
+                          label="Payment"
                           title={canPay ? (kind === "receivable" ? "Log a payment received" : "Log a payment made") : kind ? "Nothing left to pay" : "Paid on the spot — nothing owed"}
                           enabled={canPay}
                           active={paying === e.id}
