@@ -103,82 +103,70 @@ export function QuickPay({
   }
 
   const seg = (on: boolean) =>
-    `h-8 flex-1 rounded-md px-3 text-[13px] font-semibold transition ${on ? "bg-cacao text-ivory" : "text-muted-foreground hover:bg-card"}`;
-  const fieldLabel = "text-[11.5px] font-semibold text-muted-foreground";
+    `h-8 rounded-md px-3 text-[13px] font-semibold transition ${on ? "bg-cacao text-ivory" : "text-muted-foreground hover:bg-card"}`;
   const submit = (e: React.KeyboardEvent) => e.key === "Enter" && valid && !problem && !saving && void save();
 
+  // Laid out like the payment history it adds to: a titled block, then one line — day, how,
+  // amount — with the note under it.
   return (
-    <div className="px-4 py-3">
-      <div className="flex max-w-[680px] flex-col gap-3 rounded-xl border border-line/15 bg-card p-3.5" onClick={(e) => e.stopPropagation()}>
-        <p className="text-[13px] font-semibold">{incoming ? "Log a payment received" : "Log a payment made"}</p>
-
-        {/* Amount · how · when — one row of equal-height fields, each labelled above */}
-        <div className="grid grid-cols-1 gap-3 min-[560px]:grid-cols-3">
-          <label className="flex flex-col gap-1">
-            <span className={fieldLabel}>Amount</span>
-            <span className="relative">
-              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[14px] font-semibold text-muted-foreground">₱</span>
-              <Input
-                inputMode="decimal"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
-                onKeyDown={submit}
-                aria-label="Amount"
-                autoFocus
-                className="h-10 w-full pl-7 text-[14px] font-semibold tabular-nums"
-              />
-            </span>
-          </label>
-          <div className="flex flex-col gap-1">
-            <span className={fieldLabel}>Paid by</span>
-            <div className="flex h-10 gap-0.5 rounded-lg bg-secondary p-1" role="radiogroup" aria-label="How it was paid">
-              <button type="button" role="radio" aria-checked={method === "cash"} onClick={() => setMethod("cash")} className={seg(method === "cash")}>
-                Cash
-              </button>
-              <button type="button" role="radio" aria-checked={method === "bank_transfer"} onClick={() => setMethod("bank_transfer")} className={seg(method === "bank_transfer")}>
-                Bank
-              </button>
-            </div>
-          </div>
-          <label className="flex flex-col gap-1">
-            <span className={fieldLabel}>Paid on</span>
-            <Input type="date" value={date} max={today} min={dayOf(entry.timestamp)} onChange={(e) => setDate(e.target.value)} aria-label="Day it was paid" className="h-10 w-full text-[13.5px]" />
-          </label>
+    <div className="px-5 py-4 text-[13px]" onClick={(e) => e.stopPropagation()}>
+      <section className="flex max-w-[620px] flex-col gap-2">
+        <div className="flex items-baseline justify-between gap-3 border-b border-line/15 pb-1.5">
+          <h4 className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{incoming ? "Log a payment received" : "Log a payment made"}</h4>
+          <span className="text-[12.5px] text-muted-foreground">{formatPeso(remaining)} still owed</span>
         </div>
 
-        {method === "bank_transfer" && (
-          <label className="flex flex-col gap-1 min-[560px]:w-1/3">
-            <span className={fieldLabel}>Bank</span>
-            <Input list="quickpay-banks" value={bank} onChange={(e) => setBank(e.target.value)} onKeyDown={submit} placeholder="Which bank?" aria-label="Bank" className="h-10 text-[13.5px]" />
-            <datalist id="quickpay-banks">
-              {COMMON_BANKS.map((b) => (
-                <option key={b} value={b} />
-              ))}
-            </datalist>
-          </label>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <Input type="date" value={date} max={today} min={dayOf(entry.timestamp)} onChange={(e) => setDate(e.target.value)} aria-label="Day it was paid" className="h-9 w-[150px] text-[13px]" />
+          <div className="flex gap-0.5 rounded-lg bg-secondary p-0.5" role="radiogroup" aria-label="How it was paid">
+            <button type="button" role="radio" aria-checked={method === "cash"} onClick={() => setMethod("cash")} className={seg(method === "cash")}>
+              Cash
+            </button>
+            <button type="button" role="radio" aria-checked={method === "bank_transfer"} onClick={() => setMethod("bank_transfer")} className={seg(method === "bank_transfer")}>
+              Bank
+            </button>
+          </div>
+          {method === "bank_transfer" && (
+            <>
+              <Input list="quickpay-banks" value={bank} onChange={(e) => setBank(e.target.value)} onKeyDown={submit} placeholder="Which bank?" aria-label="Bank" className="h-9 w-32 text-[13px]" />
+              <datalist id="quickpay-banks">
+                {COMMON_BANKS.map((b) => (
+                  <option key={b} value={b} />
+                ))}
+              </datalist>
+            </>
+          )}
+          <span className="relative ml-auto">
+            <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[13px] font-semibold text-muted-foreground">₱</span>
+            <Input
+              inputMode="decimal"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+              onKeyDown={submit}
+              aria-label="Amount"
+              autoFocus
+              className="h-9 w-28 pl-6 text-right text-[13.5px] font-semibold tabular-nums"
+            />
+          </span>
+        </div>
 
-        <label className="flex flex-col gap-1">
-          <span className={fieldLabel}>Note (optional)</span>
-          <Input value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={submit} placeholder="e.g. paid half, rest on Friday" aria-label="Note" className="h-10 text-[13.5px]" />
-        </label>
+        <Input value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={submit} placeholder="Note (optional) — e.g. paid half, rest on Friday" aria-label="Note" className="h-9 text-[13px]" />
 
-        {/* What it comes to, then the buttons */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line/10 pt-3">
-          <span className={`text-[13px] ${problem && problem !== "Which bank?" ? "font-semibold text-danger" : "text-muted-foreground"}`} aria-live="polite">
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+          <span className={`text-[12.5px] ${problem && problem !== "Which bank?" ? "font-semibold text-danger" : "text-muted-foreground"}`} aria-live="polite">
             {problem ?? (valid ? (leftAfter > 0 ? `${formatPeso(leftAfter)} left after this` : "This settles it in full") : "Type the amount paid")}
           </span>
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="ghost" className="h-9 px-3" onClick={onClose}>
+          <div className="flex items-center gap-1.5">
+            <button type="button" onClick={onClose} className="min-h-8 rounded-lg px-3 text-[13px] font-semibold text-muted-foreground hover:bg-secondary">
               Cancel
-            </Button>
-            <Button size="sm" className="h-9 px-5" disabled={saving || !valid || !!problem} onClick={() => void save()}>
-              {saving ? "Saving…" : "Save payment"}
+            </button>
+            <Button size="sm" className="h-8 px-4" disabled={saving || !valid || !!problem} onClick={() => void save()}>
+              {saving ? "Saving…" : "Save"}
             </Button>
           </div>
         </div>
         {error && <ErrorLine text={error} />}
-      </div>
+      </section>
     </div>
   );
 }
