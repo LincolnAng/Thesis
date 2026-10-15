@@ -15,7 +15,7 @@ import type { Entry } from "@/lib/store/types";
  *   Date · Customer / Supplier · Product · Qty · Amount · Payment (mode · bank) · Owed · Deadline · Recorded by
  *
  * Owed holds what is still owed on a receivable or payable: the balance on top, and beneath it a
- * short pill (Recv / Pay, with an arrow in or out) saying which it is, beside the icon that logs a
+ * short pill (Rcv in green / Pay in red, with an arrow in or out) saying which it is, beside the icon that logs a
  * payment.
  *
  * An order of several products is still one row: its Product, Qty and Amount cells list the products
@@ -317,11 +317,11 @@ export function TransactionTable({
                     <span
                       title={kind === "receivable" ? "Receivable: a customer owes us this" : "Payable: we owe a supplier this"}
                       className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wide ${
-                        kind === "receivable" ? "bg-success/10 text-success" : "bg-[#9A6B12]/10 text-[#9A6B12]"
+                        kind === "receivable" ? "bg-success/10 text-success" : "bg-danger/10 text-danger"
                       }`}
                     >
                       {kind === "receivable" ? <ArrowDownLeft className="h-3 w-3" strokeWidth={2.6} /> : <ArrowUpRight className="h-3 w-3" strokeWidth={2.6} />}
-                      {kind === "receivable" ? "Recv" : "Pay"}
+                      {kind === "receivable" ? "Rcv" : "Pay"}
                     </span>
                     {owed && info.remaining > 0 && (
                       <button
