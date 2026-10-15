@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, Trash2, X } from "lucide-react";
+import { Check, Pencil, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -26,12 +26,145 @@ function ErrorLine({ text }: { text: string }) {
   );
 }
 
+/** The columns every payment line uses — the history, a correction and a new payment alike — so
+ *  they all line up: day · how · amount · its two buttons. */
+export const PAYMENT_GRID = "grid grid-cols-[136px_minmax(0,1fr)_108px_72px] items-center gap-x-3";
+
+interface PaymentValues {
+  date: string;
+  amount: number;
+  method: "cash" | "bank_transfer";
+  bankName: string | null;
+  note: string;
+}
+
 /**
- * A payment against something already owed, under its row: the amount (starting at the whole
- * balance, the common case), cash or bank, and Save — then the day it was paid (today unless
- * changed) and an optional note. The day can't be in the future or before the transaction. It never
- * creates a second receivable or payable: the amount is added to that one's history and the
- * balance drops by exactly that much.
+ * One payment being written — a new one, or a correction — laid out exactly like a line of the
+ * history it belongs to: the day, cash or bank (and which bank), the amount, then save and
+ * cancel where the pencil and bin sit; the note under it, where a saved note shows.
+ */
+function PaymentForm({
+  initial,
+  minDate,
+  check,
+  hint,
+  onSave,
+  onCancel,
+}: {
+  initial: { date: string; amount: string; method: "cash" | "bank_transfer"; bank: string; note: string };
+  minDate: string;
+  /** Anything wrong with the amount before it's even tried (more than is owed). */
+  check?: (amount: number) => string | null;
+  /** A quiet line about what this payment leaves. */
+  hint?: (amount: number) => string;
+  /** Saves; resolves to an error to show, or null when it went through. */
+  onSave: (v: PaymentValues) => Promise<string | null>;
+  onCancel: () => void;
+}) {
+  const today = todayOf(new Date());
+  const [date, setDate] = useState(initial.date);
+  const [amount, setAmount] = useState(initial.amount);
+  const [method, setMethod] = useState(initial.method);
+  const [bank, setBank] = useState(initial.bank);
+  const [note, setNote] = useState(initial.note);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const typed = Number(amount.replace(/[^0-9.]/g, ""));
+  const valid = Number.isFinite(typed) && typed > 0;
+  const problem = !valid
+    ? null
+    : (check?.(typed) ??
+      (!date
+        ? "Pick the day it was paid."
+        : date > today
+          ? "That day hasn't happened yet."
+          : date < minDate
+            ? "That's before the transaction itself."
+            : null));
+  const ready = valid && !problem && !(method === "bank_transfer" && !bank.trim());
+
+  async function save() {
+    if (!ready || saving) return;
+    setError(null);
+    setSaving(true);
+    const err = await onSave({ date, amount: typed, method, bankName: method === "bank_transfer" ? bank.trim() : null, note: note.trim() });
+    setSaving(false);
+    if (err) setError(err);
+  }
+  const enter = (e: React.KeyboardEvent) => e.key === "Enter" && void save();
+  const seg = (on: boolean) => `h-8 rounded-md px-2.5 text-[12.5px] font-semibold transition ${on ? "bg-cacao text-ivory" : "text-muted-foreground hover:bg-card"}`;
+  const line = problem ?? (valid && hint ? hint(typed) : "");
+
+  return (
+    <li className="-mx-2 flex flex-col gap-1.5 rounded-lg bg-secondary/60 px-2 py-2" onClick={(e) => e.stopPropagation()}>
+      <div className={PAYMENT_GRID}>
+        <Input type="date" value={date} max={today} min={minDate} onChange={(e) => setDate(e.target.value)} aria-label="Day it was paid" className="h-8 w-full px-2 text-[12.5px]" />
+        <div className="flex min-w-0 items-center gap-1.5">
+          <div className="flex shrink-0 gap-0.5 rounded-lg bg-card p-0.5" role="radiogroup" aria-label="How it was paid">
+            <button type="button" role="radio" aria-checked={method === "cash"} onClick={() => setMethod("cash")} className={seg(method === "cash")}>
+              Cash
+            </button>
+            <button type="button" role="radio" aria-checked={method === "bank_transfer"} onClick={() => setMethod("bank_transfer")} className={seg(method === "bank_transfer")}>
+              Bank
+            </button>
+          </div>
+          {method === "bank_transfer" && (
+            <>
+              <Input list="payment-banks" value={bank} onChange={(e) => setBank(e.target.value)} onKeyDown={enter} placeholder="Which bank?" aria-label="Bank" className="h-8 min-w-0 flex-1 text-[12.5px]" />
+              <datalist id="payment-banks">
+                {COMMON_BANKS.map((b) => (
+                  <option key={b} value={b} />
+                ))}
+              </datalist>
+            </>
+          )}
+        </div>
+        <span className="relative">
+          <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[12.5px] text-muted-foreground">₱</span>
+          <Input
+            inputMode="decimal"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+            onKeyDown={enter}
+            aria-label="Amount"
+            autoFocus
+            className="h-8 w-full pl-5 text-right text-[13px] font-semibold tabular-nums"
+          />
+        </span>
+        <span className="flex items-center justify-end gap-0.5">
+          <button
+            type="button"
+            onClick={() => void save()}
+            disabled={!ready || saving}
+            aria-label="Save payment"
+            title="Save"
+            className="flex h-8 w-8 items-center justify-center rounded-lg bg-cacao text-ivory transition disabled:opacity-40"
+          >
+            <Check className="h-4 w-4" strokeWidth={3} />
+          </button>
+          <button type="button" onClick={onCancel} aria-label="Cancel" title="Cancel" className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-card">
+            <X className="h-4 w-4" />
+          </button>
+        </span>
+      </div>
+      <div className={PAYMENT_GRID}>
+        <span className={`text-[11.5px] ${problem ? "font-semibold text-danger" : "text-muted-foreground"}`} aria-live="polite">
+          {saving ? "Saving…" : line}
+        </span>
+        <Input value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={enter} placeholder="Note (optional)" aria-label="Note" className="col-span-2 h-8 text-[12.5px]" />
+        <span />
+      </div>
+      {error && <ErrorLine text={error} />}
+    </li>
+  );
+}
+
+/**
+ * A new payment against something already owed, as a new line at the end of its payment
+ * history: the day (today unless changed), cash or bank, the amount (the whole balance to start
+ * with, the common case) and a note. It never creates a second receivable or payable: the amount
+ * is added to that one's history and the balance drops by exactly that much.
  */
 export function QuickPay({
   entry,
@@ -49,135 +182,45 @@ export function QuickPay({
 }) {
   const w = WORDS[kind];
   const incoming = kind === "receivable";
-  const today = todayOf(new Date());
-  const [amount, setAmount] = useState(String(remaining));
-  const [method, setMethod] = useState<"cash" | "bank_transfer">("cash");
-  const [bank, setBank] = useState("");
-  const [date, setDate] = useState(today);
-  const [note, setNote] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-
-  const typed = Number(amount.replace(/[^0-9.]/g, ""));
-  const valid = Number.isFinite(typed) && typed > 0;
-  const leftAfter = valid ? Math.max(0, Math.round((remaining - typed) * 100) / 100) : remaining;
-  const problem = !valid
-    ? null
-    : typed > remaining + 0.005
-      ? `More than the ${formatPeso(remaining)} still owed.`
-      : !date
-        ? "Pick the day it was paid."
-        : date > today
-          ? "That day hasn't happened yet."
-          : date < dayOf(entry.timestamp)
-            ? "That's before the transaction itself."
-            : method === "bank_transfer" && !bank.trim()
-          ? "Which bank?"
-          : null;
-
-  async function save() {
-    setError(null);
-    const result = recordPaymentOn(entry.id, { amount: typed, date, method, bankName: method === "bank_transfer" ? bank.trim() : null, note: note.trim() });
-    if (!result.ok) return setError(result.reason);
-    setSaving(true);
-    const confirmed = await result.saved;
-    setSaving(false);
-    if (!confirmed) {
-      return setError("Not saved yet — check the internet connection. It keeps trying, so please don't enter it twice.");
-    }
-    const newId = result.entry.payments?.at(-1)?.id;
-    const amount = typed;
-    onSaved(
-      result.remaining > 0
-        ? `${w.done} ${formatPeso(amount)}. ${formatPeso(result.remaining)} is still ${incoming ? "owed to you" : "owed by you"}.`
-        : `${w.done} ${formatPeso(amount)}. This is now paid in full.`,
-      newId
-        ? async () => {
-            const back = removePaymentOn(entry.id, newId);
-            if (!back.ok) return back.reason;
-            return (await back.saved) ? `Took back the ${formatPeso(amount)} payment.` : "Not saved yet — check the internet connection.";
-          }
-        : undefined,
-    );
-    onClose();
-  }
-
-  const seg = (on: boolean) =>
-    `h-8 rounded-md px-3 text-[13px] font-semibold transition ${on ? "bg-cacao text-ivory" : "text-muted-foreground hover:bg-card"}`;
-  const submit = (e: React.KeyboardEvent) => e.key === "Enter" && valid && !problem && !saving && void save();
-
-  // Laid out like the payment history it adds to: a titled block, then one line — day, how,
-  // amount — with the note under it.
   return (
-    <div className="px-5 py-4 text-[13px]" onClick={(e) => e.stopPropagation()}>
-      <section className="flex max-w-[620px] flex-col gap-2">
-        <div className="flex items-baseline justify-between gap-3 border-b border-line/15 pb-1.5">
-          <h4 className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{incoming ? "Log a payment received" : "Log a payment made"}</h4>
-          <span className="text-[12.5px] text-muted-foreground">{formatPeso(remaining)} still owed</span>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-2">
-            <span className="text-[12.5px] font-semibold text-muted-foreground">Paid on</span>
-            <Input type="date" value={date} max={today} min={dayOf(entry.timestamp)} onChange={(e) => setDate(e.target.value)} aria-label="Day it was paid" className="h-9 w-[150px] text-[13px]" />
-          </label>
-          <div className="flex gap-0.5 rounded-lg bg-secondary p-0.5" role="radiogroup" aria-label="How it was paid">
-            <button type="button" role="radio" aria-checked={method === "cash"} onClick={() => setMethod("cash")} className={seg(method === "cash")}>
-              Cash
-            </button>
-            <button type="button" role="radio" aria-checked={method === "bank_transfer"} onClick={() => setMethod("bank_transfer")} className={seg(method === "bank_transfer")}>
-              Bank
-            </button>
-          </div>
-          {method === "bank_transfer" && (
-            <>
-              <Input list="quickpay-banks" value={bank} onChange={(e) => setBank(e.target.value)} onKeyDown={submit} placeholder="Which bank?" aria-label="Bank" className="h-9 w-32 text-[13px]" />
-              <datalist id="quickpay-banks">
-                {COMMON_BANKS.map((b) => (
-                  <option key={b} value={b} />
-                ))}
-              </datalist>
-            </>
-          )}
-          <span className="relative ml-auto">
-            <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[13px] font-semibold text-muted-foreground">₱</span>
-            <Input
-              inputMode="decimal"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
-              onKeyDown={submit}
-              aria-label="Amount"
-              autoFocus
-              className="h-9 w-28 pl-6 text-right text-[13.5px] font-semibold tabular-nums"
-            />
-          </span>
-        </div>
-
-        <Input value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={submit} placeholder="Note (optional) — e.g. paid half, rest on Friday" aria-label="Note" className="h-9 text-[13px]" />
-
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-          <span className={`text-[12.5px] ${problem && problem !== "Which bank?" ? "font-semibold text-danger" : "text-muted-foreground"}`} aria-live="polite">
-            {problem ?? (valid && leftAfter > 0 ? `${formatPeso(leftAfter)} left after this` : "")}
-          </span>
-          <div className="flex items-center gap-1.5">
-            <button type="button" onClick={onClose} className="min-h-8 rounded-lg px-3 text-[13px] font-semibold text-muted-foreground hover:bg-secondary">
-              Cancel
-            </button>
-            <Button size="sm" className="h-8 px-4" disabled={saving || !valid || !!problem} onClick={() => void save()}>
-              {saving ? "Saving…" : "Save"}
-            </Button>
-          </div>
-        </div>
-        {error && <ErrorLine text={error} />}
-      </section>
-    </div>
+    <PaymentForm
+      initial={{ date: todayOf(new Date()), amount: String(remaining), method: "cash", bank: "", note: "" }}
+      minDate={dayOf(entry.timestamp)}
+      check={(n) => (n > remaining + 0.005 ? `More than the ${formatPeso(remaining)} owed.` : null)}
+      hint={(n) => {
+        const left = Math.max(0, Math.round((remaining - n) * 100) / 100);
+        return left > 0 ? `${formatPeso(left)} left after` : "";
+      }}
+      onCancel={onClose}
+      onSave={async (v) => {
+        const result = recordPaymentOn(entry.id, { amount: v.amount, date: v.date, method: v.method, bankName: v.bankName, note: v.note });
+        if (!result.ok) return result.reason;
+        if (!(await result.saved)) return "Not saved yet — check the internet connection. It keeps trying, so please don't enter it twice.";
+        const newId = result.entry.payments?.at(-1)?.id;
+        onSaved(
+          result.remaining > 0
+            ? `${w.done} ${formatPeso(v.amount)}. ${formatPeso(result.remaining)} is still ${incoming ? "owed to you" : "owed by you"}.`
+            : `${w.done} ${formatPeso(v.amount)}. This is now paid in full.`,
+          newId
+            ? async () => {
+                const back = removePaymentOn(entry.id, newId);
+                if (!back.ok) return back.reason;
+                return (await back.saved) ? `Took back the ${formatPeso(v.amount)} payment.` : "Not saved yet — check the internet connection.";
+              }
+            : undefined,
+        );
+        onClose();
+        return null;
+      }}
+    />
   );
 }
 
 /**
  * One payment in an obligation's history. A mistake — a typo in the amount, the wrong day, cash
- * that was really a transfer — is fixed here: correct it in place, or remove it. Either way the
- * balance follows, and the ledger checks a correction exactly as it checks a new payment.
+ * that was really a transfer — is fixed here: correct it in place (the same line, now editable),
+ * or remove it. Either way the balance follows, and the ledger checks a correction exactly as it
+ * checks a new payment.
  */
 export function PaymentLine({
   entry,
@@ -192,11 +235,6 @@ export function PaymentLine({
   onChanged: (message: string) => void;
 }) {
   const [mode, setMode] = useState<"view" | "edit" | "remove">("view");
-  const [amount, setAmount] = useState(String(payment.amount));
-  const [date, setDate] = useState(payment.date);
-  const [method, setMethod] = useState<"cash" | "bank_transfer">(payment.method === "bank_transfer" ? "bank_transfer" : "cash");
-  const [bank, setBank] = useState(payment.bankName ?? "");
-  const [note, setNote] = useState(payment.note ?? "");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -204,71 +242,44 @@ export function PaymentLine({
   const day = new Date(`${payment.date}T00:00:00`).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" });
   const iconBtn = "flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao";
 
-  async function finish(result: ReturnType<typeof removePaymentOn>, message: string) {
+  if (mode === "edit") {
+    return (
+      <PaymentForm
+        initial={{
+          date: payment.date,
+          amount: String(payment.amount),
+          method: payment.method === "bank_transfer" ? "bank_transfer" : "cash",
+          bank: payment.bankName ?? "",
+          note: payment.note ?? "",
+        }}
+        minDate={dayOf(entry.timestamp)}
+        onCancel={() => setMode("view")}
+        onSave={async (v) => {
+          const result = editPaymentOn(entry.id, payment.id, { amount: v.amount, date: v.date, method: v.method, bankName: v.bankName, note: v.note });
+          if (!result.ok) return result.reason;
+          if (!(await result.saved)) return "Not saved yet — check the internet connection and try again.";
+          setMode("view");
+          onChanged(`Corrected the payment to ${formatPeso(v.amount)}.`);
+          return null;
+        }}
+      />
+    );
+  }
+
+  async function remove() {
+    const result = removePaymentOn(entry.id, payment.id);
     if (!result.ok) return setError(result.reason);
     setSaving(true);
     const ok = await result.saved;
     setSaving(false);
     if (!ok) return setError("Not saved yet — check the internet connection and try again.");
     setMode("view");
-    onChanged(message);
-  }
-
-  if (mode === "edit") {
-    const typed = Number(amount.replace(/[^0-9.]/g, ""));
-    const seg = (on: boolean) => `h-8 rounded-md px-2.5 text-[12.5px] font-semibold ${on ? "bg-cacao text-ivory" : "text-muted-foreground hover:bg-card"}`;
-    return (
-      <li className="flex flex-col gap-1.5 rounded-lg bg-card p-2" onClick={(e) => e.stopPropagation()}>
-        <div className="flex flex-wrap items-center gap-2">
-          <Input type="date" value={date} max={todayOf(new Date())} min={dayOf(entry.timestamp)} onChange={(e) => setDate(e.target.value)} aria-label="Day of payment" className="h-8 w-auto text-[13px]" />
-          <div className="relative">
-            <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[13px] text-muted-foreground">₱</span>
-            <Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} aria-label="Amount" className="h-8 w-28 pl-5 text-[13px] font-semibold tabular-nums" />
-          </div>
-          <div className="flex gap-0.5 rounded-lg bg-secondary p-0.5" role="radiogroup" aria-label="How it was paid">
-            <button type="button" role="radio" aria-checked={method === "cash"} onClick={() => setMethod("cash")} className={seg(method === "cash")}>
-              Cash
-            </button>
-            <button type="button" role="radio" aria-checked={method === "bank_transfer"} onClick={() => setMethod("bank_transfer")} className={seg(method === "bank_transfer")}>
-              Bank
-            </button>
-          </div>
-          {method === "bank_transfer" && (
-            <>
-              <Input list={`banks-${payment.id}`} value={bank} onChange={(e) => setBank(e.target.value)} placeholder="Which bank?" aria-label="Bank" className="h-8 w-32 text-[13px]" />
-              <datalist id={`banks-${payment.id}`}>
-                {COMMON_BANKS.map((b) => (
-                  <option key={b} value={b} />
-                ))}
-              </datalist>
-            </>
-          )}
-          <Button
-            size="sm"
-            className="h-8 px-3"
-            disabled={saving || !(typed > 0)}
-            onClick={() =>
-              void finish(
-                editPaymentOn(entry.id, payment.id, { amount: typed, date, method, bankName: method === "bank_transfer" ? bank.trim() : null, note: note.trim() }),
-                `Corrected the payment to ${formatPeso(typed)}.`,
-              )
-            }
-          >
-            {saving ? "Saving…" : "Save"}
-          </Button>
-          <button type="button" onClick={() => (setMode("view"), setError(null))} aria-label="Cancel" className={iconBtn}>
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" aria-label="Note" className="h-8 text-[13px]" />
-        {error && <ErrorLine text={error} />}
-      </li>
-    );
+    onChanged(`Removed the ${formatPeso(payment.amount)} payment.`);
   }
 
   return (
     <li className="flex flex-col gap-0.5 py-1" onClick={(e) => mode !== "view" && e.stopPropagation()}>
-      <div className="grid grid-cols-[96px_minmax(0,1fr)_auto_68px] items-center gap-x-4">
+      <div className={PAYMENT_GRID}>
         <span className="text-muted-foreground tabular-nums">{day}</span>
         <span className="truncate">{how}</span>
         <span className="text-right font-semibold tabular-nums">{formatPeso(payment.amount)}</span>
@@ -285,19 +296,19 @@ export function PaymentLine({
           )}
         </span>
       </div>
-      {payment.note && <p className="pl-[112px] text-[12.5px] italic text-muted-foreground">“{payment.note}”</p>}
+      {payment.note && (
+        <div className={PAYMENT_GRID}>
+          <span />
+          <p className="col-span-2 text-[12.5px] italic text-muted-foreground">“{payment.note}”</p>
+        </div>
+      )}
       {mode === "remove" && (
         <div className="flex flex-wrap items-center justify-end gap-2 rounded-lg bg-danger/5 px-2 py-1.5">
           <span className="text-[12.5px]">Remove this {formatPeso(payment.amount)} payment? The balance goes back up by that much.</span>
           <button type="button" onClick={() => setMode("view")} className="min-h-8 rounded-lg px-2.5 text-[12.5px] font-semibold text-muted-foreground hover:bg-secondary">
             Keep it
           </button>
-          <button
-            type="button"
-            disabled={saving}
-            onClick={() => void finish(removePaymentOn(entry.id, payment.id), `Removed the ${formatPeso(payment.amount)} payment.`)}
-            className="min-h-8 rounded-lg bg-danger px-3 text-[12.5px] font-semibold text-white disabled:opacity-50"
-          >
+          <button type="button" disabled={saving} onClick={() => void remove()} className="min-h-8 rounded-lg bg-danger px-3 text-[12.5px] font-semibold text-white disabled:opacity-50">
             {saving ? "Removing…" : "Remove"}
           </button>
         </div>

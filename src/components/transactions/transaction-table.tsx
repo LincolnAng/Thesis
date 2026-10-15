@@ -156,7 +156,22 @@ function Block({ title, aside, children }: { title: string; aside?: React.ReactN
  * share of the amount), the price type and the transaction's note; on the right the payments —
  * the due date, each payment with its note, and what can be done next.
  */
-function Details({ e, showPayment, owed, onPay }: { e: Entry; showPayment: boolean; owed?: OwedActions; onPay: () => void }) {
+function Details({
+  e,
+  showPayment,
+  owed,
+  paying,
+  onPay,
+  onClosePay,
+}: {
+  e: Entry;
+  showPayment: boolean;
+  owed?: OwedActions;
+  /** The new-payment line is open at the end of the history. */
+  paying: boolean;
+  onPay: () => void;
+  onClosePay: () => void;
+}) {
   const kind = showPayment ? obligationKind(e) : null;
   const info = kind ? obligationInfo(e, new Date()) : null;
   const payments = kind ? paymentsOf(e) : [];
@@ -192,11 +207,12 @@ function Details({ e, showPayment, owed, onPay }: { e: Entry; showPayment: boole
           title="Payments"
           aside={<span className={`text-[12.5px] ${info.status === "overdue" || info.status === "defaulted" ? "font-semibold text-danger" : faint}`}>{dueLine(e)}</span>}
         >
-          {payments.length > 0 ? (
+          {payments.length > 0 || (paying && owed) ? (
             <ul className="flex flex-col">
               {payments.map((p) => (
                 <PaymentLine key={p.id} entry={e} payment={p} canChange={!!owed} onChanged={(m) => owed?.onSaved(m)} />
               ))}
+              {paying && owed && kind && <QuickPay entry={e} kind={kind} remaining={outstanding(e)} onClose={onClosePay} onSaved={owed.onSaved} />}
             </ul>
           ) : (
             <p className={`py-1 ${faint}`}>No payments yet.</p>
@@ -215,7 +231,7 @@ function Details({ e, showPayment, owed, onPay }: { e: Entry; showPayment: boole
           )}
           {owed && info.status !== "settled" && (
             <div className="mt-1.5 flex flex-wrap gap-2">
-              <button type="button" onClick={onPay} className={button}>
+              <button type="button" onClick={onPay} disabled={paying} className={`${button} disabled:opacity-40`}>
                 <HandCoins className="h-4 w-4" />
                 Log Payment
               </button>
@@ -471,7 +487,11 @@ export function TransactionTable({
                           title={canPay ? (kind === "receivable" ? "Log a payment received" : "Log a payment made") : kind ? "Nothing left to pay" : "Paid on the spot — nothing owed"}
                           enabled={canPay}
                           active={paying === e.id}
-                          onClick={() => setPaying(paying === e.id ? null : e.id)}
+                          onClick={() => {
+                            if (paying === e.id) return setPaying(null);
+                            setPaying(e.id);
+                            setOpen((prev) => new Set(prev).add(e.id));
+                          }}
                         />
                       )}
                       {showPayment && (
@@ -488,17 +508,10 @@ export function TransactionTable({
                     </div>
                   </td>
                 </tr>
-                {paying === e.id && owed && kind && (
-                  <tr className="border-b border-line/10 bg-secondary/40">
-                    <td colSpan={colCount} className="text-left">
-                      <QuickPay entry={e} kind={kind} remaining={outstanding(e)} onClose={() => setPaying(null)} onSaved={owed.onSaved} />
-                    </td>
-                  </tr>
-                )}
                 {isOpen && (
                   <tr className="border-b border-line/10 bg-secondary/40">
                     <td colSpan={colCount} className="text-left">
-                      <Details e={e} showPayment={showPayment} owed={owed} onPay={() => setPaying(e.id)} />
+                      <Details e={e} showPayment={showPayment} owed={owed} paying={paying === e.id} onPay={() => setPaying(e.id)} onClosePay={() => setPaying(null)} />
                     </td>
                   </tr>
                 )}
