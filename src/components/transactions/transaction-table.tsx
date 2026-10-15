@@ -2,91 +2,74 @@
 
 import { Fragment, useMemo, useState } from "react";
 import { Banknote, ChevronDown, ChevronRight, Pencil } from "lucide-react";
-import {
-  EXPENSE_CATEGORY_LABELS,
-  ENTRY_TYPE_LABELS,
-  PRICE_TYPE_LABELS,
-  describePaymentMethod,
-  formatDate,
-  formatPeso,
-} from "@/lib/format";
-import { dueInfo, obligationInfo, obligationKind, outstanding, paidSoFar, paymentsOf, statusOf, termOf, canBeOwed } from "@/lib/transactions/ledger";
+import { EXPENSE_CATEGORY_LABELS, ENTRY_TYPE_LABELS, describePaymentMethod, formatDate, formatPeso } from "@/lib/format";
+import { dueInfo, obligationInfo, obligationKind, outstanding, paidSoFar, paymentsOf, termOf, canBeOwed } from "@/lib/transactions/ledger";
 import { lineSubtotal, quantitySold } from "@/lib/transactions/order-lines";
 import type { Entry } from "@/lib/store/types";
 
 /**
- * Every recorded transaction, laid out the way the original Transactions sheet was: a striped
- * grid with Date, Type, Item, Qty, Customer / Supplier, Category, Amount and who logged it, in
- * that order. What the payment rework added sits beside it rather than replacing it — a
- * Payment column for executives — and the arrow on a row opens its details: the products in a
- * multi-product order, how it was paid, and every payment made on it.
+ * Every recorded transaction, one row each, in one fixed set of columns — the same for sales,
+ * expenses, receivables and payables, so what is owed reads exactly like what was paid:
  *
- * The pencil opens the same form that adds a transaction, which is where the money rules are
+ *   Date · Customer / Supplier · Product · Amount · Mode of payment · Bank · Deadline · Recorded by
+ *
+ * Bank greys out when the payment wasn't a bank transfer, and Deadline when nothing is owed.
+ * Only executives see the payment columns; an employee's copy has no payment data at all. The
+ * arrow on a row opens its details (the products in an order, every payment made on it) and
+ * the pencil opens the form that adds a transaction, which is where the money rules are
  * checked. Receivables and payables carry their own actions — record a payment, confirm a
- * default, move the due date — so what is owed is handled in the list it is read in. Tap a
- * column heading to sort by it.
+ * default, move the due date. Tap a column heading to sort by it.
  */
 
-type SortKey = "date" | "qty" | "amount";
+type SortKey = "date" | "amount" | "due";
 
-const STATUS_TEXT = { pending: "Not paid yet", partial: "Partly paid", settled: "Paid", defaulted: "Defaulted" } as const;
-
-function categoryOf(e: Entry): string {
-  if (e.type === "SALE") return e.priceType ? (PRICE_TYPE_LABELS[e.priceType] ?? e.priceType) : "Regular";
-  if (e.type === "CAPITAL") return "Capital";
-  if (e.type === "ASSET") return e.category ? (EXPENSE_CATEGORY_LABELS[e.category] ?? e.category) : "Asset";
-  if (e.category) return EXPENSE_CATEGORY_LABELS[e.category] ?? e.category;
-  return "—";
+/** What the row is, in a word, shown under the product. */
+function kindLabel(e: Entry): string {
+  if (e.type === "WASTE") return "Spoilage";
+  if (e.type === "CAPITAL") return "Capital put in";
+  if (e.type === "ASSET") return "Asset";
+  if (e.type === "RND") return "Investment";
+  const owedKind = obligationKind(e);
+  if (owedKind) return owedKind === "receivable" ? "Receivable" : "Payable";
+  return ENTRY_TYPE_LABELS[e.type] ?? e.type;
 }
 
-function TypeChip({ e }: { e: Entry }) {
-  const tone =
-    e.type === "SALE" || e.type === "CAPITAL"
-      ? "bg-success/10 text-success"
-      : e.type === "RND" || e.type === "ASSET"
-        ? "bg-cacao/10 text-cacao"
-        : e.type === "WASTE"
-          ? "bg-[var(--status-warning)]/10 text-[var(--status-warning)]"
-          : "bg-danger/10 text-danger";
-  const label = e.type === "WASTE" ? "Spoilage" : (ENTRY_TYPE_LABELS[e.type] ?? e.type);
-  return <span className={`inline-block rounded-full px-2 py-0.5 text-[11.5px] font-semibold leading-tight ${tone}`}>{label}</span>;
+/** How it was (or last was) paid: the transaction's own method, else its latest payment's. */
+function methodOf(e: Entry): { method: string | null; bank: string | null } {
+  if (e.paymentMethod) return { method: e.paymentMethod, bank: e.bankName ?? null };
+  const last = paymentsOf(e).at(-1);
+  return last?.method ? { method: last.method, bank: last.bankName } : { method: null, bank: null };
 }
 
-function PaymentCell({ e }: { e: Entry }) {
-  const term = termOf(e);
-  if (!canBeOwed(e) && e.type !== "CAPITAL") return <span className="text-muted-foreground">—</span>;
-  if (term === "spot") return <span className="text-muted-foreground">{e.type === "CAPITAL" ? "Received" : "Paid"}</span>;
+/** Money moves in these types; spoilage and older owner-funded investments carry no payment. */
+const hasPayment = (e: Entry) => e.type === "SALE" || e.type === "EXPENSE" || e.type === "CAPITAL" || e.type === "ASSET";
 
-  const status = statusOf(e) ?? "pending";
-  const due = dueInfo(e, new Date());
-  const owed = outstanding(e);
-  const termChip = term === "receivable" ? "bg-success/10 text-success" : "bg-[var(--status-warning)]/10 text-[var(--status-warning)]";
-  const statusChip =
-    status === "settled"
-      ? "border-success/40 text-success"
-      : status === "defaulted"
-        ? "border-danger/50 text-danger"
-        : status === "partial"
-          ? "border-[var(--status-warning)]/50 text-[var(--status-warning)]"
-          : "border-line/30 text-muted-foreground";
+const GREY = "bg-secondary/70 text-muted-foreground/50";
 
+/** The deadline of a receivable or payable, with where it stands. */
+function Deadline({ e }: { e: Entry }) {
+  const now = new Date();
+  const info = obligationInfo(e, now);
+  const due = dueInfo(e, now);
+  const bad = info.status === "overdue" || info.status === "defaulted";
   return (
     <div className="flex flex-col items-center gap-0.5">
-      <div className="flex flex-wrap items-center justify-center gap-1">
-        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${termChip}`}>{term === "receivable" ? "Receivable" : "Payable"}</span>
-        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusChip}`}>{STATUS_TEXT[status]}</span>
-      </div>
-      {owed > 0 && (
-        <span className={`text-[11.5px] ${due.overdue ? "font-semibold text-danger" : "text-muted-foreground"}`}>
-          {formatPeso(owed)} left
-          {due.daysLeft !== null &&
-            (due.overdue
-              ? ` · ${Math.abs(due.daysLeft)} day${Math.abs(due.daysLeft) === 1 ? "" : "s"} overdue`
-              : due.daysLeft === 0
-                ? " · due today"
-                : ` · due in ${due.daysLeft} day${due.daysLeft === 1 ? "" : "s"}`)}
-        </span>
-      )}
+      <span className={bad ? "font-semibold text-danger" : "font-semibold"}>{e.dueDate ? formatDate(e.dueDate) : "No date set"}</span>
+      <span className={`text-[11.5px] ${bad ? "font-semibold text-danger" : "text-muted-foreground"}`}>
+        {info.status === "settled"
+          ? "Paid in full"
+          : info.status === "defaulted"
+            ? `Defaulted · ${formatPeso(info.remaining)} left`
+            : `${formatPeso(info.remaining)} left${
+                due.daysLeft === null
+                  ? ""
+                  : due.overdue
+                    ? ` · ${Math.abs(due.daysLeft)} day${Math.abs(due.daysLeft) === 1 ? "" : "s"} overdue`
+                    : due.daysLeft === 0
+                      ? " · due today"
+                      : ` · in ${due.daysLeft} day${due.daysLeft === 1 ? "" : "s"}`
+              }`}
+      </span>
     </div>
   );
 }
@@ -202,7 +185,7 @@ export function TransactionTable({
   owed,
 }: {
   rows: Entry[];
-  /** Executives only — employees never see who owes what. */
+  /** Executives only — employees never see who owes what, or how anything was paid. */
   showPayment: boolean;
   onEdit: (entry: Entry) => void;
   /** For rows carried over from an earlier month: the month they come from, by id. */
@@ -214,7 +197,7 @@ export function TransactionTable({
 
   const sorted = useMemo(() => {
     if (!sort) return rows;
-    const val = (e: Entry) => (sort.key === "date" ? e.timestamp : sort.key === "qty" ? (quantitySold(e) ?? e.quantity ?? 0) : (e.amount ?? 0));
+    const val = (e: Entry) => (sort.key === "date" ? e.timestamp : sort.key === "due" ? (e.dueDate ?? "") : (e.amount ?? 0));
     return [...rows].sort((a, b) => {
       const x = val(a);
       const y = val(b);
@@ -222,12 +205,11 @@ export function TransactionTable({
     });
   }, [rows, sort]);
 
-  // A real table, sized to its contents: every column only as wide as what's in it, so there are
-  // no wide empty gutters, and every cell centred under its heading. Long item and name text
-  // wraps within a sensible width instead of stretching the table.
+  // A real table, sized to its contents, every cell centred under its heading. Long item and
+  // name text wraps within a sensible width instead of stretching the table.
   const th = "whitespace-nowrap px-3 py-2.5 text-center text-[11px] font-bold uppercase tracking-wide text-muted-foreground";
   const td = "px-3 py-2 text-center align-middle";
-  const colCount = showPayment ? 11 : 9;
+  const colCount = showPayment ? 9 : 6;
 
   const head = (label: string, key?: SortKey) => (
     <th scope="col" className={th}>
@@ -257,15 +239,13 @@ export function TransactionTable({
         <thead className="border-b border-line/15 bg-secondary">
           <tr>
             {head("Date", "date")}
-            {head("Type")}
-            {head("Item")}
-            {head("Qty sold", "qty")}
             {head("Customer / Supplier")}
-            {head("Category")}
+            {head("Product")}
             {head("Amount", "amount")}
             {showPayment && head("Mode of payment")}
-            {showPayment && head("Payment")}
-            {head("Logged by")}
+            {showPayment && head("Bank")}
+            {showPayment && head("Deadline", "due")}
+            {head("Recorded by")}
             <th scope="col" className={th}>
               <span className="sr-only">Actions</span>
             </th>
@@ -274,22 +254,22 @@ export function TransactionTable({
         <tbody>
           {sorted.map((e, i) => {
             const carried = carriedFrom?.get(e.id);
-            const overdue = showPayment && dueInfo(e, new Date()).overdue;
+            const kind = obligationKind(e);
+            const overdue = showPayment && !!kind && dueInfo(e, new Date()).overdue;
             const moneyIn = e.type === "SALE" || e.type === "CAPITAL";
             const qty = quantitySold(e);
+            const { method, bank } = methodOf(e);
             const expandable = hasDetails(e, showPayment);
             const isOpen = open.has(e.id);
             return (
               <Fragment key={e.id}>
-                <tr
-                  className={`border-b border-line/5 ${overdue ? "bg-danger/[0.05]" : i % 2 === 0 ? "bg-card" : "bg-[#FBFAF7] dark:bg-secondary/30"}`}
-                >
+                <tr className={`border-b border-line/5 ${overdue ? "bg-danger/[0.05]" : i % 2 === 0 ? "bg-card" : "bg-[#FBFAF7] dark:bg-secondary/30"}`}>
                   <td className={`${td} whitespace-nowrap`}>
                     <div>{formatDate(e.timestamp)}</div>
                     {carried && <div className="text-[11px] font-semibold text-[var(--status-warning)]">Carried from {carried}</div>}
                   </td>
-                  <td className={`${td} whitespace-nowrap`}>
-                    <TypeChip e={e} />
+                  <td className={`${td} max-w-[180px]`}>
+                    <span className="line-clamp-2">{e.counterparty ?? <span className="text-muted-foreground">—</span>}</span>
                   </td>
                   <td className={`${td} max-w-[220px]`} title={e.sku ?? ""}>
                     {e.lineItems?.length ? (
@@ -300,34 +280,37 @@ export function TransactionTable({
                     ) : (
                       <span className="line-clamp-2">{e.sku ?? <span className="text-muted-foreground">—</span>}</span>
                     )}
+                    <span className="block text-[11.5px] text-muted-foreground">
+                      {kindLabel(e)}
+                      {qty != null ? ` · ${qty} sold` : ""}
+                      {e.type === "EXPENSE" && e.category ? ` · ${EXPENSE_CATEGORY_LABELS[e.category] ?? e.category}` : ""}
+                    </span>
                   </td>
-                  <td className={`${td} tabular-nums`}>{qty ?? <span className="text-muted-foreground">—</span>}</td>
-                  <td className={`${td} max-w-[180px]`}>
-                    <span className="line-clamp-2">{e.counterparty ?? <span className="text-muted-foreground">—</span>}</span>
-                  </td>
-                  <td className={`${td} whitespace-nowrap text-muted-foreground`}>{categoryOf(e)}</td>
-                  <td className={`${td} whitespace-nowrap font-semibold tabular-nums ${moneyIn ? "text-success" : "text-danger"}`}>
-                    {e.amount == null ? <span className="font-normal text-muted-foreground">—</span> : `${moneyIn ? "+" : "−"}${formatPeso(e.amount)}`}
+                  <td className={`${td} whitespace-nowrap font-semibold tabular-nums ${e.type === "WASTE" ? "text-muted-foreground" : moneyIn ? "text-success" : "text-danger"}`}>
+                    {e.amount == null ? (
+                      <span className="font-normal text-muted-foreground">—</span>
+                    ) : (
+                      `${e.type === "WASTE" ? "" : moneyIn ? "+" : "−"}${formatPeso(e.amount)}`
+                    )}
                   </td>
                   {showPayment && (
-                    <td className={`${td} text-[12.5px]`}>
-                      {e.paymentMethod ? (
+                    <td className={`${td} text-[12.5px] ${hasPayment(e) ? "" : GREY}`}>
+                      {method ? (
                         <span
-                          className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 font-semibold ${e.paymentMethod === "bank_transfer" ? "bg-[#3F6E8C]/10 text-[#3F6E8C]" : "bg-secondary text-foreground"}`}
+                          className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 font-semibold ${method === "bank_transfer" ? "bg-[#3F6E8C]/10 text-[#3F6E8C]" : "bg-secondary text-foreground"}`}
                         >
-                          {describePaymentMethod(e.paymentMethod, e.bankName)}
+                          {method === "bank_transfer" ? "Bank transfer" : "Cash"}
                         </span>
                       ) : (
-                        <span className="text-muted-foreground">—</span>
+                        <span className="text-muted-foreground">{hasPayment(e) && kind ? "Not paid yet" : "—"}</span>
                       )}
                     </td>
                   )}
                   {showPayment && (
-                    <td className={td}>
-                      <div className="flex justify-center">
-                        <PaymentCell e={e} />
-                      </div>
-                    </td>
+                    <td className={`${td} text-[12.5px] ${method === "bank_transfer" ? "" : GREY}`}>{method === "bank_transfer" ? (bank ?? "—") : "—"}</td>
+                  )}
+                  {showPayment && (
+                    <td className={`${td} text-[12.5px] ${kind ? "" : GREY}`}>{kind ? <Deadline e={e} /> : "—"}</td>
                   )}
                   <td className={`${td} whitespace-nowrap text-muted-foreground`}>{e.loggedByName ?? "—"}</td>
                   <td className="px-1 py-1 text-center align-middle">
@@ -350,11 +333,11 @@ export function TransactionTable({
                           {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                         </button>
                       )}
-                      {owed && outstanding(e) > 0 && obligationKind(e) && (
+                      {owed && kind && outstanding(e) > 0 && (
                         <button
                           type="button"
                           onClick={() => owed.onPay(e)}
-                          aria-label={obligationKind(e) === "receivable" ? "Record money received" : "Record a payment made"}
+                          aria-label={kind === "receivable" ? "Record money received" : "Record a payment made"}
                           title="Record a payment"
                           className="flex h-11 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
                         >

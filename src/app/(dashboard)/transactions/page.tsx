@@ -121,6 +121,10 @@ function TransactionsPageInner() {
 
   const kinds = exec ? KINDS : KINDS.filter(([k]) => EMPLOYEE_KINDS.includes(k));
   const effectiveKind: Kind = kinds.some(([k]) => k === kind) ? kind : "all";
+  const stepKind = (by: 1 | -1) => {
+    const at = Math.max(0, kinds.findIndex(([k]) => k === effectiveKind));
+    setKind(kinds[(at + by + kinds.length) % kinds.length][0]);
+  };
   const inKind = (e: Entry) => {
     switch (effectiveKind) {
       case "all":
@@ -148,10 +152,19 @@ function TransactionsPageInner() {
       )
     : [];
   const carriedFrom = new Map(earlierRows.filter((e) => matches(e) && inKind(e)).map((e) => [e.id, monthLabel(monthOf(e), "short")]));
-  const rows = [
-    ...earlierRows.filter((e) => carriedFrom.has(e.id)).sort((a, b) => a.timestamp.localeCompare(b.timestamp)),
-    ...ledger.filter((e) => madeIn(e) && matches(e) && inKind(e)).sort(byNewest),
-  ];
+  const tracker = effectiveKind === "RECEIVABLE" || effectiveKind === "PAYABLE";
+  const rows = tracker
+    ? // The tracker reads by urgency: what is still unpaid first, soonest deadline first.
+      [...earlierRows.filter((e) => carriedFrom.has(e.id)), ...ledger.filter((e) => madeIn(e) && matches(e) && inKind(e))].sort(
+        (a, b) =>
+          Number(outstanding(b) > 0) - Number(outstanding(a) > 0) ||
+          (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999") ||
+          byNewest(a, b),
+      )
+    : [
+        ...earlierRows.filter((e) => carriedFrom.has(e.id)).sort((a, b) => a.timestamp.localeCompare(b.timestamp)),
+        ...ledger.filter((e) => madeIn(e) && matches(e) && inKind(e)).sort(byNewest),
+      ];
 
   // The obligation behind a row, for the payment, default and due-date dialogs.
   const rowFor = (e: Entry): ObligationRow | null => {
@@ -290,19 +303,17 @@ function TransactionsPageInner() {
 
         {/* One list: filter by kind, with the add button beside it. */}
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex w-fit max-w-full gap-1.5 overflow-x-auto rounded-[10px] bg-secondary p-1" role="group" aria-label="Kind of transaction">
-            {kinds.map(([k, label]) => (
-              <button
-                key={k}
-                type="button"
-                aria-pressed={effectiveKind === k}
-                onClick={() => setKind(k)}
-                className={`min-h-10 shrink-0 rounded-lg px-4 py-2 text-[14px] ${effectiveKind === k ? "bg-card font-semibold shadow-sm" : "font-medium text-muted-foreground"}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          {/* A carousel through the one list: everything, then each kind in turn. */}
+          <CarouselNav
+            wrap
+            size="large"
+            label={kinds.find(([k]) => k === effectiveKind)?.[1] ?? "All"}
+            labelWidth="min-w-[160px]"
+            onPrev={() => stepKind(-1)}
+            onNext={() => stepKind(1)}
+            prevLabel="Previous kind of transaction"
+            nextLabel="Next kind of transaction"
+          />
           <button
             type="button"
             onClick={() => setAdding(true)}
