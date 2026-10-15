@@ -117,7 +117,10 @@ export function QuickPay({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Input type="date" value={date} max={today} min={dayOf(entry.timestamp)} onChange={(e) => setDate(e.target.value)} aria-label="Day it was paid" className="h-9 w-[150px] text-[13px]" />
+          <label className="flex items-center gap-2">
+            <span className="text-[12.5px] font-semibold text-muted-foreground">Paid on</span>
+            <Input type="date" value={date} max={today} min={dayOf(entry.timestamp)} onChange={(e) => setDate(e.target.value)} aria-label="Day it was paid" className="h-9 w-[150px] text-[13px]" />
+          </label>
           <div className="flex gap-0.5 rounded-lg bg-secondary p-0.5" role="radiogroup" aria-label="How it was paid">
             <button type="button" role="radio" aria-checked={method === "cash"} onClick={() => setMethod("cash")} className={seg(method === "cash")}>
               Cash
@@ -154,7 +157,7 @@ export function QuickPay({
 
         <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
           <span className={`text-[12.5px] ${problem && problem !== "Which bank?" ? "font-semibold text-danger" : "text-muted-foreground"}`} aria-live="polite">
-            {problem ?? (valid ? (leftAfter > 0 ? `${formatPeso(leftAfter)} left after this` : "This settles it in full") : "Type the amount paid")}
+            {problem ?? (valid && leftAfter > 0 ? `${formatPeso(leftAfter)} left after this` : "")}
           </span>
           <div className="flex items-center gap-1.5">
             <button type="button" onClick={onClose} className="min-h-8 rounded-lg px-3 text-[13px] font-semibold text-muted-foreground hover:bg-secondary">

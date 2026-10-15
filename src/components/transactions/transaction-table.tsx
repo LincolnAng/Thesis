@@ -451,6 +451,11 @@ export function TransactionTable({
                                   : "Paid out"}
                             </span>
                           )}
+                          {kind && paymentsOf(e).length > 0 && (
+                            <span className="whitespace-nowrap text-[11.5px] text-muted-foreground">
+                              {paymentsOf(e).length > 1 ? "Last paid" : "Paid"} {formatDate(paymentsOf(e).at(-1)!.date)}
+                            </span>
+                          )}
                         </div>
                       )}
                     </td>
