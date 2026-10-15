@@ -125,14 +125,12 @@ export function QuickPay({
         <span className={`text-[12.5px] ${problem && problem !== "Which bank?" ? "font-semibold text-danger" : "text-muted-foreground"}`} aria-live="polite">
           {problem ?? (valid ? (leftAfter > 0 ? `${formatPeso(leftAfter)} left after` : "Settles it") : "")}
         </span>
-        <div className="ml-auto flex items-center gap-1">
-          <Button size="sm" className="h-9 px-4" disabled={saving || !valid || !!problem} onClick={() => void save()}>
-            {saving ? "Saving…" : "Save"}
-          </Button>
-          <button type="button" onClick={onClose} aria-label="Cancel" className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+        <Button size="sm" className="h-9 px-4" disabled={saving || !valid || !!problem} onClick={() => void save()}>
+          {saving ? "Saving…" : "Save"}
+        </Button>
+        <button type="button" onClick={onClose} aria-label="Cancel" className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary">
+          <X className="h-4 w-4" />
+        </button>
       </div>
       {error && <ErrorLine text={error} />}
     </div>

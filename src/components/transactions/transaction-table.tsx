@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import { Pencil, Plus } from "lucide-react";
+import { History as HistoryIcon, Pencil, Plus } from "lucide-react";
 import { EXPENSE_CATEGORY_LABELS, PRICE_TYPE_LABELS, describePaymentMethod, formatDate, formatPeso } from "@/lib/format";
 import { dueInfo, obligationInfo, obligationKind, outstanding, paymentsOf } from "@/lib/transactions/ledger";
 import { QuickPay } from "@/components/transactions/obligation-dialogs";
@@ -11,17 +11,16 @@ import type { Entry } from "@/lib/store/types";
  * Every recorded transaction, one row each, in one fixed set of columns — the same for sales,
  * expenses, receivables and payables, so what is owed reads exactly like what was paid:
  *
- *   Date · Customer / Supplier · Product · Qty · Amount · Mode of payment · Bank · Deadline ·
- *   History · Recorded by
+ *   Date · Customer / Supplier · Product · Qty · Amount · Mode of payment · Bank · Deadline · Recorded by
  *
  * An order of several products is still one row: its products are listed top to bottom in the
  * Product cell with their quantities lined up beside them, and the Amount is the order's total.
  *
- * History is always in view for receivables and payables: each payment (date, how, amount), each
- * time the deadline moved, and a default — newest last, the latest few shown. Only executives
- * see the payment columns; an employee's copy has no payment data at all. Pressing a row opens
- * the full history, the price type, a note and the actions, and the pencil opens the form that
- * adds a transaction, which is where the money rules are checked. Tap a column heading to sort.
+ * Receivables and payables have a history button beside the pencil: it opens each payment (date,
+ * how, amount), each time the deadline moved, and a default, with the actions to log a payment,
+ * change the due date or mark a default. Only executives see the payment columns; an employee's
+ * copy has no payment data at all. The pencil opens the form that adds a transaction, which is
+ * where the money rules are checked. Tap a column heading to sort by it.
  */
 
 type SortKey = "date" | "amount" | "due";
@@ -39,46 +38,6 @@ const hasPayment = (e: Entry) => e.type === "SALE" || e.type === "EXPENSE" || e.
 /** Shown where a column doesn't apply to a row, so a blank is never mistaken for missing data. */
 function NA() {
   return <span className="font-semibold text-muted-foreground">N/A</span>;
-}
-
-interface HistoryEvent {
-  at: string;
-  label: string;
-  amount?: number;
-  bad?: boolean;
-}
-
-/** Everything that has happened to an obligation, oldest first: payments, deadline moves, a default. */
-function historyOf(e: Entry): HistoryEvent[] {
-  const out: HistoryEvent[] = [];
-  for (const p of paymentsOf(e)) {
-    const how = p.method === "bank_transfer" ? (p.bankName ?? "Bank") : p.method === "cash" ? "Cash" : "";
-    out.push({ at: p.date, label: `${formatDate(p.date)}${how ? ` · ${how}` : ""}`, amount: p.amount });
-  }
-  for (const c of e.dueDateHistory ?? []) out.push({ at: c.changedAt, label: `Due moved to ${c.to ? formatDate(c.to) : "no date"}` });
-  if (e.defaultedAt) out.push({ at: e.defaultedAt, label: `Defaulted ${formatDate(e.defaultedAt)}`, bad: true });
-  return out.sort((a, b) => a.at.localeCompare(b.at));
-}
-
-const HISTORY_SHOWN = 3;
-
-/** The last few events of an obligation, always visible; the rest are one press away. */
-function History({ e }: { e: Entry }) {
-  const events = historyOf(e);
-  if (events.length === 0) return <span className="text-muted-foreground">No payments yet</span>;
-  const shown = events.slice(-HISTORY_SHOWN);
-  const hidden = events.length - shown.length;
-  return (
-    <div className="flex flex-col items-center gap-0.5">
-      {hidden > 0 && <span className="text-[11px] text-muted-foreground">+{hidden} earlier</span>}
-      {shown.map((ev, i) => (
-        <span key={i} className={`whitespace-nowrap ${ev.bad ? "font-semibold text-danger" : "text-muted-foreground"}`}>
-          {ev.label}
-          {ev.amount != null && <span className="ml-1.5 font-semibold tabular-nums text-success">{formatPeso(ev.amount)}</span>}
-        </span>
-      ))}
-    </div>
-  );
 }
 
 /** An order's products and quantities, line by line. A single product is a list of one. */
@@ -233,7 +192,7 @@ export function TransactionTable({
   // name text wraps within a sensible width instead of stretching the table.
   const th = "whitespace-nowrap px-3 py-2.5 text-center text-[11px] font-bold uppercase tracking-wide text-muted-foreground";
   const td = "px-3 py-2 text-center align-middle";
-  const colCount = showPayment ? 11 : 7;
+  const colCount = showPayment ? 10 : 7;
 
   const head = (label: string, key?: SortKey) => (
     <th scope="col" className={th}>
@@ -270,7 +229,6 @@ export function TransactionTable({
             {showPayment && head("Mode of payment")}
             {showPayment && head("Bank")}
             {showPayment && head("Deadline", "due")}
-            {showPayment && head("History")}
             {head("Recorded by")}
             <th scope="col" className={th}>
               <span className="sr-only">Actions</span>
@@ -390,20 +348,36 @@ export function TransactionTable({
                       )}
                     </td>
                   )}
-                  {showPayment && <td className={`${td} text-[12px]`}>{kind ? <History e={e} /> : <NA />}</td>}
                   <td className={`${td} whitespace-nowrap text-muted-foreground`}>{e.loggedByName ?? "—"}</td>
                   <td className="px-2 py-1 text-center align-middle">
-                    <button
-                      type="button"
-                      onClick={(ev) => {
-                        ev.stopPropagation();
-                        onEdit(e);
-                      }}
-                      aria-label="Change this transaction"
-                      className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center justify-center gap-0.5">
+                      {showPayment && kind && (
+                        <button
+                          type="button"
+                          onClick={(ev) => {
+                            ev.stopPropagation();
+                            toggle();
+                          }}
+                          aria-label={isOpen ? "Hide payment history" : "Show payment history"}
+                          aria-expanded={isOpen}
+                          title="Payment history"
+                          className={`flex h-9 w-9 items-center justify-center rounded-lg hover:bg-secondary hover:text-cacao ${isOpen ? "bg-secondary text-cacao" : "text-muted-foreground"}`}
+                        >
+                          <HistoryIcon className="h-4 w-4" />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          onEdit(e);
+                        }}
+                        aria-label="Change this transaction"
+                        className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
                 {paying === e.id && owed && kind && (
