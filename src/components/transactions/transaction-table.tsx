@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import { Banknote, ChevronDown, ChevronRight, Pencil } from "lucide-react";
+import { BanknoteArrowDown, BanknoteArrowUp, CalendarClock, ChevronDown, ChevronRight, Pencil, TriangleAlert } from "lucide-react";
 import { EXPENSE_CATEGORY_LABELS, ENTRY_TYPE_LABELS, PRICE_TYPE_LABELS, describePaymentMethod, formatDate, formatPeso } from "@/lib/format";
 import { dueInfo, obligationInfo, obligationKind, outstanding, paymentsOf } from "@/lib/transactions/ledger";
 import { lineSubtotal, quantitySold } from "@/lib/transactions/order-lines";
@@ -102,6 +102,10 @@ function receiptItems(e: Entry): ReceiptItem[] {
 const hasDetails = (e: Entry, showPayment: boolean) =>
   receiptItems(e).length > 0 || Boolean(e.notes) || (showPayment && obligationKind(e) !== null);
 
+/** Every action button in a receipt: one size, icon then label, a small press so it feels live. */
+const ACTION =
+  "inline-flex h-9 w-[168px] items-center justify-center gap-2 rounded-lg text-[13px] font-semibold transition active:scale-[0.97]";
+
 function Details({ e, showPayment, owed }: { e: Entry; showPayment: boolean; owed?: OwedActions }) {
   const items = receiptItems(e);
   const kind = showPayment ? obligationKind(e) : null;
@@ -165,15 +169,18 @@ function Details({ e, showPayment, owed }: { e: Entry; showPayment: boolean; owe
           )}
           {owed && info.status !== "settled" && (
             <div className="mt-1 flex flex-wrap gap-2">
-              <button type="button" onClick={() => owed.onPay(e)} className="min-h-10 rounded-lg bg-cacao px-4 text-[13px] font-semibold text-ivory">
-                Record a payment
+              <button type="button" onClick={() => owed.onPay(e)} className={`${ACTION} bg-cacao text-ivory hover:brightness-110`}>
+                {kind === "receivable" ? <BanknoteArrowDown className="h-4 w-4" /> : <BanknoteArrowUp className="h-4 w-4" />}
+                Record payment
               </button>
-              <button type="button" onClick={() => owed.onMoveDue(e)} className="min-h-10 rounded-lg border border-line/25 px-4 text-[13px] font-semibold">
+              <button type="button" onClick={() => owed.onMoveDue(e)} className={`${ACTION} border border-line/25 bg-card hover:border-cacao hover:text-cacao`}>
+                <CalendarClock className="h-4 w-4" />
                 Change due date
               </button>
               {info.status === "overdue" && (
-                <button type="button" onClick={() => owed.onDefault(e)} className="min-h-10 rounded-lg border border-danger/50 px-4 text-[13px] font-semibold text-danger">
-                  Mark as defaulted
+                <button type="button" onClick={() => owed.onDefault(e)} className={`${ACTION} border border-danger/50 bg-card text-danger hover:bg-danger/10`}>
+                  <TriangleAlert className="h-4 w-4" />
+                  Mark defaulted
                 </button>
               )}
             </div>
@@ -346,7 +353,7 @@ export function TransactionTable({
                           }
                           aria-expanded={isOpen}
                           aria-label={isOpen ? "Hide details" : "Show details"}
-                          className="flex h-11 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
+                          className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-secondary hover:text-cacao active:scale-90"
                         >
                           {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                         </button>
@@ -357,16 +364,16 @@ export function TransactionTable({
                           onClick={() => owed.onPay(e)}
                           aria-label={kind === "receivable" ? "Record money received" : "Record a payment made"}
                           title="Record a payment"
-                          className="flex h-11 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
+                          className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-secondary hover:text-cacao active:scale-90"
                         >
-                          <Banknote className="h-4 w-4" />
+                          {kind === "receivable" ? <BanknoteArrowDown className="h-4 w-4" /> : <BanknoteArrowUp className="h-4 w-4" />}
                         </button>
                       )}
                       <button
                         type="button"
                         onClick={() => onEdit(e)}
                         aria-label="Change this transaction"
-                        className="flex h-11 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
+                        className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-secondary hover:text-cacao active:scale-90"
                       >
                         <Pencil className="h-4 w-4" />
                       </button>
