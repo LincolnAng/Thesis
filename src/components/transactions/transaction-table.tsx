@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, HandCoins, History as HistoryIcon, Pencil } from "lucide-react";
+import { HandCoins, History as HistoryIcon, Pencil } from "lucide-react";
 import { EXPENSE_CATEGORY_LABELS, PRICE_TYPE_LABELS, formatDate, formatPeso } from "@/lib/format";
 import { dueInfo, methodOf, obligationInfo, obligationKind, outstanding, paymentsOf } from "@/lib/transactions/ledger";
 import { lineSubtotal, orderTotal } from "@/lib/transactions/order-lines";
@@ -10,37 +10,29 @@ import type { Entry } from "@/lib/store/types";
 
 /**
  * Every recorded transaction, one row each, in one fixed set of columns — the same for sales,
- * expenses, receivables and payables, so what is owed reads exactly like what was paid:
+ * expenses, receivables and payables:
  *
- *   Date · Customer / Supplier · Product · Qty · Amount · Payment (mode · bank) · Owed · Deadline · Recorded by
+ *   Date · Customer / Supplier · Product · Qty · Amount · Status · Recorded by
  *
- * Owed holds what is still owed on a receivable or payable: the balance on top, and beneath it a
- * short pill (Rcv in green / Pay in red, with an arrow in or out) saying which it is, beside the icon that logs a
- * payment.
+ * Status is one pill: green Paid, yellow Partially Paid (or Unpaid, Due today) with what is left
+ * written small beneath it, soft red Overdue or Defaulted. Amounts stay plain dark text — the pill
+ * carries the money's state. A row with a balance still owed has a quiet "Log Payment" button.
+ * Cells that don't apply are simply blank.
  *
- * An order of several products is still one row: its Product, Qty and Amount cells list the products
- * top to bottom in ruled slots, and the rules run straight across those three columns so each
- * product reads as one line.
+ * An order of several products is still one row: the first product's name, then a muted
+ * "+ 2 more", on one line so every row is the same height. Opening the row lists them all.
  *
- * Receivables and payables have a history button beside the pencil: it opens each payment (date,
- * how, amount), each time the deadline moved, and a default, with the actions to log a payment,
- * change the due date or mark a default. Only executives see the payment columns; an employee's
+ * Receivables and payables have a history button beside the pencil: it opens the due date, each
+ * payment (date, how, amount), each time the deadline moved and a default, with the actions to log
+ * a payment, change the due date or mark a default. Only executives see Status; an employee's
  * copy has no payment data at all. The pencil opens the form that adds a transaction, which is
  * where the money rules are checked. Tap a column heading to sort by it.
  */
 
-type SortKey = "date" | "amount" | "due";
+type SortKey = "date" | "amount";
 
 /** Money moves in these types; spoilage and older owner-funded investments carry no payment. */
 const hasPayment = (e: Entry) => e.type === "SALE" || e.type === "EXPENSE" || e.type === "CAPITAL" || e.type === "ASSET";
-
-/** Shown where a column doesn't apply to a row, so a blank is never mistaken for missing data. */
-function NA() {
-  return <span className="text-[12px] font-normal text-muted-foreground/60">N/A</span>;
-}
-
-/** An order shows at most this many products in its row; the rest are listed when it is opened. */
-const MAX_SLOTS = 3;
 
 interface ProductLine {
   name: string;
@@ -63,55 +55,53 @@ function productLines(e: Entry): ProductLine[] {
   return [{ name: e.sku ?? "", qty: e.type === "SALE" || e.type === "WASTE" ? e.quantity : null, amount: e.amount }];
 }
 
-/**
- * One value per product, each in its own slot, so every column of an order lines up product by
- * product while it stays a single row — one entry, edited and paid as one. The slots are told
- * apart by spacing alone: no rules, so the eye reads straight across instead of snagging on lines.
- */
-function Slots({ children }: { children: React.ReactNode[] }) {
-  return (
-    <ul>
-      {children.map((c, i) => (
-        <li key={i} className="flex h-7 items-center justify-center whitespace-nowrap px-3">
-          {c}
-        </li>
-      ))}
-    </ul>
-  );
+/** Where a receivable or payable stands against its due date, in words. */
+function dueLine(e: Entry): string {
+  const due = dueInfo(e, new Date());
+  if (!e.dueDate || due.daysLeft === null) return "No due date set";
+  const when = due.overdue
+    ? `${Math.abs(due.daysLeft)} day${Math.abs(due.daysLeft) === 1 ? "" : "s"} overdue`
+    : due.daysLeft === 0
+      ? "due today"
+      : `in ${due.daysLeft} day${due.daysLeft === 1 ? "" : "s"}`;
+  return `Due ${formatDate(e.dueDate)} · ${when}`;
 }
 
-/** The deadline of a receivable or payable, with where it stands. */
-function Deadline({ e, action }: { e: Entry; action?: React.ReactNode }) {
-  const now = new Date();
-  const info = obligationInfo(e, now);
-  const due = dueInfo(e, now);
-  const bad = info.status === "overdue" || info.status === "defaulted";
-  return (
-    <div className="flex flex-col items-center gap-0.5">
-      <span className={bad ? "font-semibold text-danger" : ""}>{e.dueDate ? formatDate(e.dueDate) : "No date set"}</span>
-      <span className={`text-[11.5px] ${bad ? "font-semibold text-danger" : "text-muted-foreground"}`}>
-        {info.status === "settled"
-          ? "Paid in full"
-          : info.status === "defaulted"
-            ? "Defaulted"
-            : due.daysLeft === null
-              ? "No due date"
-              : due.overdue
-                ? `${Math.abs(due.daysLeft)} day${Math.abs(due.daysLeft) === 1 ? "" : "s"} overdue`
-                : due.daysLeft === 0
-                  ? "Due today"
-                  : `in ${due.daysLeft} day${due.daysLeft === 1 ? "" : "s"}`}
-      </span>
-      {action && <div className="mt-1.5">{action}</div>}
-    </div>
-  );
+type Tone = "good" | "warn" | "bad";
+
+const PILL: Record<Tone, string> = {
+  good: "bg-success/10 text-success",
+  warn: "bg-[var(--status-warning)]/10 text-[var(--status-warning)]",
+  bad: "bg-danger/10 text-danger",
+};
+
+/** The one pill that says where a transaction's money stands, and what is still left. */
+function statusOf(e: Entry, showPayment: boolean): { label: string; tone: Tone; left: number } | null {
+  if (!showPayment || !hasPayment(e)) return null;
+  if (!obligationKind(e)) return { label: "Paid", tone: "good", left: 0 };
+  const info = obligationInfo(e, new Date());
+  const left = info.remaining;
+  switch (info.status) {
+    case "settled":
+      return { label: "Paid", tone: "good", left: 0 };
+    case "partial":
+      return { label: "Partially Paid", tone: "warn", left };
+    case "due_today":
+      return { label: "Due today", tone: "warn", left };
+    case "overdue":
+      return { label: "Overdue", tone: "bad", left };
+    case "defaulted":
+      return { label: "Defaulted", tone: "bad", left };
+    default:
+      return { label: "Unpaid", tone: "warn", left };
+  }
 }
 
 const priceTypeOf = (e: Entry) => (e.type === "SALE" && e.priceType && e.priceType !== "standard" ? PRICE_TYPE_LABELS[e.priceType] : null);
 
 /** Whether there is anything under an order that its rows don't already show. */
 const hasDetails = (e: Entry, showPayment: boolean) =>
-  productLines(e).length > MAX_SLOTS || priceTypeOf(e) !== null || Boolean(e.notes) || (showPayment && obligationKind(e) !== null);
+  productLines(e).length > 1 || priceTypeOf(e) !== null || Boolean(e.notes) || (showPayment && hasPayment(e) && (obligationKind(e) !== null || methodOf(e).method !== null));
 
 /** What opens under an order: the price type, the payments on it, and a note. */
 function Details({ e, showPayment, owed, onPay }: { e: Entry; showPayment: boolean; owed?: OwedActions; onPay: () => void }) {
@@ -124,7 +114,7 @@ function Details({ e, showPayment, owed, onPay }: { e: Entry; showPayment: boole
 
   return (
     <div className="flex flex-col gap-3 px-4 py-3 text-[13px] min-[800px]:flex-row min-[800px]:flex-wrap min-[800px]:gap-x-12">
-      {items.length > MAX_SLOTS && (
+      {items.length > 1 && (
         <ul className="flex min-w-[260px] flex-col gap-0.5">
           {items.map((l, i) => (
             <li key={i} className="flex items-baseline justify-between gap-6">
@@ -143,8 +133,15 @@ function Details({ e, showPayment, owed, onPay }: { e: Entry; showPayment: boole
         </div>
       )}
 
+      {showPayment && !kind && hasPayment(e) && methodOf(e).method && (
+        <div className={faint}>
+          Paid by {methodOf(e).method === "bank_transfer" ? `bank transfer${methodOf(e).bank ? ` · ${methodOf(e).bank}` : ""}` : "cash"}
+        </div>
+      )}
+
       {kind && info && (
         <div className="flex min-w-[260px] flex-col gap-1">
+          <span className={info.status === "overdue" || info.status === "defaulted" ? "font-semibold text-danger" : "font-medium"}>{dueLine(e)}</span>
           {payments.length > 0 ? (
             <ul className="flex flex-col gap-0.5">
               {payments.map((p) => (
@@ -221,7 +218,7 @@ export function TransactionTable({
 
   const sorted = useMemo(() => {
     if (!sort) return rows;
-    const val = (e: Entry) => (sort.key === "date" ? e.timestamp : sort.key === "due" ? (e.dueDate ?? "") : (e.amount ?? 0));
+    const val = (e: Entry) => (sort.key === "date" ? e.timestamp : (e.amount ?? 0));
     return [...rows].sort((a, b) => {
       const x = val(a);
       const y = val(b);
@@ -231,12 +228,12 @@ export function TransactionTable({
 
   // A real table, sized to its contents, every cell centred under its heading. Long item and
   // name text wraps within a sensible width instead of stretching the table.
-  const th = "whitespace-nowrap px-3 py-2.5 text-center text-[11px] font-bold uppercase tracking-wide text-muted-foreground";
-  const td = "px-3 py-2 text-center align-middle";
-  const colCount = showPayment ? 10 : 7;
+  const th = "whitespace-nowrap px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wide text-muted-foreground";
+  const td = "px-3 py-3 text-left align-middle";
+  const colCount = showPayment ? 8 : 7;
 
-  const head = (label: string, key?: SortKey) => (
-    <th scope="col" className={th}>
+  const head = (label: string, key?: SortKey, right?: boolean) => (
+    <th scope="col" className={`${th} ${right ? "!text-right" : ""}`}>
       {key ? (
         <button
           type="button"
@@ -265,11 +262,9 @@ export function TransactionTable({
             {head("Date", "date")}
             {head("Customer / Supplier")}
             {head("Product")}
-            {head("Qty")}
-            {head("Amount", "amount")}
-            {showPayment && head("Payment")}
-            {showPayment && head("Owed")}
-            {showPayment && head("Deadline", "due")}
+            {head("Qty", undefined, true)}
+            {head("Amount", "amount", true)}
+            {showPayment && head("Status")}
             {head("Recorded by")}
             <th scope="col" className={th}>
               <span className="sr-only">Actions</span>
@@ -280,73 +275,16 @@ export function TransactionTable({
           {sorted.map((e) => {
             const carried = carriedFrom?.get(e.id);
             const kind = obligationKind(e);
-            const overdue = showPayment && !!kind && dueInfo(e, new Date()).overdue;
-            const moneyIn = e.type === "SALE" || e.type === "CAPITAL";
             const { method, bank } = methodOf(e);
             const isOpen = open.has(e.id);
             const expandable = hasDetails(e, showPayment);
             const items = productLines(e);
-            const multi = items.length > 1;
-            const shown = items.slice(0, MAX_SLOTS);
-            const more = items.length - shown.length;
-            const info = kind && showPayment ? obligationInfo(e, new Date()) : null;
-            // Only product, quantity and amount repeat per product; they share the same slots so they line up.
-            // Split cells drop their side padding (the slots carry it), so the slots of Product, Qty
-            // and Amount sit on the same lines across the three columns.
-            const split = multi ? "px-0 py-1.5 text-center align-middle" : td;
-            const moreSlot = more > 0 ? [<span key="more" className="text-[12px] text-muted-foreground">+{more} more</span>] : [];
-            const blankSlot = more > 0 ? [<span key="blank" />] : [];
-            const amountText = (v: number | null) =>
-              v == null ? "—" : `${e.type === "WASTE" ? "" : moneyIn ? "+" : "−"}${formatPeso(v)}`;
-            // The Owed cell: what is left on top; beneath it, which kind of debt it is and the way to log a payment.
-            const owedNode =
-              kind && info ? (
-                <div className="flex flex-col items-center gap-0.5">
-                  <span
-                    className={`text-[13px] leading-tight font-semibold tabular-nums ${
-                      info.remaining > 0 ? (info.status === "overdue" || info.status === "defaulted" ? "text-danger" : "text-[var(--status-warning)]") : "text-success"
-                    }`}
-                  >
-                    {info.remaining > 0 ? `${formatPeso(info.remaining)} left` : "Paid in full"}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span
-                      title={kind === "receivable" ? "Receivable: a customer owes us this" : "Payable: we owe a supplier this"}
-                      className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wide ${
-                        kind === "receivable" ? "bg-success/10 text-success" : "bg-danger/10 text-danger"
-                      }`}
-                    >
-                      {kind === "receivable" ? <ArrowDownLeft className="h-3 w-3" strokeWidth={2.6} /> : <ArrowUpRight className="h-3 w-3" strokeWidth={2.6} />}
-                      {kind === "receivable" ? "Rcv" : "Pay"}
-                    </span>
-                    {owed && info.remaining > 0 && (
-                      <button
-                        type="button"
-                        onClick={(ev) => {
-                          ev.stopPropagation();
-                          setPaying(paying === e.id ? null : e.id);
-                        }}
-                        aria-label={kind === "receivable" ? "Log a payment received" : "Log a payment made"}
-                        title={kind === "receivable" ? "Log a payment received" : "Log a payment made"}
-                        className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-cacao"
-                      >
-                        <HandCoins className="h-4 w-4" />
-                      </button>
-                    )}
-                  </span>
-                </div>
-              ) : null;
-            const paymentNode = !hasPayment(e) ? (
-              <NA />
-            ) : method === "bank_transfer" ? (
-              <span>
-                Bank transfer<span className="text-muted-foreground"> · {bank ?? "—"}</span>
-              </span>
-            ) : method ? (
-              <span>Cash</span>
-            ) : (
-              <span className="text-muted-foreground">{kind ? "Not paid yet" : "—"}</span>
-            );
+            const extra = items.length - 1;
+            const qtys = items.map((l) => l.qty).filter((q): q is number => q != null);
+            const qty = qtys.length > 0 ? qtys.reduce((a, q) => a + q, 0) : null;
+            const status = statusOf(e, showPayment);
+            const canPay = !!owed && !!kind && !!status && status.left > 0;
+            const payTip = method === "bank_transfer" ? `Bank transfer${bank ? ` · ${bank}` : ""}` : method ? "Cash" : undefined;
             const toggle = () =>
               setOpen((prev) => {
                 const next = new Set(prev);
@@ -359,76 +297,57 @@ export function TransactionTable({
                 <tr
                   onClick={expandable ? toggle : undefined}
                   aria-expanded={expandable ? isOpen : undefined}
-                  className={`group border-b border-line/20 ${overdue ? "bg-danger/[0.05]" : "bg-card"} ${
-                    expandable ? "cursor-pointer hover:bg-secondary/40" : ""
-                  }`}
+                  className={`group border-b border-line/20 bg-card ${expandable ? "cursor-pointer hover:bg-secondary/40" : ""}`}
                 >
                   <td className={`${td} whitespace-nowrap`}>{formatDate(e.timestamp)}</td>
                   <td className={`${td} max-w-[180px]`}>
-                    <span className="line-clamp-2 font-medium">{e.counterparty ?? <span className="font-normal text-muted-foreground">—</span>}</span>
+                    <span className="block truncate font-medium">{e.counterparty}</span>
                     {carried && <div className="text-[11px] font-semibold text-[var(--status-warning)]">Carried from {carried}</div>}
                   </td>
-                  {/* Product, quantity, amount: one slot per product */}
+                  {/* The first product, then how many more: one line, so every row is the same height. */}
                   <td
-                    className={`${split} max-w-[240px]`}
+                    className={`${td} max-w-[260px]`}
                     title={items.map((l) => l.name).join(", ") + (e.type === "EXPENSE" && e.category ? ` · ${EXPENSE_CATEGORY_LABELS[e.category] ?? e.category}` : "")}
                   >
-                    {multi ? (
-                      <Slots>
-                        {[
-                          ...shown.map((l, j) => (
-                            <span key={j} className="max-w-[220px] truncate">
-                              {l.name}
-                            </span>
-                          )),
-                          ...moreSlot,
-                        ]}
-                      </Slots>
-                    ) : (
-                      <span className="line-clamp-2">{items[0].name || <span className="text-muted-foreground">—</span>}</span>
-                    )}
+                    <span className="flex items-baseline gap-1.5 whitespace-nowrap">
+                      <span className="truncate">{items[0].name}</span>
+                      {extra > 0 && <span className="shrink-0 text-[12px] text-muted-foreground">+ {extra} more</span>}
+                    </span>
                   </td>
-                  <td className={`${split} tabular-nums`}>
-                    {multi ? (
-                      <Slots>
-                        {[
-                          ...shown.map((l, j) => (
-                            <span key={j} className="text-muted-foreground">
-                              {l.qty != null ? `× ${l.qty}` : "—"}
-                            </span>
-                          )),
-                          ...blankSlot,
-                        ]}
-                      </Slots>
-                    ) : items[0].qty != null ? (
-                      items[0].qty
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
+                  <td className={`${td} text-right tabular-nums`}>{qty}</td>
+                  <td className={`${td} whitespace-nowrap text-right tabular-nums ${e.type === "WASTE" ? "text-muted-foreground" : "text-foreground"}`}>
+                    {e.amount != null ? formatPeso(e.amount) : null}
                   </td>
-                  <td className={`${split} whitespace-nowrap font-semibold tabular-nums ${e.type === "WASTE" ? "text-muted-foreground" : moneyIn ? "text-success" : "text-danger"}`}>
-                    {multi ? (
-                      <Slots>
-                        {[...shown.map((l, j) => <span key={j}>{amountText(l.amount)}</span>), ...blankSlot]}
-                      </Slots>
-                    ) : (
-                      amountText(e.amount)
-                    )}
-                  </td>
-                  {showPayment && <td className={`${td} whitespace-nowrap text-[12.5px]`}>{paymentNode}</td>}
-                  {showPayment && <td className={`${td} text-[12.5px]`}>{owedNode ?? <NA />}</td>}
                   {showPayment && (
-                    <td className={`${td} text-[12.5px]`}>
-                      {kind ? (
-                        <Deadline e={e} />
-                      ) : (
-                        <NA />
+                    <td className={td}>
+                      {status && (
+                        <div className="flex flex-col items-start gap-0.5">
+                          <span
+                            title={payTip}
+                            className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-[12px] font-semibold ${PILL[status.tone]}`}
+                          >
+                            {status.label}
+                          </span>
+                          {status.left > 0 && <span className="whitespace-nowrap text-[11.5px] tabular-nums text-muted-foreground">{formatPeso(status.left)} left</span>}
+                        </div>
                       )}
                     </td>
                   )}
-                  <td className={`${td} whitespace-nowrap text-muted-foreground`}>{e.loggedByName ?? "—"}</td>
-                  <td className="px-2 py-1 text-center align-middle">
-                    <div className="flex items-center justify-center gap-0.5">
+                  <td className={`${td} whitespace-nowrap text-muted-foreground`}>{e.loggedByName}</td>
+                  <td className="px-2 py-1 text-right align-middle">
+                    <div className="flex items-center justify-end gap-1">
+                      {canPay && (
+                        <button
+                          type="button"
+                          onClick={(ev) => {
+                            ev.stopPropagation();
+                            setPaying(paying === e.id ? null : e.id);
+                          }}
+                          className="inline-flex h-8 items-center whitespace-nowrap rounded-lg border border-line/25 px-2.5 text-[12.5px] font-medium text-muted-foreground transition hover:border-cacao hover:text-cacao"
+                        >
+                          Log Payment
+                        </button>
+                      )}
                       {showPayment && kind && (
                         <button
                           type="button"
