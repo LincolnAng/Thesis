@@ -494,7 +494,7 @@ function MoneyBox({
           tone === "bad" ? "border-danger bg-danger" : "border-success bg-success"
         }`}
       >
-        {heading && <span className="font-display text-[18px] font-semibold tracking-wide">{heading}</span>}
+        {heading && <span className="font-display text-[clamp(24px,2.6vw,32px)] font-bold leading-tight tracking-wide">{heading}</span>}
         <span className="flex items-center justify-center gap-2 text-[14px] font-semibold opacity-90">
           {icon}
           {label}
