@@ -321,7 +321,7 @@ export function TransactionTable({
                   {showPayment && (
                     <td className={td}>
                       {status && (
-                        <div className="flex flex-col items-start gap-0.5">
+                        <div className="flex flex-col items-start gap-1">
                           <span
                             title={payTip}
                             className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-[12px] font-semibold ${PILL[status.tone]}`}
@@ -331,17 +331,14 @@ export function TransactionTable({
                           {kind && (
                             <span
                               title={kind === "receivable" ? "A receivable: a customer owes us" : "A payable: we owe a supplier"}
-                              className="flex items-center gap-1 whitespace-nowrap text-[11.5px] tabular-nums text-muted-foreground"
+                              className={`flex items-center gap-1 whitespace-nowrap px-2.5 text-[12px] tabular-nums ${kind === "receivable" ? "text-success" : "text-danger"}`}
                             >
-                              {kind === "receivable" ? (
-                                <ArrowDownLeft className="h-3 w-3 text-success" strokeWidth={2.6} />
-                              ) : (
-                                <ArrowUpRight className="h-3 w-3 text-danger" strokeWidth={2.6} />
-                              )}
-                              {status.left > 0 && <span>{formatPeso(status.left)}</span>}
-                              <span className={`font-medium ${kind === "receivable" ? "text-success" : "text-danger"}`}>
-                                {status.left > 0 ? (kind === "receivable" ? "to collect" : "to pay") : kind === "receivable" ? "collected" : "paid out"}
-                              </span>
+                              {kind === "receivable" ? <ArrowDownLeft className="h-3 w-3" strokeWidth={2.4} /> : <ArrowUpRight className="h-3 w-3" strokeWidth={2.4} />}
+                              {status.left > 0
+                                ? `${formatPeso(status.left)} ${kind === "receivable" ? "to collect" : "to pay"}`
+                                : kind === "receivable"
+                                  ? "Collected"
+                                  : "Paid out"}
                             </span>
                           )}
                         </div>
