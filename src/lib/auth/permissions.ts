@@ -108,7 +108,8 @@ export function redactForEmployee(data: BusinessData, sellingPrice: (product: Pr
     })),
     // Ingredient rows say what a batch uses (production needs that); labor and misc rows are
     // only ever costs.
-    recipes: data.recipes.filter((r) => r.rowType === "ingredient").map((r) => ({ ...r, cost: null })),
+    // In-house components (tablea in ice cream) are quantities too, which production planning needs.
+    recipes: data.recipes.filter((r) => r.rowType === "ingredient" || r.rowType === "component").map((r) => ({ ...r, cost: null })),
     rawMaterials: data.rawMaterials.map((m) => ({ ...m, unitCost: 0 })),
     suppliers: [],
     supplierPriceHistory: [],

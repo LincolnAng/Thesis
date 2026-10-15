@@ -170,3 +170,13 @@ test("employees never receive payment terms, and editing a sale keeps them", () 
   assert.equal(item.amountPaid, 500);
   assert.equal(item.quantity, 20);
 });
+
+test("employees keep in-house component rows (production needs them), without costs", () => {
+  const data = sample();
+  data.recipes = [...data.recipes, { id: "r-c", productId: "p1", rowType: "component", materialId: "p-tablea", label: null, quantity: 3, cost: 12 }];
+  const recipes = redactForEmployee(data, () => 100).recipes;
+  const component = recipes.find((r) => r.rowType === "component");
+  assert.ok(component);
+  assert.equal(component.cost, null);
+  assert.ok(!recipes.some((r) => r.rowType === "labor"));
+});

@@ -783,6 +783,13 @@ function applyEntrySideEffects(
           );
           touchedMaterialIds.push(material.id);
         }
+        // In-house components (tablea in ice cream) come off their own shelf the same way.
+        for (const row of product.recipeComponents ?? []) {
+          if (row.productId === product.id) continue;
+          const used = row.quantity * batches;
+          products = products.map((p) => (p.id === row.productId ? { ...p, stockQty: Math.max(0, p.stockQty - used) } : p));
+          touchedProductIds.push(row.productId);
+        }
       }
     }
   } else if (entry.type === "EXPENSE" && (entry.category === "raw_materials" || entry.category === "packaging")) {
@@ -899,10 +906,11 @@ export function replaceEntry(id: string, next: Omit<Entry, "id">) {
  * each time any part of a product was saved.
  */
 function toProductRow(p: Product): ProductRow {
-  const { recipeIngredients, recipeLabor, recipeMisc, ...row } = p;
+  const { recipeIngredients, recipeLabor, recipeMisc, recipeComponents, ...row } = p;
   void recipeIngredients;
   void recipeLabor;
   void recipeMisc;
+  void recipeComponents;
   return row;
 }
 
@@ -935,7 +943,7 @@ export function updateProduct(id: string, patch: Partial<Product>) {
   }));
   if (!oldProduct || !newProduct) return;
   void mirrorOp("products", "update", { id, item: toProductRow(newProduct) });
-  if (patch.recipeIngredients || patch.recipeLabor || patch.recipeMisc) {
+  if (patch.recipeIngredients || patch.recipeLabor || patch.recipeMisc || patch.recipeComponents) {
     mirrorProductRecipeDiff(oldProduct, newProduct);
   }
 }

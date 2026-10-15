@@ -4,12 +4,13 @@
 // into the browser via store.ts.
 import type { ExpenseCategory, Product, Supplier } from "./types";
 
-export type ProductRow = Omit<Product, "recipeIngredients" | "recipeLabor" | "recipeMisc">;
+export type ProductRow = Omit<Product, "recipeIngredients" | "recipeLabor" | "recipeMisc" | "recipeComponents">;
 
 export interface RecipeRow {
   id: string;
   productId: string;
-  rowType: "ingredient" | "labor" | "misc";
+  /** "component" rows name an in-house product (its id in materialId) used in this recipe. */
+  rowType: "ingredient" | "labor" | "misc" | "component";
   materialId: string | null;
   label: string | null;
   quantity: number | null;
@@ -45,7 +46,16 @@ export function flattenProductRecipe(product: Product): RecipeRow[] {
     quantity: null,
     cost: row.cost,
   }));
-  return [...ingredientRows, ...laborRows, ...miscRows];
+  const componentRows: RecipeRow[] = (product.recipeComponents ?? []).map((row) => ({
+    id: row.id,
+    productId: product.id,
+    rowType: "component",
+    materialId: row.productId,
+    label: null,
+    quantity: row.quantity,
+    cost: null,
+  }));
+  return [...ingredientRows, ...laborRows, ...miscRows, ...componentRows];
 }
 
 /** Re-nests a flat ProductRow + its matching RecipeRows back into a full `Product`. */
@@ -62,6 +72,9 @@ export function assembleProduct(productRow: ProductRow, recipeRows: RecipeRow[])
     recipeMisc: forThisProduct
       .filter((r) => r.rowType === "misc")
       .map((r) => ({ id: r.id, label: r.label ?? "", cost: r.cost ?? 0 })),
+    recipeComponents: forThisProduct
+      .filter((r) => r.rowType === "component" && r.materialId)
+      .map((r) => ({ id: r.id, productId: r.materialId as string, quantity: r.quantity ?? 0 })),
   };
 }
 

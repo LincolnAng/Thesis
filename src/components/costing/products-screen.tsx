@@ -134,7 +134,7 @@ export function ProductsScreen({
           const unit = p.unit || "jar";
           // Half a recipe priced is not a margin, it is a flattering guess. Say what is missing.
           const costable = cost.unpriced.length === 0;
-          const noRecipe = p.recipeIngredients.length === 0;
+          const noRecipe = p.recipeIngredients.length === 0 && (p.recipeComponents ?? []).length === 0;
           return (
             <div
               key={p.id}

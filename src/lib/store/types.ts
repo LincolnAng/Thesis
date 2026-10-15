@@ -79,6 +79,17 @@ export interface RecipeIngredientRow {
   quantity: number; // amount of that material used per batch, in the material's own unit
 }
 
+/**
+ * Something made in-house that goes into another product — tablea into ice cream or brandy.
+ * The component is a product of its own (its own recipe, stock, batches and expiry); a batch
+ * of the product that uses it draws its stock down, the way a batch draws down beans.
+ */
+export interface RecipeComponentRow {
+  id: string;
+  productId: string; // the in-house product used — references Product.id
+  quantity: number; // how much of it one batch uses, in that product's own unit
+}
+
 export interface RecipeExtraRow {
   id: string;
   label: string;
@@ -136,6 +147,8 @@ export interface Product {
   recipeIngredients: RecipeIngredientRow[];
   recipeLabor: RecipeExtraRow[];
   recipeMisc: RecipeExtraRow[];
+  /** In-house products this one is made from. Missing on products saved before components. */
+  recipeComponents?: RecipeComponentRow[];
 }
 
 export type SupplierType = "packaging" | "raw_materials";

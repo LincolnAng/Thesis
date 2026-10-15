@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { Page } from "@/components/layout/page";
 import { SimpleStock } from "@/components/simple/simple-stock";
 import { useViewMode } from "@/lib/summary/view-mode";
+import { ProcessPlan } from "@/components/production/process-plan";
 import { EventPlanDialog } from "@/components/inventory/event-plan-dialog";
 import { PlanSettingsDialog } from "@/components/inventory/plan-settings-dialog";
 import { SeasonalBreakdown } from "@/components/inventory/seasonal-breakdown";
@@ -379,6 +380,8 @@ export function ProductionScreen({ section }: { section: "production" | "calenda
         {/* The banner above already covers the no-equipment case, and does it better — it has
             the button. Everything else that can stop the plan is spelled out here. */}
         <PlanFixes fixes={fixes.filter((f) => f.id !== "no-equipment")} />
+
+        {section === "production" && <ProcessPlan />}
 
         <div className="grid grid-cols-1 gap-4 min-[1000px]:grid-cols-3">
           <div className={`rounded-2xl border bg-card px-5 py-4 ${low.length ? "border-danger/35" : "border-line/15"}`}>

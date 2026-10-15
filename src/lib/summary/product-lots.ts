@@ -78,6 +78,8 @@ export function productExpiry(
   shelfLifeDays: number,
   expiringWithinDays: number,
   today = new Date(),
+  /** Every product, so batches of things made FROM this one (tablea into ice cream) draw it down. */
+  allProducts: Product[] = [],
 ): ProductExpiry {
   const todayDay = dayOf(today.toISOString());
 
@@ -107,6 +109,15 @@ export function productExpiry(
         matches(e, product),
     )
     .reduce((sum, e) => sum + (e.quantity as number), 0);
+  // Used as an in-house component: each batch of a product that contains this one took some.
+  for (const parent of allProducts) {
+    const row = (parent.recipeComponents ?? []).find((c) => c.productId === product.id);
+    if (!row || parent.id === product.id || parent.batchYield <= 0) continue;
+    for (const e of entries) {
+      if (e.type !== "INVENTORY_IN" || !e.quantity || e.quantity <= 0 || !matches(e, parent)) continue;
+      out += (e.quantity / parent.batchYield) * row.quantity;
+    }
+  }
 
   const lots: StockLot[] = [];
   for (const batch of made) {

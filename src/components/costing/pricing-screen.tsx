@@ -85,7 +85,7 @@ function PricingDetail({ product, cost, actual }: { product: Product; cost: Prod
    */
   const { products } = useStore();
   // A product with no recipe has no cost to price from, so it opens on the recipe.
-  const [tab, setTab] = useState<"price" | "recipe" | "rates">(product.recipeIngredients.length === 0 ? "recipe" : "price");
+  const [tab, setTab] = useState<"price" | "recipe" | "rates">(product.recipeIngredients.length === 0 && (product.recipeComponents ?? []).length === 0 ? "recipe" : "price");
   const price = effectiveProductPrice(product, cost);
   const profit = price - cost.costPerJar;
   const margin = price > 0 ? (profit / price) * 100 : 0;
@@ -312,7 +312,7 @@ export function PricingScreen({
                   <div className="text-sm font-semibold">{fullName(p, products)}</div>
                   <div className="mt-1.5 flex justify-between text-[13px] text-muted-foreground">
                     {price > 0 ? <span>{peso(price)} / {p.unit || "jar"}</span> : <span className="text-[#9A6B12]">No price yet</span>}
-                    {p.recipeIngredients.length === 0 ? (
+                    {p.recipeIngredients.length === 0 && (p.recipeComponents ?? []).length === 0 ? (
                       <span className="font-semibold text-[#9A6B12]">no recipe yet</span>
                     ) : cost.unpriced.length === 0 ? (
                       <span className={`font-semibold ${margin >= 15 ? "text-success" : "text-danger"}`}>

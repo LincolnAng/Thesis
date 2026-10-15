@@ -19,10 +19,10 @@ import type { Product } from "@/lib/store/types";
  * several screens from anything that showed what changing it would do.
  */
 export function ProductExpiryStrip({ product }: { product: Product }) {
-  const { entries, businessSettings } = useStore();
+  const { entries, businessSettings, products } = useStore();
   const life = shelfLifeDays(businessSettings, product.id);
   const window = expiringWithinDays(businessSettings);
-  const expiry = productExpiry(entries, product, life, window);
+  const expiry = productExpiry(entries, product, life, window, new Date(), products);
   const bulk = bulkUnitFor(businessSettings, product);
   const shopSize = caseSize(businessSettings);
   const shopWord = caseWord(businessSettings);

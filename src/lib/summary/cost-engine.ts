@@ -175,6 +175,8 @@ export function getProductCost(
   /** Her ledger, so ingredient prices come from receipts rather than a stored guess. */
   entries: Entry[] = [],
   products: Product[] = [],
+  /** How deep in a chain of in-house components this is — stops a recipe that uses itself. */
+  depth = 0,
 ): ProductCost {
   const ingredientLines: CostLine[] = [];
   const packagingLines: CostLine[] = [];
@@ -203,6 +205,29 @@ export function getProductCost(
       (p) => p.materialId === row.materialId && convertQuantity(p.quantity, p.unit, material.unit) === null,
     );
     if (hasUnusablePrice && unitCost.source !== "supplier") unconvertible.push(material.name);
+  }
+
+  // In-house components (tablea in ice cream) cost what one unit of them cost to make. A
+  // component whose own cost isn't known makes this one unknown too, never zero.
+  for (const row of product.recipeComponents ?? []) {
+    const component = products.find((p) => p.id === row.productId);
+    if (!component || component.id === product.id) continue;
+    if (depth >= 4) {
+      unpriced.push(component.name);
+      continue;
+    }
+    const sub = getProductCost(component, rawMaterials, supplierPrices, hourlyLaborRate, cacaoUtilization, entries, products, depth + 1);
+    const known = component.batchYield > 0 && sub.unpriced.length === 0 && sub.totalCost > 0;
+    if (!known) unpriced.push(component.name);
+    ingredientLines.push({
+      materialId: component.id,
+      name: `${component.name} (made in-house)`,
+      quantityPerBatch: row.quantity,
+      unit: component.unit?.trim() || "pcs",
+      unitCost: sub.totalCost,
+      batchCost: sub.totalCost * row.quantity,
+      source: known ? "transactions" : "none",
+    });
   }
 
   const labor = batchLaborCost(product, hourlyLaborRate);

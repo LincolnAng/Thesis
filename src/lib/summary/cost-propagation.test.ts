@@ -72,3 +72,30 @@ test("a product with no recipe costs nothing and keeps its own price", () => {
   assert.equal(cost.costPerJar, 0);
   assert.equal(effectiveProductPrice(empty, cost), 0);
 });
+
+// In-house components: tablea made here and used in another product.
+test("a product made from an in-house component costs what that component cost to make", () => {
+  const tablea: Product = { ...product, id: "p-tablea", name: "Tablea", batchYield: 10, recipeIngredients: [{ id: "t1", materialId: "m-beans", quantity: 5 }], recipeMisc: [] };
+  const iceCream: Product = {
+    ...product,
+    id: "p-ice",
+    name: "Ice cream",
+    batchYield: 20,
+    recipeIngredients: [],
+    recipeMisc: [],
+    recipeComponents: [{ id: "c1", productId: "p-tablea", quantity: 4 }],
+  };
+  const c: CostContext = { ...ctx([price("m-beans", 100, 1, "kg")]), products: [tablea, iceCream] };
+  // Tablea: 5 kg × ₱100 over 10 = ₱50 each. Ice cream: 4 tablea = ₱200 a batch over 20 = ₱10.
+  assert.equal(productCostPerJar(tablea, c).costPerJar, 50);
+  const ice = productCostPerJar(iceCream, c);
+  assert.equal(ice.costPerJar, 10);
+  assert.ok(ice.ingredientLines.some((l) => l.name.startsWith("Tablea")));
+});
+
+test("a component with no cost makes the product's cost unknown, not zero", () => {
+  const tablea: Product = { ...product, id: "p-tablea", name: "Tablea", recipeIngredients: [], recipeMisc: [] };
+  const iceCream: Product = { ...product, id: "p-ice", name: "Ice cream", recipeIngredients: [], recipeMisc: [], recipeComponents: [{ id: "c1", productId: "p-tablea", quantity: 4 }] };
+  const ice = productCostPerJar(iceCream, { ...ctx([]), products: [tablea, iceCream] });
+  assert.ok(ice.unpriced.includes("Tablea"));
+});

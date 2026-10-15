@@ -63,7 +63,7 @@ export function useProductionPlan(strategy: ScheduleStrategy = "fastest"): Produ
     needBy.setMonth(needBy.getMonth() + 1, 1);
     const needByDay = needBy.toISOString().slice(0, 10);
     return products.map((p) => {
-      const expiry = productExpiry(entries, p, shelfLifeDays(businessSettings, p.id), window);
+      const expiry = productExpiry(entries, p, shelfLifeDays(businessSettings, p.id), window, new Date(), products);
       if (!expiry.tracksAnything) return p;
       return { ...p, stockQty: Math.max(0, Math.round(sellableBy(expiry, needByDay) * 100) / 100) };
     });

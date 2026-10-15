@@ -14,7 +14,7 @@ import { CostBreakdownLines } from "@/components/finance/cost-breakdown-lines";
 import { LaborEditor } from "@/components/finance/labor-editor";
 import { useCostContext } from "@/lib/summary/use-cost-context";
 import { useNumericDraft } from "@/lib/use-numeric-draft";
-import type { Product, RawMaterialStock, RecipeExtraRow, RecipeIngredientRow } from "@/lib/store/types";
+import type { Product, RawMaterialStock, RecipeComponentRow, RecipeExtraRow, RecipeIngredientRow } from "@/lib/store/types";
 import { cn } from "@/lib/utils";
 
 function genRowId(prefix: string): string {
@@ -171,8 +171,67 @@ function TierRow({
   );
 }
 
+/**
+ * Something this shop makes that goes into this product — tablea into ice cream or brandy.
+ * Chosen from the product list, measured in that product's own unit, costed at what one of it
+ * costs to make. A batch of this product draws it off its own shelf.
+ */
+function ComponentRowEditor({
+  row,
+  options,
+  onUpdate,
+  onRemove,
+}: {
+  row: RecipeComponentRow;
+  options: Product[];
+  onUpdate: (id: string, patch: Partial<RecipeComponentRow>) => void;
+  onRemove: (id: string) => void;
+}) {
+  const qtyField = useNumericDraft(row.quantity, (n) => onUpdate(row.id, { quantity: n }));
+  const costCtx = useCostContext();
+  const component = options.find((p) => p.id === row.productId);
+  const unitCost = component ? productCostPerJar(component, costCtx).costPerJar : 0;
+  return (
+    <div className="flex items-center gap-2">
+      <select
+        value={row.productId}
+        onChange={(e) => onUpdate(row.id, { productId: e.target.value })}
+        aria-label="In-house ingredient"
+        className="h-11 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2 text-sm"
+      >
+        {options.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
+      </select>
+      <Input
+        type="number"
+        inputMode="decimal"
+        aria-label="Quantity"
+        value={qtyField.value}
+        onChange={(e) => qtyField.onChange(e.target.value)}
+        className="h-11 w-20 shrink-0 text-right text-sm"
+      />
+      <span className="w-10 shrink-0 text-xs text-muted-foreground">{component?.unit || "pcs"}</span>
+      <span className="hidden w-20 shrink-0 text-right text-xs font-medium text-foreground min-[480px]:block">
+        {unitCost > 0 ? formatPeso(unitCost * row.quantity) : "No cost yet"}
+      </span>
+      <Button size="icon" variant="ghost" className="h-11 w-11 shrink-0 text-muted-foreground" aria-label="Remove" onClick={() => onRemove(row.id)}>
+        <Trash2 className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+}
+
 export function RecipeEditor({ product }: { product: Product }) {
-  const { rawMaterials } = useStore();
+  const { rawMaterials, products } = useStore();
+  const components = product.recipeComponents ?? [];
+  // Anything else on the product list can go in — tablea into ice cream. Never itself.
+  const componentOptions = products.filter((p) => p.id !== product.id);
+  function persistComponents(next: RecipeComponentRow[]) {
+    updateProduct(product.id, { recipeComponents: next });
+  }
   const costCtx = useCostContext();
   const [showMore, setShowMore] = useState(false);
   const [batchCount, setBatchCount] = useState(1);
@@ -297,9 +356,9 @@ export function RecipeEditor({ product }: { product: Product }) {
           </div>
           {rawMaterials.length === 0 ? (
             <p className="text-xs text-muted-foreground">No raw materials or packaging yet — add them under Costing first.</p>
-          ) : ingredients.length === 0 ? (
+          ) : ingredients.length === 0 && components.length === 0 ? (
             <p className="text-xs text-muted-foreground">No recipe yet. Tap &quot;Add ingredient&quot; for each thing that goes into a batch.</p>
-          ) : (
+          ) : ingredients.length === 0 ? null : (
             <>
               <div className="flex gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 <span className="flex-1">Ingredient</span>
@@ -319,6 +378,32 @@ export function RecipeEditor({ product }: { product: Product }) {
                 />
               ))}
             </>
+          )}
+          {componentOptions.length > 0 && (
+            <div className="space-y-2 border-t border-line/10 pt-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-[13px] font-semibold">Made in-house</p>
+                  <p className="text-xs text-muted-foreground">Something you make that goes into this, like tablea in ice cream.</p>
+                </div>
+                <AddButton
+                  onClick={() =>
+                    persistComponents([...components, { id: genRowId("cmp"), productId: componentOptions[0].id, quantity: 0 }])
+                  }
+                >
+                  Add in-house ingredient
+                </AddButton>
+              </div>
+              {components.map((row) => (
+                <ComponentRowEditor
+                  key={row.id}
+                  row={row}
+                  options={componentOptions}
+                  onUpdate={(id, patch) => persistComponents(components.map((r) => (r.id === id ? { ...r, ...patch } : r)))}
+                  onRemove={(id) => persistComponents(components.filter((r) => r.id !== id))}
+                />
+              ))}
+            </div>
           )}
         </CostSection>
 
