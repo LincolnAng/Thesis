@@ -24,6 +24,12 @@ const HEADER = [
   // empty cells meaning "we were not recording who" rather than "nobody".
   "loggedById",
   "loggedByName",
+  // Payment terms, appended last for the same reason. Empty on older rows, which read as spot.
+  "paymentTerm",
+  "dueDate",
+  "amountPaid",
+  "paymentStatus",
+  "settledAt",
 ];
 
 function toRow(e: Entry): string[] {
@@ -46,12 +52,17 @@ function toRow(e: Entry): string[] {
     e.eventId ?? "",
     e.loggedById ?? "",
     e.loggedByName ?? "",
+    e.paymentTerm ?? "",
+    e.dueDate ?? "",
+    e.amountPaid == null ? "" : String(e.amountPaid),
+    e.paymentStatus ?? "",
+    e.settledAt ?? "",
   ];
 }
 
 function fromRow(row: string[]): Entry | null {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [id, timestamp, type, amount, quantity, unit, sku, counterparty, location, priceType, category, rawText, confidence, notes, _deletedAt, eventId, loggedById, loggedByName] =
+  const [id, timestamp, type, amount, quantity, unit, sku, counterparty, location, priceType, category, rawText, confidence, notes, _deletedAt, eventId, loggedById, loggedByName, paymentTerm, dueDate, amountPaid, paymentStatus, settledAt] =
     row;
   if (!id) return null;
   return {
@@ -72,6 +83,11 @@ function fromRow(row: string[]): Entry | null {
     eventId: eventId || null,
     loggedById: loggedById || null,
     loggedByName: loggedByName || null,
+    paymentTerm: (["spot", "payable", "receivable"].includes(paymentTerm) ? paymentTerm : null) as Entry["paymentTerm"],
+    dueDate: dueDate || null,
+    amountPaid: amountPaid ? Number(amountPaid) : null,
+    paymentStatus: (["pending", "partial", "settled"].includes(paymentStatus) ? paymentStatus : null) as Entry["paymentStatus"],
+    settledAt: settledAt || null,
   };
 }
 

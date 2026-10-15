@@ -32,6 +32,15 @@ export type CollectionName =
 
 export type WriteOp = "append" | "update" | "delete" | "migrate";
 
+/** Payment terms on a sale — who owes what, and when. Executives only; see redactForEmployee. */
+const PAYMENT_FIELDS = ["paymentTerm", "dueDate", "amountPaid", "paymentStatus", "settledAt"] as const;
+
+function withoutPaymentFields<T extends object>(entry: T): T {
+  const copy = { ...entry } as Record<string, unknown>;
+  for (const f of PAYMENT_FIELDS) delete copy[f];
+  return copy as T;
+}
+
 /** Entry types an employee can see and record. Everything else is money out or owner-only. */
 export const EMPLOYEE_ENTRY_TYPES: readonly EntryType[] = ["SALE", "WASTE", "INVENTORY_IN", "INVENTORY_OUT", "NOTE"];
 
@@ -86,7 +95,9 @@ export function redactForEmployee(data: BusinessData, sellingPrice: (product: Pr
     entries: data.entries
       .filter(employeeCanSeeEntry)
       // Spoilage is valued at cost, so its amount is a cost.
-      .map((e) => (e.type === "WASTE" ? { ...e, amount: null } : e)),
+      .map((e) => (e.type === "WASTE" ? { ...e, amount: null } : e))
+      // Who still owes the business what is the owners' to track, not the counter's.
+      .map(withoutPaymentFields),
     products: data.products.map((p) => ({
       ...p,
       standardPrice: sellingPrice(p),
@@ -160,8 +171,10 @@ export function decideWrite(req: WriteRequest): WriteDecision {
       if (!item || !employeeCanSeeEntry(item as Pick<Entry, "type">)) return deny("forbidden_entry_type");
       // Their copy of a spoilage entry has no amount (it's a cost); keep the real one.
       const merged = existing.type === "WASTE" && item.type === "WASTE" ? { ...item, amount: existing.amount } : item;
-      // Who logged it isn't theirs to change.
-      return { allow: true, item: { ...merged, loggedById: existing.loggedById, loggedByName: existing.loggedByName } };
+      // Who logged it isn't theirs to change, and their copy has no payment terms — keep the
+      // real ones, or editing a sale on credit would quietly mark it paid.
+      const kept = Object.fromEntries(PAYMENT_FIELDS.map((f) => [f, existing[f]]));
+      return { allow: true, item: { ...merged, ...kept, loggedById: existing.loggedById, loggedByName: existing.loggedByName } };
     }
     case "products":
     case "rawMaterials": {

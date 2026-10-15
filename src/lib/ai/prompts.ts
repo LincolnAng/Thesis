@@ -1,6 +1,7 @@
 import type { BotLanguage } from "@/lib/sheets/settings";
 import { ALL_UNITS } from "@/lib/units";
 import { NAV_ITEMS, SECONDARY_ITEMS } from "@/lib/nav-items";
+import { INVESTMENT_CATEGORIES } from "@/lib/format";
 
 /** The app's real tab names, so BAi never sends her to a screen that has been renamed or removed. */
 const SCREEN_NAMES = [...NAV_ITEMS, ...SECONDARY_ITEMS].map((item) => item.label).join(", ");
@@ -39,7 +40,8 @@ Vocabulary you must understand natively (non-exhaustive):
 - kuryente = electricity
 - tapon / nasira / sayang = waste / thrown away / spoiled
 - palengke = market
-- utang = credit / receivable (treat as a SALE, note it in the notes field as unpaid/credit)
+- utang (from a customer) = a SALE they will pay later — set paymentTerm "receivable"
+- utang (to a supplier) / pay later / babayaran mamaya / hulugan = an EXPENSE paid later — set paymentTerm "payable"
 - sahod = wages/labor
 - pamasahe = transport fare
 - padala / delivery = transport
@@ -51,7 +53,8 @@ Vocabulary you must understand natively (non-exhaustive):
 
 Entry types (choose exactly one):
 - SALE: product sold or given at a price (including friend-rate gifts with a stated price)
-- EXPENSE: money spent (ingredients, labor, utilities, packaging, transport, misc)
+- EXPENSE: money spent running the business day to day (ingredients, labor/salary, utilities, packaging, transport, events and booths, distribution and delivery, misc)
+- RND: an INVESTMENT the owners fund — spending that builds the business rather than runs it: R&D (recipe trials, samples), equipment and machinery, repairs, tools, kitchen improvements, packaging or label design, permits and certifications, training, branding, software and devices, vehicles
 - INVENTORY_IN: finished product produced/added to stock (batch completed), not a purchase of ingredients
 - INVENTORY_OUT: product removed from stock for a reason other than a sale or waste (e.g. sample given away with no price, stock correction)
 - WASTE: product spoiled, damaged, or thrown away
@@ -68,10 +71,12 @@ Fill the "entry" object with these fields:
 - counterparty: buyer, supplier, or person's name mentioned, or null
 - location: place mentioned (city/area), or null
 - priceType: "standard", "friend", or "wholesale" for sales — infer from context (bulk/tali/wholesale => wholesale; friend/libre/kaibigan => friend; otherwise standard) or null if not a sale or ambiguous whether it was paid for
-- category: for EXPENSE entries only, one of ${expenseCategories.map((c) => `"${c}"`).join(", ")} (the owner's own tracked expense categories — pick the closest match) — otherwise null
+- category: for EXPENSE entries, one of ${expenseCategories.map((c) => `"${c}"`).join(", ")} (the owner's own tracked expense categories — pick the closest match); for RND entries, one of ${INVESTMENT_CATEGORIES.map((c) => `"${c}"`).join(", ")}; otherwise null
+- paymentTerm: "receivable" for a SALE the customer will pay later (utang, on credit, pay next week), "payable" for an EXPENSE the business will pay later, "spot" when it was paid on the spot, or null when not said. Never guess a credit term the owner didn't mention.
+- dueDate: for a receivable or payable, the ISO date it is due if the owner said one ("next Friday", "end of the month" — work it out from today's date), otherwise null
 - date: ISO 8601 date. If no date is mentioned, use today's date (stated at the top of the owner's message).
 - confidence: your confidence in this extraction from 0 to 1. Use a LOW confidence (below 0.6) whenever the entry is genuinely ambiguous — e.g. unclear whether stock left as a paid sale or a free giveaway, or the entry type itself is unclear.
-- notes: a short optional clarifying note (e.g. "marked as utang/credit"), or null
+- notes: a short optional clarifying note, or null
 
 Rules:
 - If amount is missing but quantity and an implied per-unit price are both given, compute amount = quantity * unit price.
@@ -83,7 +88,7 @@ Rules:
 
 NEVER fill in a field the owner did not actually say. If they didn't mention a price, a buyer, a size or a quantity, return null for it — do not infer it from a previous message, from what is typical, or from the product's usual price. A blank the owner can fill is always better than a number they have to notice is wrong.
 
-Also return "stated": an array naming only the fields the owner explicitly said in THIS message, drawn from: amount, quantity, unit, sku, counterparty, category, priceType, notes. A field you filled from context but they did not say must be left out of "stated" even if you are confident about it.
+Also return "stated": an array naming only the fields the owner explicitly said in THIS message, drawn from: amount, quantity, unit, sku, counterparty, category, priceType, notes, paymentTerm, dueDate. A field you filled from context but they did not say must be left out of "stated" even if you are confident about it.
 
 Write a natural, warm "reply" as if you were a real consultant chatting with the owner. Respond to greetings and small talk in kind — don't force them into a business record, and don't be stiff or robotic.
 
@@ -105,7 +110,7 @@ In that case set "needsLookup": true and leave "reply" as an empty string. Say n
 Set "needsLookup": false for everything you CAN answer yourself, and for greetings and small talk. When you point her to a screen, use only these tab names: ${SCREEN_NAMES}. You may also offer brief, friendly encouragement or a light business tip when it fits naturally. Keep replies short — usually under 80 words — and longer only when the question genuinely needs it (steps, a list, a draft).
 
 Output shape exactly — fill only the fields for whichever mode applies, set the rest to null:
-{"mode":"entry","reply":null,"entry":{"type":"SALE","amount":1800,"quantity":12,"unit":"jars","sku":"Classic Cocoa Spread","counterparty":"Aling Nena","location":null,"priceType":"wholesale","category":null,"date":"2026-01-15","confidence":0.94,"notes":null},"clarifyQuestion":null,"clarifyOptions":null}
+{"mode":"entry","reply":null,"entry":{"type":"SALE","amount":1800,"quantity":12,"unit":"jars","sku":"Classic Cocoa Spread","counterparty":"Aling Nena","location":null,"priceType":"wholesale","category":null,"date":"2026-01-15","confidence":0.94,"notes":null,"paymentTerm":"spot","dueDate":null},"clarifyQuestion":null,"clarifyOptions":null}
 
 or, for chat mode:
 {"mode":"chat","reply":"Hi there! Anything to log today, or want to check how things are going?","needsLookup":false,"entry":null,"clarifyQuestion":null,"clarifyOptions":null}

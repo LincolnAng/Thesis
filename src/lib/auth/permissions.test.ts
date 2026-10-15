@@ -146,3 +146,27 @@ test("executive can write anything else, and the logger is still stamped from th
   assert.equal(d.allow && d.item?.loggedByName, "Owner");
   assert.ok(decideWrite({ role: "executive", user: me, collection: "budgets", op: "update", item: {} }).allow);
 });
+
+test("employees never receive payment terms, and editing a sale keeps them", () => {
+  const data = sample();
+  data.entries = [
+    { id: "s2", type: "SALE", amount: 2000, sku: "Tablea", paymentTerm: "receivable", amountPaid: 500, dueDate: "2026-11-01", paymentStatus: "partial" },
+  ] as never;
+  const [sale] = redactForEmployee(data, () => 100).entries as unknown as Record<string, unknown>[];
+  for (const f of ["paymentTerm", "dueDate", "amountPaid", "paymentStatus", "settledAt"]) assert.ok(!(f in sale), f);
+
+  const existing = { id: "s2", type: "SALE", amount: 2000, paymentTerm: "receivable", amountPaid: 500, dueDate: "2026-11-01", paymentStatus: "partial", loggedById: "u-exec", loggedByName: "Ate" };
+  const decision = decideWrite({
+    role: "employee",
+    user: me,
+    collection: "entries",
+    op: "update",
+    item: { id: "s2", type: "SALE", amount: 2000, quantity: 20 },
+    existing,
+  });
+  assert.equal(decision.allow, true);
+  const item = (decision as { item: Record<string, unknown> }).item;
+  assert.equal(item.paymentTerm, "receivable");
+  assert.equal(item.amountPaid, 500);
+  assert.equal(item.quantity, 20);
+});

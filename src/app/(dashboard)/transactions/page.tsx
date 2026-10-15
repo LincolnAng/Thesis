@@ -3,180 +3,142 @@
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { ArrowDownLeft, ArrowUpRight, CircleDollarSign, HandCoins, Landmark } from "lucide-react";
 import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
-import { ArrowDown, ArrowRight, ArrowUp } from "lucide-react";
 import { CarouselNav } from "@/components/ui/carousel-nav";
 import { Page } from "@/components/layout/page";
-import { SimpleMoney } from "@/components/simple/simple-money";
-import { useViewMode } from "@/lib/summary/view-mode";
 import { BudgetBreakdownChart } from "@/components/summary/budget-breakdown-chart";
 import { CategoryBudgetEditor } from "@/components/summary/category-budget-editor";
-import { TransactionGrid } from "@/components/transactions/transaction-grid";
+import { Bar } from "@/components/summary/bar";
 import { MissingProductBanner } from "@/components/sales/missing-product-banner";
 import { SettingNumberInput } from "@/components/ui/setting-number-input";
+import { QuickEditDialog } from "@/components/home/quick-edit-dialog";
+import { TransactionTable } from "@/components/transactions/transaction-table";
+import { EMPTY_FILTERS, TransactionSearch, type TransactionFilters } from "@/components/transactions/transaction-search";
 import { useStore } from "@/lib/store/use-store";
+import { addEntry, deleteEntry, replaceEntry } from "@/lib/store/store";
+import { blankEntryDraft } from "@/lib/store/blank-draft";
+import { entryToDraft } from "@/lib/home/describe-entry";
 import { computeExpensesSummary } from "@/lib/summary/expenses-summary";
 import { salesTarget, setSalesTarget } from "@/lib/summary/business-config";
-import { formatPeso } from "@/lib/format";
-import type { Entry } from "@/lib/store/types";
+import { carriedOver, dueInfo, monthOf, statusOf, summarize, termOf } from "@/lib/transactions/ledger";
+import { formatPeso, pluralize } from "@/lib/format";
+import type { Entry, EntryType } from "@/lib/store/types";
 
-type Kind = "all" | "SALE" | "EXPENSE" | "RND" | "WASTE";
-
-function describe(e: Entry): string {
-  return e.sku ?? e.rawText ?? (e.type === "SALE" ? "Sale" : "Expense");
-}
-
-/** Month of an entry in local time ("2026-09"), so a sale late on the 30th isn't filed under next month. */
-function monthOf(e: Entry): string {
-  const d = new Date(e.timestamp);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
+/** The static tabs: one per kind of transaction, always on screen. */
+type Tab = "all" | "SALE" | "EXPENSE" | "RND" | "WASTE";
+const TABS: [Tab, string][] = [
+  ["all", "All"],
+  ["SALE", "Sales"],
+  ["EXPENSE", "Expenses"],
+  ["RND", "Investments"],
+  ["WASTE", "Spoilage"],
+];
+const EMPLOYEE_TABS: Tab[] = ["all", "SALE", "WASTE"];
+const LEDGER_TYPES = new Set<EntryType>(["SALE", "EXPENSE", "RND", "WASTE"]);
 
 function monthLabel(key: string, style: "long" | "short" = "long") {
   const [y, m] = key.split("-").map(Number);
   return new Date(y, m - 1, 1).toLocaleDateString("en-US", style === "long" ? { month: "long", year: "numeric" } : { month: "short" });
 }
 
-function totals(list: Entry[]) {
-  const totalIn = list.filter((e) => e.type === "SALE").reduce((s, e) => s + (e.amount ?? 0), 0);
-  // R&D is money that genuinely left the account, so it belongs in money OUT — it is split
-  // out only so the cost of experimenting can be seen rather than buried in ingredients.
-  const totalOut = list
-    .filter((e) => e.type === "EXPENSE" || e.type === "RND")
-    .reduce((s, e) => s + (e.amount ?? 0), 0);
-  // Jars thrown away are kept apart from money OUT, which is what she actually paid out. No
-  // peso left the account when a jar spoiled — the loss is real, but it is a different kind
-  // of number, and adding it to purchases would overstate what she spent.
-  const spoiled = list
-    .filter((e) => e.type === "WASTE")
-    .reduce((s, e) => s + (e.amount ?? 0), 0);
-  return { totalIn, totalOut, spoiled, earned: totalIn - totalOut - spoiled };
-}
-
-function StatCard({
-  label,
-  value,
-  tone,
-  icon,
-  filled,
-  sub,
-}: {
-  label: string;
-  value: number;
-  tone: "good" | "bad";
-  icon: React.ReactNode;
-  /** Solid card with white text, colored by the tone. */
-  filled?: boolean;
-  sub?: string;
-}) {
-  const solid = tone === "good" ? "bg-success border-success" : "bg-danger border-danger";
-  const iconBg = filled ? "bg-card/20" : tone === "good" ? "bg-success/10" : "bg-danger/10";
-  return (
-    <div className={`flex items-center gap-3.5 rounded-2xl border px-[22px] py-4 ${filled ? `${solid} text-white` : "border-line/15 bg-card"}`}>
-      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconBg}`}>{icon}</div>
-      <div className="min-w-0">
-        <div className={`text-xs font-semibold ${filled ? "text-white/85" : "text-muted-foreground"}`}>{label}</div>
-        <div className={`font-display text-[26px] font-bold ${filled ? "text-white" : tone === "good" ? "text-success" : "text-danger"}`}>
-          {formatPeso(value)}
-        </div>
-        {sub && <div className={`text-[11px] font-medium ${filled ? "text-white/85" : "text-muted-foreground"}`}>{sub}</div>}
-      </div>
-    </div>
-  );
-}
-
+/**
+ * Transactions: one page, top to bottom — the month's money in boxes, the sales target and
+ * budget, then every transaction under tabs, with a search bar that filters as you go.
+ *
+ * There is no Simple/Advanced split any more: everything is here, in one place. Payables and
+ * receivables (money owed either way) are executives' only, as are expenses and investments;
+ * employees see sales and spoilage.
+ */
 function TransactionsPageInner() {
   const { entries, categoryBudgets, businessSettings } = useStore();
-  const [viewMode] = useViewMode();
-  // An employee records and checks sales and spoilage; money out, profit and the budget are
-  // the owners'. The server doesn't send them expenses or R&D at all — this keeps the screen
-  // from showing boxes that would read as ₱0.
   const exec = isExecutive(useCurrentUser());
   const searchParams = useSearchParams();
   // Arriving from a supplier's "See spending" link: show only what was paid to them.
   const supplierFilter = searchParams.get("supplier");
 
-  const [kind, setKind] = useState<Kind>(supplierFilter ? "EXPENSE" : "all");
-  const [search, setSearch] = useState("");
-  const [addOpen, setAddOpen] = useState(false);
-  const [showBudget, setShowBudget] = useState(false);
+  const [tab, setTab] = useState<Tab>(supplierFilter ? "EXPENSE" : "all");
+  const [filters, setFilters] = useState<TransactionFilters>(EMPTY_FILTERS);
+  const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<Entry | null>(null);
   const [editBudgets, setEditBudgets] = useState(false);
+  const now = useMemo(() => new Date(), []);
 
-  // Spoilage belongs here even though no money moves: it is a loss she needs to see beside
-  // the sales it eats into, and the grid is where she corrects a mis-logged one.
-  const money = useMemo(
-    () =>
-      entries.filter(
-        (e) => e.type === "SALE" || e.type === "EXPENSE" || e.type === "RND" || e.type === "WASTE",
-      ),
-    [entries],
-  );
+  const ledger = useMemo(() => entries.filter((e) => LEDGER_TYPES.has(e.type)), [entries]);
   // Every month with at least one transaction, newest first — always including this one.
   const months = useMemo(() => {
-    const now = new Date();
-    const current = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    return [...new Set([current, ...money.map(monthOf)])].sort().reverse();
-  }, [money]);
+    const current = monthOf({ timestamp: now.toISOString() });
+    return [...new Set([current, ...ledger.map(monthOf)])].sort().reverse();
+  }, [ledger, now]);
   const [period, setPeriod] = useState<string>(() => months[0]);
-  // Where the shown month sits in the list (newest first), so the arrows know what's next.
   const monthIndex = months.indexOf(period);
+  const periodName = period === "all" ? "all time" : monthLabel(period);
+
+  const summary = useMemo(() => summarize(ledger, period, now), [ledger, period, now]);
+  const carried = useMemo(() => (exec ? carriedOver(ledger, period) : []), [exec, ledger, period]);
+  const carriedFrom = useMemo(() => new Map(carried.map((e) => [e.id, monthLabel(monthOf(e), "short")])), [carried]);
 
   const target = salesTarget(businessSettings);
   const expenses = useMemo(() => computeExpensesSummary(entries, categoryBudgets), [entries, categoryBudgets]);
   const spentByCategory = useMemo(() => new Map(expenses.byCategory.map((row) => [row.category, row.amount])), [expenses]);
-
-  const periodRows = period === "all" ? money : money.filter((e) => monthOf(e) === period);
-  const periodTotals = totals(periodRows);
-  const periodName = period === "all" ? "all time" : monthLabel(period);
   const monthsInPeriod = period === "all" ? months.length : 1;
   const periodTarget = target * monthsInPeriod;
   const periodBudget = expenses.budget * monthsInPeriod;
 
-  const rows = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return periodRows
-      .filter((e) => kind === "all" || e.type === kind)
-      .filter((e) => !supplierFilter || (e.counterparty ?? "").toLowerCase() === supplierFilter.toLowerCase())
-      .filter((e) => !q || describe(e).toLowerCase().includes(q) || (e.counterparty ?? "").toLowerCase().includes(q))
-      .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
-  }, [periodRows, kind, search, supplierFilter]);
+  const tabs = exec ? TABS : TABS.filter(([t]) => EMPLOYEE_TABS.includes(t));
+  const periodRows = useMemo(
+    () => (period === "all" ? ledger : ledger.filter((e) => monthOf(e) === period)),
+    [ledger, period],
+  );
 
-  if (exec && viewMode === "simple") {
-    return (
-      <Page title="Transactions">
-        <SimpleMoney />
-      </Page>
-    );
-  }
+  // What the filter dropdowns offer: only values that actually occur.
+  const choices = useMemo(() => {
+    const uniq = (list: (string | null | undefined)[]) => [...new Set(list.filter((x): x is string => !!x))].sort((a, b) => a.localeCompare(b));
+    return {
+      products: uniq(ledger.map((e) => e.sku)),
+      people: uniq(ledger.map((e) => e.counterparty)),
+      recorders: uniq(ledger.map((e) => e.loggedByName)),
+    };
+  }, [ledger]);
+
+  const rows = useMemo(() => {
+    const q = filters.text.trim().toLowerCase();
+    // Still-owed rows from earlier months come first in a month's Sales, Expenses and All tabs.
+    const pool = [...carried, ...periodRows.slice().sort((a, b) => b.timestamp.localeCompare(a.timestamp))];
+    return pool.filter((e) => {
+      if (tab !== "all" && e.type !== tab) return false;
+      if (filters.type && e.type !== filters.type) return false;
+      if (supplierFilter && (e.counterparty ?? "").toLowerCase() !== supplierFilter.toLowerCase()) return false;
+      if (filters.product && e.sku !== filters.product) return false;
+      if (filters.person && e.counterparty !== filters.person) return false;
+      if (filters.recordedBy && e.loggedByName !== filters.recordedBy) return false;
+      if (filters.status) {
+        if (filters.status === "spot" && termOf(e) !== "spot") return false;
+        if (filters.status === "overdue" && !dueInfo(e, now).overdue) return false;
+        if (["pending", "partial", "settled"].includes(filters.status) && statusOf(e) !== filters.status) return false;
+      }
+      if (q) {
+        const hay = [e.sku, e.counterparty, e.rawText, e.notes, e.loggedByName].join(" ").toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [carried, periodRows, tab, filters, supplierFilter, now]);
+
+  const addType: EntryType = tab === "all" ? "SALE" : tab;
 
   return (
     <Page
       title="Transactions"
-      hideModeToggle={!exec}
       right={
-        <>
-          {exec && <button
-            type="button"
-            onClick={() => setShowBudget((v) => !v)}
-            className={`rounded-[10px] border px-4 py-2.5 text-[13px] font-semibold ${showBudget ? "border-cacao/30 bg-cacao/10 text-cacao" : "border-line/20 bg-card"}`}
-          >
-            {showBudget ? "Hide target & budget" : "Target & budget"}
-          </button>}
-          <button
-            type="button"
-            onClick={() => setAddOpen(true)}
-            className="rounded-[10px] bg-cacao px-[18px] py-2.5 text-[13px] font-semibold text-ivory"
-          >
-            + Add transaction
-          </button>
-        </>
+        <button type="button" onClick={() => setAdding(true)} className="rounded-[10px] bg-cacao px-[18px] py-2.5 text-[13px] font-semibold text-ivory">
+          + Add transaction
+        </button>
       }
     >
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-6">
         <MissingProductBanner sales={entries.filter((e) => e.type === "SALE")} />
 
-        {/* One month at a time with arrows, rather than a pill per month — the pill row grew
-            by one every month and would have taken the whole header over within a year. */}
         <div className="flex flex-wrap items-center gap-2">
           <CarouselNav
             label={period === "all" ? "All time" : monthLabel(period)}
@@ -191,140 +153,256 @@ function TransactionsPageInner() {
             type="button"
             onClick={() => setPeriod(period === "all" ? months[0] : "all")}
             className={`rounded-full border px-3.5 py-1.5 text-[13px] ${
-              period === "all"
-                ? "border-cacao bg-cacao font-semibold text-ivory"
-                : "border-line/15 bg-card font-medium text-muted-foreground"
+              period === "all" ? "border-cacao bg-cacao font-semibold text-ivory" : "border-line/15 bg-card font-medium text-muted-foreground"
             }`}
           >
             All time
           </button>
-          {period !== "all" && period !== months[0] && (
-            <button
-              type="button"
-              onClick={() => setPeriod(months[0])}
-              className="text-[13px] font-medium text-muted-foreground underline decoration-dotted"
-            >
-              Back to {monthLabel(months[0], "short")}
-            </button>
-          )}
         </div>
 
-        <div className={`grid grid-cols-1 gap-4 ${exec ? "min-[900px]:grid-cols-3" : "min-[900px]:grid-cols-2"}`}>
-          <StatCard
-            label={exec ? `Money IN · ${periodName}` : `Sales · ${periodName}`}
-            value={periodTotals.totalIn}
-            tone="good"
-            sub={!exec ? "everything sold" : periodTarget > 0 ? `${Math.round((periodTotals.totalIn / periodTarget) * 100)}% of ${formatPeso(periodTarget)} target` : "No target set"}
-            icon={<ArrowUp className="h-5 w-5 text-success" strokeWidth={2} />}
-          />
-          {exec && (<>
-          <StatCard
-            label={`Money OUT · ${periodName}`}
-            value={periodTotals.totalOut}
-            tone="bad"
-            sub={periodBudget > 0 ? `${Math.round((periodTotals.totalOut / periodBudget) * 100)}% of ${formatPeso(periodBudget)} budget` : "No budget set"}
-            icon={<ArrowDown className="h-5 w-5 text-danger" strokeWidth={2} />}
-          />
-          <StatCard
-            label={`You EARNED · ${periodName}`}
-            value={periodTotals.earned}
-            tone={periodTotals.earned >= 0 ? "good" : "bad"}
-            filled
-            sub={
-              periodTotals.spoiled > 0
-                ? `money in − money out − ${formatPeso(periodTotals.spoiled)} spoiled`
-                : periodTotals.earned >= 0
-                  ? "money in − money out"
-                  : "you spent more than you made"
-            }
-            icon={<ArrowRight className="h-5 w-5 text-white" strokeWidth={2} />}
-          />
-          </>)}
-        </div>
-
-        {exec && showBudget && (
-          <div className="flex flex-col gap-4 rounded-2xl border border-line/15 bg-card p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="text-sm font-semibold">Target & budget</div>
-              <label className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-                Monthly sales target ₱
-                <SettingNumberInput value={target} onCommit={setSalesTarget} className="h-8 w-28 text-sm" />
-              </label>
-            </div>
-            <BudgetBreakdownChart categoryBudgets={categoryBudgets} spentByCategory={spentByCategory} />
-            <button
-              type="button"
-              onClick={() => setEditBudgets((v) => !v)}
-              className="self-start text-xs font-semibold text-cacao"
-            >
-              {editBudgets ? "Done editing budgets" : "Edit budgets"}
-            </button>
-            {editBudgets && <CategoryBudgetEditor />}
-          </div>
+        {/* The money, by kind: cash that moved, what is still owed, and what was earned. */}
+        {exec ? (
+          <section className="grid grid-cols-1 gap-3 min-[600px]:grid-cols-2 min-[1200px]:grid-cols-5" aria-label="Money summary">
+            <MoneyBox
+              icon={<ArrowDownLeft className="h-5 w-5" />}
+              label="Money in"
+              value={summary.moneyIn}
+              tone="good"
+              note={`Cash received · ${periodName}`}
+            />
+            <MoneyBox
+              icon={<ArrowUpRight className="h-5 w-5" />}
+              label="Money out"
+              value={summary.moneyOut}
+              tone="bad"
+              note={`Cash paid · ${periodName}`}
+            />
+            <MoneyBox
+              icon={<CircleDollarSign className="h-5 w-5" />}
+              label="Money earned"
+              value={summary.earned}
+              tone={summary.earned >= 0 ? "good" : "bad"}
+              filled
+              note={summary.spoiled > 0 ? `Sales − expenses − ${formatPeso(summary.spoiled)} spoiled, paid or not` : "Sales − expenses, paid or not"}
+            />
+            <MoneyBox
+              icon={<HandCoins className="h-5 w-5" />}
+              label="Receivables"
+              value={summary.receivables}
+              tone="neutral"
+              note={summary.overdueReceivables ? `Owed to us · ${pluralize(summary.overdueReceivables, "overdue")}` : "Owed to us, not yet paid"}
+              alert={summary.overdueReceivables > 0}
+            />
+            <MoneyBox
+              icon={<Landmark className="h-5 w-5" />}
+              label="Payables"
+              value={summary.payables}
+              tone="neutral"
+              note={summary.overduePayables ? `We owe · ${pluralize(summary.overduePayables, "overdue")}` : "We owe, not yet paid"}
+              alert={summary.overduePayables > 0}
+            />
+          </section>
+        ) : (
+          <section className="grid grid-cols-1 gap-3 min-[600px]:grid-cols-2" aria-label="Sales summary">
+            <MoneyBox icon={<ArrowDownLeft className="h-5 w-5" />} label="Sales" value={summary.sales} tone="good" note={`Everything sold · ${periodName}`} />
+          </section>
         )}
 
-        <div className="flex flex-col overflow-hidden rounded-2xl border border-line/15 bg-card">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line/10 px-[18px] py-3.5">
-              <div className="text-sm font-semibold">
-                Transactions · <span className="font-medium text-muted-foreground">{period === "all" ? "All time" : monthLabel(period)}</span>
-              </div>
-              <div className="flex gap-1.5">
-                {(
-                  [
-                    ["all", "All"],
-                    ["SALE", "Sales"],
-                    ["EXPENSE", "Expenses"],
-                    ["RND", "R&D"],
-                    ["WASTE", "Spoilage"],
-                  ] as const
-                ).filter(([k]) => exec || k === "all" || k === "SALE" || k === "WASTE").map(([k, label]) => (
-                  <button
-                    key={k}
-                    type="button"
-                    onClick={() => setKind(k)}
-                    className={`rounded-lg px-3.5 py-1.5 text-[13px] ${kind === k ? "bg-cacao/10 font-semibold text-cacao" : "font-medium text-muted-foreground"}`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <input
-                type="text"
-                placeholder="Search…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-[180px] rounded-lg border border-line/20 px-3 py-2 text-[13px] outline-none focus:border-cacao"
+        {exec && (
+          <section className="flex flex-col gap-4 rounded-2xl border border-line/15 bg-card p-5" aria-labelledby="target-title">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 id="target-title" className="text-sm font-semibold">
+                Sales target & budget · {periodName}
+              </h2>
+              <button type="button" onClick={() => setEditBudgets((v) => !v)} className="text-xs font-semibold text-cacao">
+                {editBudgets ? "Done editing" : "Edit target & budgets"}
+              </button>
+            </div>
+            <div className="grid grid-cols-1 gap-5 min-[800px]:grid-cols-2">
+              <Progress
+                label="Sales against target"
+                value={summary.sales}
+                goal={periodTarget}
+                empty="No sales target set"
+                tone="good"
+              />
+              <Progress
+                label="Expenses against budget"
+                value={summary.expenses}
+                goal={periodBudget}
+                empty="No budget set"
+                tone="warning"
               />
             </div>
-
-            {supplierFilter && (
-              <div className="flex items-center gap-2 border-b border-line/10 bg-secondary px-[18px] py-2 text-[13px]">
-                <span className="text-muted-foreground">Showing payments to</span>
-                <span className="font-semibold">{supplierFilter}</span>
-                <Link href="/transactions" className="ml-auto font-semibold text-cacao">
-                  Clear
-                </Link>
+            {summary.invested > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {formatPeso(summary.invested)} went into investments {period === "all" ? "overall" : "this month"} — funded by the owners, so not counted above.
+              </p>
+            )}
+            {editBudgets && (
+              <div className="flex flex-col gap-4 border-t border-line/10 pt-4">
+                <label className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                  Monthly sales target ₱
+                  <SettingNumberInput value={target} onCommit={setSalesTarget} className="h-8 w-28 text-sm" />
+                </label>
+                <BudgetBreakdownChart categoryBudgets={categoryBudgets} spentByCategory={spentByCategory} />
+                <CategoryBudgetEditor />
               </div>
             )}
+          </section>
+        )}
 
-            <TransactionGrid
-              rows={rows}
-              adding={addOpen}
-              onStartAdding={() => setAddOpen(true)}
-              onDoneAdding={() => setAddOpen(false)}
-              defaultType={kind === "EXPENSE" ? "EXPENSE" : "SALE"}
-            />
+        <section className="flex flex-col gap-3" aria-labelledby="records-title">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <h2 id="records-title" className="text-sm font-semibold">
+              Transactions · <span className="font-medium text-muted-foreground">{period === "all" ? "All time" : monthLabel(period)}</span>
+            </h2>
+            <div className="flex w-fit max-w-full gap-1.5 overflow-x-auto rounded-[10px] bg-secondary p-1" role="tablist" aria-label="Kind of transaction">
+              {tabs.map(([t, label]) => (
+                <button
+                  key={t}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === t}
+                  onClick={() => setTab(t)}
+                  className={`min-h-10 shrink-0 rounded-lg px-4 py-2 text-[13px] ${tab === t ? "bg-card font-semibold shadow-sm" : "font-medium text-muted-foreground"}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
 
-            <div className="flex justify-between border-t border-line/10 px-[18px] py-2.5 text-xs text-faint">
-              <span>Edit any cell straight in the table — it saves when you move on</span>
+          <TransactionSearch
+            value={filters}
+            onChange={setFilters}
+            products={choices.products}
+            people={choices.people}
+            recorders={choices.recorders}
+            showType={tab === "all"}
+            showStatus={exec && (tab === "all" || tab === "SALE" || tab === "EXPENSE")}
+          />
+
+          {supplierFilter && (
+            <div className="flex items-center gap-2 rounded-xl bg-secondary px-4 py-2 text-[13px]">
+              <span className="text-muted-foreground">Showing payments to</span>
+              <span className="font-semibold">{supplierFilter}</span>
+              <Link href="/transactions" className="ml-auto font-semibold text-cacao">
+                Clear
+              </Link>
+            </div>
+          )}
+
+          {tab === "RND" && (
+            <p className="text-[13px] text-muted-foreground">
+              Investments build the business rather than run it — R&D, equipment, repairs, permits and the like. The owners fund
+              them, so they are kept out of money in, money out and earnings.
+            </p>
+          )}
+
+          <div className="overflow-hidden rounded-2xl border border-line/15 bg-card">
+            <TransactionTable rows={rows} showPayment={exec} onEdit={setEditing} carriedFrom={carriedFrom} />
+            <div className="flex flex-wrap justify-between gap-2 border-t border-line/10 px-4 py-2.5 text-xs text-muted-foreground">
+              <span>Press the pencil on a row to change it.</span>
               <span>
-                Showing {rows.length} of {periodRows.length} rows
+                Showing {rows.length} of {periodRows.length + carried.length} rows
+                {carried.length > 0 ? ` · ${carried.length} still owed from earlier months` : ""}
               </span>
             </div>
-        </div>
+          </div>
+        </section>
       </div>
 
+      <QuickEditDialog
+        open={adding}
+        onOpenChange={setAdding}
+        title="Add transaction"
+        initial={blankEntryDraft(exec ? addType : addType === "WASTE" ? "WASTE" : "SALE")}
+        allowedTypes={exec ? ["SALE", "EXPENSE", "RND", "WASTE"] : ["SALE", "WASTE"]}
+        onSave={(draft) => addEntry(draft)}
+      />
+      {editing && (
+        <QuickEditDialog
+          key={editing.id}
+          open
+          onOpenChange={(open) => !open && setEditing(null)}
+          title="Change transaction"
+          initial={entryToDraft(editing)}
+          allowedTypes={exec ? ["SALE", "EXPENSE", "RND", "WASTE"] : ["SALE", "WASTE"]}
+          onSave={(draft) => replaceEntry(editing.id, draft)}
+          onDelete={() => deleteEntry(editing.id)}
+        />
+      )}
     </Page>
+  );
+}
+
+function MoneyBox({
+  icon,
+  label,
+  value,
+  note,
+  tone,
+  filled,
+  alert,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+  note: string;
+  tone: "good" | "bad" | "neutral";
+  filled?: boolean;
+  alert?: boolean;
+}) {
+  const color = tone === "good" ? "text-success" : tone === "bad" ? "text-danger" : "text-foreground";
+  if (filled) {
+    return (
+      <div className={`flex flex-col gap-1 rounded-2xl border px-5 py-4 text-white ${tone === "bad" ? "border-danger bg-danger" : "border-success bg-success"}`}>
+        <span className="flex items-center gap-2 text-xs font-semibold text-white/85">
+          {icon}
+          {label}
+        </span>
+        <span className="font-display text-[26px] font-bold">{formatPeso(value)}</span>
+        <span className="text-[11.5px] text-white/85">{note}</span>
+      </div>
+    );
+  }
+  return (
+    <div className={`flex flex-col gap-1 rounded-2xl border bg-card px-5 py-4 ${alert ? "border-danger/40" : "border-line/15"}`}>
+      <span className={`flex items-center gap-2 text-xs font-semibold text-muted-foreground`}>
+        <span className={color}>{icon}</span>
+        {label}
+      </span>
+      <span className={`font-display text-[26px] font-bold ${color}`}>{formatPeso(value)}</span>
+      <span className={`text-[11.5px] ${alert ? "font-semibold text-danger" : "text-muted-foreground"}`}>{note}</span>
+    </div>
+  );
+}
+
+function Progress({
+  label,
+  value,
+  goal,
+  empty,
+  tone,
+}: {
+  label: string;
+  value: number;
+  goal: number;
+  empty: string;
+  tone: "good" | "warning";
+}) {
+  const pct = goal > 0 ? (value / goal) * 100 : 0;
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-sm">
+        <span>{label}</span>
+        <span className="text-muted-foreground">
+          {goal > 0 ? `${formatPeso(value)} of ${formatPeso(goal)} · ${Math.round(pct)}%` : empty}
+        </span>
+      </div>
+      <Bar pct={Math.min(100, pct)} tone={tone} />
+    </div>
   );
 }
 
@@ -335,4 +413,3 @@ export default function TransactionsPageSuspended() {
     </Suspense>
   );
 }
-

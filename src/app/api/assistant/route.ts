@@ -5,10 +5,12 @@ import { assistantSystemPromptStatic, assistantSystemPromptDynamic, buildAssista
 import { getAiSettings } from "@/lib/sheets/settings";
 import { normalizeUnit } from "@/lib/units";
 import type { Entry } from "@/lib/store/types";
+import { INVESTMENT_CATEGORIES } from "@/lib/format";
 
 const VALID_TYPES = ["SALE", "EXPENSE", "RND", "INVENTORY_IN", "INVENTORY_OUT", "WASTE", "SUPPLIER", "NOTE"];
 const VALID_PRICE_TYPES = ["standard", "friend", "wholesale"];
-const STATED_FIELDS = ["amount", "quantity", "unit", "sku", "counterparty", "category", "priceType", "notes"];
+const STATED_FIELDS = ["amount", "quantity", "unit", "sku", "counterparty", "category", "priceType", "notes", "paymentTerm", "dueDate"];
+const VALID_PAYMENT_TERMS = ["spot", "receivable", "payable"];
 
 const DEFAULT_VALID_CATEGORIES = ["raw_materials", "labor", "utilities", "packaging", "transport", "misc"];
 
@@ -25,6 +27,28 @@ export interface AssistantEntryResult {
   date: string;
   confidence: number;
   notes: string | null;
+  /** Spot unless she said it is owed: a sale on credit (utang) or a purchase paid later. */
+  paymentTerm: Entry["paymentTerm"];
+  dueDate: string | null;
+}
+
+/** Only a sale can be owed to the business and only an expense by it. */
+function coerceTerm(type: Entry["type"] | undefined, raw: unknown): Entry["paymentTerm"] {
+  if (!VALID_PAYMENT_TERMS.includes(raw as string)) return null;
+  if (raw === "receivable") return type === "SALE" ? "receivable" : null;
+  if (raw === "payable") return type === "EXPENSE" ? "payable" : null;
+  return "spot";
+}
+
+function coerceDay(raw: unknown): string | null {
+  const s = str(raw);
+  return s && /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : null;
+}
+
+/** An investment's kind comes from its own list; an expense's from her expense categories. */
+function coerceCategory(type: Entry["type"] | undefined, raw: unknown, validCategories: string[]): Entry["category"] {
+  if (type === "RND") return (INVESTMENT_CATEGORIES as readonly string[]).includes(raw as string) ? (raw as string) : "rnd";
+  return validCategories.includes(raw as string) ? (raw as Entry["category"]) : null;
 }
 
 export interface AssistantClarifyOption {
@@ -71,7 +95,7 @@ function coerceEntry(parsed: Record<string, unknown>, today: string, validCatego
   const priceType = VALID_PRICE_TYPES.includes(parsed.priceType as string)
     ? (parsed.priceType as Entry["priceType"])
     : null;
-  const category = validCategories.includes(parsed.category as string) ? (parsed.category as Entry["category"]) : null;
+  const category = coerceCategory(type, parsed.category, validCategories);
 
   return {
     type,
@@ -86,6 +110,8 @@ function coerceEntry(parsed: Record<string, unknown>, today: string, validCatego
     date: str(parsed.date) ?? today,
     confidence: typeof parsed.confidence === "number" ? Math.max(0, Math.min(1, parsed.confidence)) : 0.5,
     notes: str(parsed.notes),
+    paymentTerm: coerceTerm(type, parsed.paymentTerm),
+    dueDate: coerceDay(parsed.dueDate),
   };
 }
 
@@ -101,9 +127,12 @@ function coercePatch(parsed: Record<string, unknown>, validCategories: string[])
   if ("priceType" in parsed && VALID_PRICE_TYPES.includes(parsed.priceType as string)) {
     patch.priceType = parsed.priceType as Entry["priceType"];
   }
-  if ("category" in parsed && validCategories.includes(parsed.category as string)) {
-    patch.category = parsed.category as Entry["category"];
+  if ("category" in parsed) {
+    const category = coerceCategory(patch.type, parsed.category, validCategories);
+    if (category) patch.category = category;
   }
+  if ("paymentTerm" in parsed) patch.paymentTerm = coerceTerm(patch.type ?? (VALID_TYPES.includes(parsed.type as string) ? (parsed.type as Entry["type"]) : undefined), parsed.paymentTerm) ?? undefined;
+  if ("dueDate" in parsed) patch.dueDate = coerceDay(parsed.dueDate);
   if ("notes" in parsed) patch.notes = str(parsed.notes);
   return patch;
 }

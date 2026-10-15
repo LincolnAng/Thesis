@@ -13,6 +13,16 @@ export type EntryType =
 
 export type PriceType = "standard" | "friend" | "wholesale" | null;
 
+/**
+ * When the money changes hands. Spot: paid on the spot. Receivable: a customer still owes it
+ * (a sale on credit — utang). Payable: the business still owes it (bought on credit).
+ * Missing on rows written before payment terms existed, which read as spot.
+ */
+export type PaymentTerm = "spot" | "payable" | "receivable";
+
+/** Noted by hand on a payable or receivable: nothing paid yet, some paid, or all paid. */
+export type PaymentStatus = "pending" | "partial" | "settled";
+
 // The 6 built-ins below always exist; a plain string (not a closed union) so the
 // owner can add their own categories from the Expenses budget editor — anything
 // not in EXPENSE_CATEGORY_LABELS just displays as its own raw name.
@@ -24,6 +34,8 @@ export const BUILT_IN_EXPENSE_CATEGORIES = [
   "utilities",
   "packaging",
   "transport",
+  "events",
+  "distribution",
   "misc",
 ] as const;
 
@@ -50,6 +62,15 @@ export interface Entry {
   /** Who was signed in when this was saved. Empty on rows written before people existed. */
   loggedByName?: string | null;
   loggedById?: string | null;
+  /** Spot unless set. Only sales can be receivable and only expenses payable. */
+  paymentTerm?: PaymentTerm | null;
+  /** "YYYY-MM-DD" — when a payable or receivable is expected to be paid. */
+  dueDate?: string | null;
+  /** How much of a payable or receivable has been paid so far, in pesos. */
+  amountPaid?: number | null;
+  paymentStatus?: PaymentStatus | null;
+  /** When it was marked fully paid. */
+  settledAt?: string | null;
 }
 
 export interface RecipeIngredientRow {

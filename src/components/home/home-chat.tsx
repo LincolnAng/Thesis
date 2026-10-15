@@ -373,6 +373,10 @@ export function HomeChat() {
       rawText,
       confidence: outcome.entry.confidence,
       notes: outcome.entry.notes,
+      // Owed either way: start it as not paid yet, with the due date if she said one.
+      ...(outcome.entry.paymentTerm && outcome.entry.paymentTerm !== "spot"
+        ? { paymentTerm: outcome.entry.paymentTerm, dueDate: outcome.entry.dueDate, paymentStatus: "pending" as const }
+        : {}),
     };
 
     if (outcome.clarifyQuestion && outcome.clarifyOptions && outcome.clarifyOptions.length > 0) {

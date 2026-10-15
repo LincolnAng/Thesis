@@ -116,3 +116,26 @@ test("sales are compared with the same days of last month", () => {
   assert.ok(h);
   assert.equal(h.title, "Sales are up 20% on last month");
 });
+
+test("overdue customer payments are an urgent headliner for executives only", () => {
+  const entries = [
+    { id: "r", type: "SALE", amount: 1200, amountPaid: 200, paymentTerm: "receivable", dueDate: "2026-10-01", counterparty: "Aling Nena", timestamp: at(2026, 8, 20) },
+  ];
+  const exec = computeHeadliners(inputs({ entries: entries as never })).find((h) => h.id === "overdue");
+  assert.ok(exec);
+  assert.match(exec.title, /₱1,000/);
+  assert.match(exec.detail, /Aling Nena/);
+  assert.ok(!computeHeadliners(inputs({ role: "employee", entries: entries as never })).some((h) => h.id === "overdue"));
+});
+
+test("investments are owner-funded and not taken off net income", () => {
+  const result = netIncome(
+    [
+      { id: "s", type: "SALE", amount: 1000, quantity: 10, sku: "Cacao Tablea 150g", timestamp: at(2026, 9, 15) },
+      { id: "i", type: "RND", amount: 5000, timestamp: at(2026, 9, 15) },
+    ] as never,
+    [tablea] as never,
+    () => 60,
+  );
+  assert.deepEqual(result, { value: 400 });
+});

@@ -29,7 +29,9 @@ export function computeMonthlyProfitTrend(
   for (let i = months - 1; i >= 0; i--) {
     const monthEntries = entriesInMonth(entries, i, now);
     const sales = monthEntries.filter((e) => e.type === "SALE");
-    const expenseEntries = monthEntries.filter((e) => e.type === "EXPENSE" || e.type === "RND");
+    // Investments (the RND type — R&D, equipment, repairs) are funded by the owners, so they are
+    // not the business's expenses: see lib/transactions/ledger.ts.
+    const expenseEntries = monthEntries.filter((e) => e.type === "EXPENSE");
 
     const revenue = sum(sales, (e) => e.amount ?? 0);
     let cogs = 0;

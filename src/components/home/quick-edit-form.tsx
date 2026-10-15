@@ -14,7 +14,9 @@ import { CustomerNameInput } from "@/components/customers/customer-name-input";
 import { SupplierNameInput } from "@/components/suppliers/supplier-name-input";
 import { ConfirmDeleteButton } from "@/components/data-table/confirm-delete-button";
 import { useStore } from "@/lib/store/use-store";
-import { EXPENSE_CATEGORY_LABELS, ENTRY_TYPE_LABELS, PRICE_TYPE_LABELS, formatPeso } from "@/lib/format";
+import { EXPENSE_CATEGORY_LABELS, ENTRY_TYPE_LABELS, INVESTMENT_CATEGORIES, PRICE_TYPE_LABELS, formatPeso } from "@/lib/format";
+import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
+import { recordPayment } from "@/lib/transactions/ledger";
 import { spoiledValue } from "@/lib/summary/spoilage";
 import { productUnit } from "@/lib/units";
 import { bulkUnitFor } from "@/lib/summary/business-config";
@@ -22,7 +24,7 @@ import { useCostContext } from "@/lib/summary/use-cost-context";
 import { effectiveProductPrice, productCostPerJar } from "@/lib/summary/recipe-cost";
 import { allExpenseCategories } from "@/lib/summary/expenses-summary";
 import type { EntryDraft } from "@/lib/home/describe-entry";
-import type { EntryType, PriceType, Product } from "@/lib/store/types";
+import type { EntryType, PaymentStatus, PriceType, Product } from "@/lib/store/types";
 import type { CostContext } from "@/lib/summary/recipe-cost";
 import { cn } from "@/lib/utils";
 
@@ -74,6 +76,8 @@ export function QuickEditForm({
 }) {
   const { products, rawMaterials, categoryBudgets, events, suppliers, businessSettings } = useStore();
   const costCtx = useCostContext();
+  // Payment terms are the owners' to track; employees never see who owes what.
+  const exec = isExecutive(useCurrentUser());
   // A form opened with a product and a quantity already on it (Home's "Something sold")
   // should show the money straight away, not wait for something to be touched.
   const seedPrice =
@@ -186,6 +190,19 @@ export function QuickEditForm({
       setAutoFilledFrom(null);
     } else if (next.type === "INVENTORY_IN") {
       next.counterparty = null;
+    }
+    // Only a sale can be owed TO the business and only an expense BY it. A term that stops
+    // applying is cleared rather than left on the row where nobody can see it.
+    const allowedTerm = next.type === "SALE" ? "receivable" : next.type === "EXPENSE" ? "payable" : null;
+    if (next.paymentTerm && next.paymentTerm !== "spot" && next.paymentTerm !== allowedTerm) {
+      next.paymentTerm = null;
+      next.dueDate = null;
+      next.amountPaid = null;
+      next.paymentStatus = null;
+      next.settledAt = null;
+    }
+    if (next.type === "RND" && !(INVESTMENT_CATEGORIES as readonly string[]).includes(next.category ?? "")) {
+      next.category = "rnd";
     }
 
     if (!amountTyped && next.type === "SALE") {
@@ -472,6 +489,33 @@ export function QuickEditForm({
         </div>
       )}
 
+      {draft.type === "RND" && (
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">What kind of investment</Label>
+          <ChipGroup
+            options={[...INVESTMENT_CATEGORIES]}
+            value={(INVESTMENT_CATEGORIES as readonly string[]).includes(draft.category ?? "") ? (draft.category as string) : "rnd"}
+            labels={EXPENSE_CATEGORY_LABELS}
+            onChange={(v) => set("category", v)}
+          />
+          <p className="text-xs text-muted-foreground">Funded by the owners — kept apart from the business&apos;s money in and out.</p>
+        </div>
+      )}
+
+      <div className="space-y-1">
+        <Label className="text-xs text-muted-foreground">Date</Label>
+        <Input
+          type="date"
+          value={dayOf(draft.timestamp)}
+          onChange={(e) => e.target.value && set("timestamp", withDay(draft.timestamp, e.target.value))}
+          className="h-9"
+        />
+      </div>
+
+      {exec && (draft.type === "SALE" || draft.type === "EXPENSE") && (
+        <PaymentFields draft={draft} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} />
+      )}
+
       {draft.type === "EXPENSE" && (
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">Category</Label>
@@ -502,6 +546,84 @@ export function QuickEditForm({
           Cancel
         </Button>
       </div>
+    </div>
+  );
+}
+
+function dayOf(timestamp: string): string {
+  const d = new Date(timestamp);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Moves an entry to another day, keeping its time so ordering within a day survives. */
+function withDay(timestamp: string, day: string): string {
+  const [y, m, d] = day.split("-").map(Number);
+  const t = new Date(timestamp);
+  return new Date(y, m - 1, d, t.getHours(), t.getMinutes(), t.getSeconds()).toISOString();
+}
+
+const STATUS_LABELS: Record<PaymentStatus, string> = { pending: "Not paid yet", partial: "Partly paid", settled: "Fully paid" };
+
+/**
+ * Spot, or owed — and if owed, by when and how much is paid so far. A receivable is a sale the
+ * customer still owes (utang); a payable is something bought that the business still owes.
+ */
+function PaymentFields({ draft, onChange }: { draft: EntryDraft; onChange: (patch: Partial<EntryDraft>) => void }) {
+  const owedTerm = draft.type === "SALE" ? "receivable" : "payable";
+  const term = draft.paymentTerm === owedTerm ? owedTerm : "spot";
+  const paidText = draft.amountPaid == null ? "" : String(draft.amountPaid);
+
+  return (
+    <div className="space-y-2 rounded-xl border border-line/15 p-2.5">
+      <Label className="text-xs text-muted-foreground">Payment</Label>
+      <ChipGroup
+        options={["spot", owedTerm]}
+        value={term}
+        labels={{ spot: "Paid on the spot", receivable: "Customer will pay later", payable: "We'll pay later" }}
+        onChange={(v) =>
+          onChange(
+            v === "spot"
+              ? { paymentTerm: "spot", dueDate: null, amountPaid: null, paymentStatus: null, settledAt: null }
+              : { paymentTerm: owedTerm, paymentStatus: draft.paymentStatus ?? "pending" },
+          )
+        }
+      />
+      {term !== "spot" && (
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1">
+            <Label className="text-[11px] text-muted-foreground">Due on</Label>
+            <Input type="date" value={draft.dueDate ?? ""} onChange={(e) => onChange({ dueDate: e.target.value || null })} className="h-9" />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-[11px] text-muted-foreground">Paid so far (₱)</Label>
+            <Input
+              inputMode="decimal"
+              value={paidText}
+              placeholder="0"
+              onChange={(e) => {
+                const n = Number(e.target.value.replace(/[^0-9.]/g, ""));
+                onChange(recordPayment({ ...draft, id: "" }, Number.isFinite(n) ? n : 0, new Date()));
+              }}
+              className="h-9"
+            />
+          </div>
+          <div className="col-span-2 space-y-1">
+            <Label className="text-[11px] text-muted-foreground">Status</Label>
+            <ChipGroup
+              options={["pending", "partial", "settled"] as PaymentStatus[]}
+              value={draft.paymentStatus ?? "pending"}
+              labels={STATUS_LABELS}
+              onChange={(v) =>
+                onChange(
+                  v === "settled"
+                    ? { paymentStatus: "settled", amountPaid: draft.amount ?? draft.amountPaid ?? null, settledAt: new Date().toISOString() }
+                    : { paymentStatus: v, settledAt: null },
+                )
+              }
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

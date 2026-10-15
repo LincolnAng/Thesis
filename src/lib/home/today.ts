@@ -65,7 +65,8 @@ export interface Headliner {
   linkLabel: string;
 }
 
-const MONEY_OUT_TYPES = new Set(["EXPENSE", "RND"]);
+/** Business spending. Investments (RND) are owner-funded and kept out — see lib/transactions/ledger.ts. */
+const MONEY_OUT_TYPES = new Set(["EXPENSE"]);
 const MAX_HEADLINERS = 6;
 
 /** The device's own calendar day for an ISO timestamp, "YYYY-MM-DD". */
@@ -332,6 +333,28 @@ function expenseHeadliner(input: TodayInputs): Headliner | null {
   };
 }
 
+/** Customers who owe money past its due date. Executives only — employees never see who owes what. */
+function overdueHeadliner(input: TodayInputs): Headliner | null {
+  const today = new Date(input.now.getFullYear(), input.now.getMonth(), input.now.getDate()).getTime();
+  const overdue = input.entries.filter((e) => {
+    if (e.type !== "SALE" || e.paymentTerm !== "receivable" || !e.dueDate || e.paymentStatus === "settled") return false;
+    const owed = (e.amount ?? 0) - Math.min(e.amount ?? 0, e.amountPaid ?? 0);
+    const [y, m, d] = e.dueDate.split("-").map(Number);
+    return owed > 0 && new Date(y, m - 1, d).getTime() < today;
+  });
+  if (overdue.length === 0) return null;
+  const total = sum(overdue, (e) => (e.amount ?? 0) - Math.min(e.amount ?? 0, e.amountPaid ?? 0));
+  const names = [...new Set(overdue.map((e) => e.counterparty).filter((n): n is string => !!n))];
+  return {
+    id: "overdue",
+    tone: "urgent",
+    title: `${peso(total)} in customer payments is overdue`,
+    detail: `${overdue.length} unpaid ${overdue.length === 1 ? "sale is" : "sales are"} past the due date${names.length ? ` — ${names.slice(0, 3).join(", ")}${names.length > 3 ? ` and ${names.length - 3} more` : ""}` : ""}.`,
+    href: "/transactions",
+    linkLabel: "See receivables",
+  };
+}
+
 function bestSellerHeadliner(input: TodayInputs): Headliner | null {
   const sales = inMonth(input.entries, input.now.getFullYear(), input.now.getMonth()).filter((e) => e.type === "SALE" && e.sku);
   if (sales.length === 0) return null;
@@ -381,6 +404,7 @@ export function computeHeadliners(input: TodayInputs): Headliner[] {
   const exec = input.role === "executive";
   const list: (Headliner | null)[] = [
     ...stockHeadliners(input),
+    exec ? overdueHeadliner(input) : null,
     exec ? salesHeadliner(input) : null,
     exec ? profitHeadliner(input) : null,
     exec ? expenseHeadliner(input) : null,

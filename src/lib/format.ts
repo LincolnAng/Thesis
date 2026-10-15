@@ -62,13 +62,49 @@ export const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
   utilities: "Utilities",
   packaging: "Packaging",
   transport: "Transport",
+  events: "Events & booths",
+  distribution: "Distribution & delivery",
   misc: "Other",
+  // Investment kinds (on R&D/investment entries). See INVESTMENT_CATEGORIES.
+  rnd: "R&D",
+  equipment: "Equipment & machinery",
+  repairs: "Repairs & maintenance",
+  tools: "Tools & utensils",
+  facility: "Kitchen & facility improvements",
+  packaging_design: "Packaging & label design",
+  permits: "Permits & certifications",
+  training: "Training & seminars",
+  branding: "Branding & marketing assets",
+  technology: "Software & devices",
+  vehicle: "Vehicles & delivery equipment",
+  other_investment: "Other investment",
 };
+
+/**
+ * What an investment was for. Investments are spending that builds the business rather than
+ * running it day to day — the owners fund these themselves, so they are tracked on their own
+ * tab and kept out of the business's money in, money out and earnings. R&D is one kind among
+ * them; older R&D entries with no kind read as "rnd".
+ */
+export const INVESTMENT_CATEGORIES = [
+  "rnd",
+  "equipment",
+  "repairs",
+  "tools",
+  "facility",
+  "packaging_design",
+  "permits",
+  "training",
+  "branding",
+  "technology",
+  "vehicle",
+  "other_investment",
+] as const;
 
 export const ENTRY_TYPE_LABELS: Record<string, string> = {
   SALE: "Sale",
   EXPENSE: "Expense",
-  RND: "R&D",
+  RND: "Investment",
   INVENTORY_IN: "Batch made",
   INVENTORY_OUT: "Stock out",
   WASTE: "Waste",
