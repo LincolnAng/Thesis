@@ -19,8 +19,8 @@ import type { Entry } from "@/lib/store/types";
  * carries the money's state. A row with a balance still owed has a quiet "Log Payment" button.
  * Cells that don't apply are simply blank.
  *
- * An order of several products is still one row: the first product's name, then a muted
- * "+ 2 more", on one line so every row is the same height. Opening the row lists them all.
+ * An order of several products is still one row, listing every product one per line with its
+ * quantity on the same line in Qty. Opening the row adds each product's share of the amount.
  *
  * Receivables and payables have a history button beside the pencil: it opens the due date, each
  * payment (date, how, amount), each time the deadline moved and a default, with the actions to log
@@ -279,9 +279,6 @@ export function TransactionTable({
             const isOpen = open.has(e.id);
             const expandable = hasDetails(e, showPayment);
             const items = productLines(e);
-            const extra = items.length - 1;
-            const qtys = items.map((l) => l.qty).filter((q): q is number => q != null);
-            const qty = qtys.length > 0 ? qtys.reduce((a, q) => a + q, 0) : null;
             const status = statusOf(e, showPayment);
             const canPay = !!owed && !!kind && !!status && status.left > 0;
             const payTip = method === "bank_transfer" ? `Bank transfer${bank ? ` · ${bank}` : ""}` : method ? "Cash" : undefined;
@@ -304,17 +301,24 @@ export function TransactionTable({
                     <span className="block truncate font-medium">{e.counterparty}</span>
                     {carried && <div className="text-[11px] font-semibold text-[var(--status-warning)]">Carried from {carried}</div>}
                   </td>
-                  {/* The first product, then how many more: one line, so every row is the same height. */}
+                  {/* Every product in the order, one per line, each with its own quantity on the same line next door. */}
                   <td
                     className={`${td} max-w-[260px]`}
                     title={items.map((l) => l.name).join(", ") + (e.type === "EXPENSE" && e.category ? ` · ${EXPENSE_CATEGORY_LABELS[e.category] ?? e.category}` : "")}
                   >
-                    <span className="flex items-baseline gap-1.5 whitespace-nowrap">
-                      <span className="truncate">{items[0].name}</span>
-                      {extra > 0 && <span className="shrink-0 text-[12px] text-muted-foreground">+ {extra} more</span>}
-                    </span>
+                    {items.map((l, j) => (
+                      <span key={j} className="block truncate leading-6">
+                        {l.name}
+                      </span>
+                    ))}
                   </td>
-                  <td className={`${td} text-right tabular-nums`}>{qty}</td>
+                  <td className={`${td} text-right tabular-nums`}>
+                    {items.map((l, j) => (
+                      <span key={j} className="block leading-6">
+                        {l.qty ?? "\u00a0"}
+                      </span>
+                    ))}
+                  </td>
                   <td className={`${td} whitespace-nowrap text-right tabular-nums ${e.type === "WASTE" ? "text-muted-foreground" : "text-foreground"}`}>
                     {e.amount != null ? formatPeso(e.amount) : null}
                   </td>
