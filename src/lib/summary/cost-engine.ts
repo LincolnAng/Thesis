@@ -217,7 +217,7 @@ export function getProductCost(
       continue;
     }
     const sub = getProductCost(component, rawMaterials, supplierPrices, hourlyLaborRate, cacaoUtilization, entries, products, depth + 1);
-    const known = component.batchYield > 0 && sub.unpriced.length === 0 && sub.totalCost > 0;
+    const known = sub.unpriced.length === 0 && sub.totalCost > 0;
     if (!known) unpriced.push(component.name);
     ingredientLines.push({
       materialId: component.id,
@@ -231,7 +231,9 @@ export function getProductCost(
   }
 
   const labor = batchLaborCost(product, hourlyLaborRate);
-  const yieldQty = product.batchYield;
+  // Costs are per unit, and a recipe is a ratio: what one batch of `batchYield` takes. A product
+  // with no batch size yet has its recipe read as being for one unit — see lib/costing/per-unit.
+  const yieldQty = product.batchYield > 0 ? product.batchYield : 1;
   const perJar = (batchTotal: number) => (yieldQty > 0 ? batchTotal / yieldQty : 0);
 
   const ingredientCost = perJar(ingredientLines.reduce((sum, l) => sum + l.batchCost, 0));

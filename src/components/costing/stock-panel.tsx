@@ -10,6 +10,7 @@ import { expiringWithinDays, setShelfLifeDays, shelfLifeDays } from "@/lib/summa
 import { productExpiry } from "@/lib/summary/product-lots";
 import { newSizeFrom, sizeName, type ProductFamily } from "@/lib/summary/product-sizes";
 import { useNumericDraft } from "@/lib/use-numeric-draft";
+import { withBatchSize } from "@/lib/costing/per-unit";
 import { formatPeso, pluralize } from "@/lib/format";
 import type { Product } from "@/lib/store/types";
 
@@ -18,6 +19,7 @@ import type { Product } from "@/lib/store/types";
  *
  *   Stock      on hand · warn when below       (both typed in place) and whether it's running low
  *   Freshness  keeps for N days                 and what's past its date or about to be
+ *   Batches    how many you usually make at once — for planning production only
  *   Sizes      one row per size: name, price, on hand — tap to open; add a size at the end
  */
 
@@ -29,6 +31,7 @@ export function StockPanel({ product, family, onOpenProduct }: { product: Produc
     <div className="flex flex-col divide-y divide-line/10">
       <StockBlock product={product} />
       <FreshnessBlock product={product} unit={unit} />
+      <BatchBlock product={product} unit={unit} />
       {family && <SizesBlock product={product} family={family} onOpen={onOpenProduct} />}
     </div>
   );
@@ -132,6 +135,41 @@ function FreshnessBlock({ product, unit }: { product: Product; unit: string }) {
       ) : (
         <p className="text-[12.5px] text-muted-foreground">Freshness is tracked from each batch you log as made.</p>
       )}
+    </Block>
+  );
+}
+
+/**
+ * The usual batch size. Production plans in batches, so it needs one; costing is per unit, so
+ * changing it rescales the stored recipe and leaves every cost where it was.
+ */
+function BatchBlock({ product, unit }: { product: Product; unit: string }) {
+  const [text, setText] = useState(product.batchYield > 0 ? String(product.batchYield) : "");
+  const plural = product.unit || "jars";
+
+  function commit() {
+    const n = Number(text);
+    if (Number.isFinite(n) && n > 0 && n !== product.batchYield) updateProduct(product.id, withBatchSize(product, n));
+    else setText(product.batchYield > 0 ? String(product.batchYield) : "");
+  }
+
+  return (
+    <Block title="Batches" aside={product.batchYield > 0 ? null : <Pill tone="warn">Not set</Pill>}>
+      <Field label="Usually made in batches of" suffix={plural}>
+        <input
+          inputMode="numeric"
+          aria-label="Usual batch size"
+          value={text}
+          placeholder="—"
+          onChange={(e) => setText(e.target.value.replace(/[^0-9]/g, ""))}
+          onBlur={commit}
+          onKeyDown={(e) => e.key === "Enter" && commit()}
+          className={box}
+        />
+      </Field>
+      <p className="text-[12.5px] text-muted-foreground">
+        Only used to plan production — how many batches to make and when. Batches can vary; the cost of one {unit} doesn&apos;t change with it.
+      </p>
     </Block>
   );
 }

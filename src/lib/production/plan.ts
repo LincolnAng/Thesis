@@ -264,7 +264,7 @@ export function planProduction(input: PlanInput): PlanResult {
       kind: "no_batch_size",
       urgent: false,
       title: `${p.name} has no batch size`,
-      detail: `${p.shortfall} are needed, but production can't be planned until Costing says how many one batch makes.`,
+      detail: `${p.shortfall} are needed, but production can't be planned until it has a usual batch size (Costing → the product → Stock & sizes).`,
     });
   }
   alerts.sort((a, b) => Number(b.urgent) - Number(a.urgent));

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { ArrowLeft, Check, ChevronDown, Info } from "lucide-react";
+import { ArrowLeft, Check, Info } from "lucide-react";
 import { Page } from "@/components/layout/page";
 import { ProductPhoto, GRADIENTS } from "@/components/costing/products-screen";
 import { PriceCalculator } from "@/components/costing/price-calculator";
@@ -10,22 +10,22 @@ import { CostBuildUp } from "@/components/costing/cost-build-up";
 import { StockPanel } from "@/components/costing/stock-panel";
 import { EditProductDialog } from "@/components/stock/edit-product-dialog";
 import { useStore } from "@/lib/store/use-store";
-import { updateProduct } from "@/lib/store/store";
 import { useProductPhotos } from "@/lib/products/photos";
 import { useCostContext } from "@/lib/summary/use-cost-context";
 import { effectiveProductPrice, productCostPerJar } from "@/lib/summary/recipe-cost";
 import { familiesOf, fullName } from "@/lib/summary/product-sizes";
-import { costPerUnit } from "@/lib/costing/price-calc";
 import { formatPeso } from "@/lib/format";
-import type { Product } from "@/lib/store/types";
 
 /**
  * One product, in four plainly named tabs — one job each:
  *
- *   Recipe        what one batch takes: ingredients, packaging, your time, other costs
+ *   Recipe        what goes into ONE unit: ingredients, packaging, your time
  *   Cost          what one costs to make, built up stage by stage
- *   Price         what you sell it for, and what you keep
- *   Stock & sizes what's on hand, how long it keeps, the other sizes
+ *   Price         the three ways to set a price, side by side, and what you keep
+ *   Stock & sizes what's on hand, how long it keeps, the usual batch size, the other sizes
+ *
+ * Everything is per unit, because batches vary in size; the batch size is only for planning
+ * production (lib/costing/per-unit).
  *
  * Above the tabs, the three numbers that matter — price, cost, what you keep — always in view;
  * one that isn't known yet says so and links to the tab that fills it in. Recipe, Cost and Price
@@ -53,133 +53,6 @@ function Note({ children, action }: { children: ReactNode; action?: ReactNode })
         <p>{children}</p>
         {action}
       </div>
-    </div>
-  );
-}
-
-
-/** A quiet link that reveals the detail behind a simple answer. */
-function More({ label, children }: { label: string; children: ReactNode }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="mt-4">
-      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="flex items-center gap-1 text-[13px] font-semibold text-cacao">
-        {label}
-        <ChevronDown className={`h-3.5 w-3.5 transition ${open ? "rotate-180" : ""}`} />
-      </button>
-      {open && <div className="mt-3">{children}</div>}
-    </div>
-  );
-}
-
-/** What to sell it for: one question, an answer that says what you keep, and a few suggestions. */
-function SimplePrice({ product, unitCost, currentPrice, unit }: { product: Product; unitCost: number | null; currentPrice: number; unit: string }) {
-  const [value, setValue] = useState(currentPrice > 0 ? String(currentPrice) : "");
-  const [saved, setSaved] = useState<string | null>(null);
-
-  const typed = Number(value.replace(/[^0-9.]/g, ""));
-  const price = value !== "" && Number.isFinite(typed) && typed > 0 ? typed : null;
-  const keep = price != null && unitCost != null ? price - unitCost : null;
-  const keepPct = keep != null && price != null ? Math.round((keep / price) * 100) : null;
-  const unchanged = price != null && Math.abs(price - currentPrice) < 0.005 && product.pricingMode === "manual";
-
-  function save() {
-    if (price == null) return;
-    updateProduct(product.id, { pricingMode: "manual", standardPrice: price });
-    setSaved(`Saved — it now sells for ${formatPeso(price)} each.`);
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      <p className="text-[14px]">
-        {unitCost != null ? (
-          <>
-            It costs you <span className="font-semibold">{formatPeso(unitCost)}</span> to make one {unit}. How much will you sell it for?
-          </>
-        ) : (
-          <>How much will you sell one {unit} for?</>
-        )}
-      </p>
-
-      <div className="relative max-w-[240px]">
-        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[18px] font-semibold text-muted-foreground">₱</span>
-        <input
-          inputMode="decimal"
-          value={value}
-          onChange={(e) => {
-            setValue(e.target.value.replace(/[^0-9.]/g, ""));
-            setSaved(null);
-          }}
-          aria-label={`Selling price for one ${unit}`}
-          placeholder="0"
-          className="h-14 w-full rounded-lg border border-input bg-transparent pl-9 pr-3 text-[22px] font-bold tabular-nums outline-none focus:border-cacao"
-        />
-      </div>
-
-      {unitCost != null && (
-        <div className="flex flex-wrap gap-2" aria-label="Suggested prices">
-          {(
-            [
-              ["+30%", 1.3],
-              ["+50%", 1.5],
-              ["Double it", 2],
-            ] as const
-          ).map(([label, factor]) => {
-            const suggested = Math.ceil(unitCost * factor);
-            return (
-              <button
-                key={label}
-                type="button"
-                onClick={() => {
-                  setValue(String(suggested));
-                  setSaved(null);
-                }}
-                className="min-h-9 rounded-full border border-line/25 bg-card px-3.5 text-[13px] font-semibold transition hover:border-cacao hover:text-cacao active:scale-95"
-              >
-                {label} · {formatPeso(suggested)}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {keep != null && keepPct != null ? (
-        <p className={`text-[14px] font-semibold ${keep >= 0 ? "text-success" : "text-danger"}`}>
-          {keep >= 0 ? `You keep ${formatPeso(keep)} on each ${unit} (${keepPct}% of the price).` : `You lose ${formatPeso(-keep)} on each ${unit}.`}
-        </p>
-      ) : (
-        unitCost == null && (
-          <p className="text-[13px] text-muted-foreground">Finish the recipe and its prices, and we&apos;ll show what you keep on each one.</p>
-        )
-      )}
-
-      {product.pricingMode !== "manual" && currentPrice > 0 && (
-        <p className="text-[12.5px] text-muted-foreground">
-          Right now the price follows your cost at {product.marginPercent}% {product.pricingMode === "margin" ? "margin" : "markup"}. Saving a price here fixes it instead.
-        </p>
-      )}
-
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={save}
-          disabled={price == null || unchanged}
-          className="min-h-11 rounded-[10px] bg-cacao px-5 text-[14px] font-semibold text-ivory transition active:scale-[0.98] disabled:opacity-40"
-        >
-          Save price
-        </button>
-        {saved && <span className="text-[13px] font-semibold text-success">{saved}</span>}
-      </div>
-
-      <More label="More ways to set the price">
-        <PriceCalculator
-          key={`${product.id}-${product.pricingMode}-${product.standardPrice}-${product.marginPercent}`}
-          product={product}
-          unitCost={unitCost}
-          currentPrice={currentPrice}
-          unit={unit}
-        />
-      </More>
     </div>
   );
 }
@@ -224,7 +97,8 @@ export function ProductDetail({
   const price = product && cost ? effectiveProductPrice(product, cost) : 0;
   const hasRecipe = !!product && (product.recipeIngredients.length > 0 || (product.recipeComponents ?? []).length > 0);
   const complete = !!product && !!cost && cost.unpriced.length === 0 && cost.unconvertible.length === 0 && hasRecipe;
-  const perUnit = product && cost ? costPerUnit(cost.batchTotal, product.batchYield, complete) : null;
+  // Per unit, whatever the batch size (lib/costing/per-unit).
+  const perUnit = cost && complete ? Math.round(cost.costPerJar * 100) / 100 : null;
 
   const done: Partial<Record<Tab, boolean>> = { recipe: hasRecipe, cost: perUnit != null, price: price > 0 };
   const [tab, setTab] = useState<Tab>(() => (["recipe", "cost", "price"] as Tab[]).find((t) => !done[t]) ?? "recipe");
@@ -318,14 +192,22 @@ export function ProductDetail({
                       ? `We can't work out the cost yet — there's no price for ${cost.unpriced.join(", ")}. Log a purchase of it in Transactions to price it.`
                       : cost.unconvertible.length > 0
                         ? `Check the units on ${cost.unconvertible.join(", ")} — they couldn't be converted.`
-                        : `Say how many ${unit}s one batch makes (at the top of the Recipe), and the cost of one will appear here.`}
+                        : `Add what goes into one ${unit}, and the cost will appear here.`}
                 </Note>
               )}
               <CostBuildUp product={product} cost={cost} unit={unit} />
             </div>
           )}
 
-          {tab === "price" && <SimplePrice product={product} unitCost={perUnit} currentPrice={price} unit={unit} />}
+          {tab === "price" && (
+            <PriceCalculator
+              key={`${product.id}-${product.pricingMode}-${product.standardPrice}-${product.marginPercent}`}
+              product={product}
+              unitCost={perUnit}
+              currentPrice={price}
+              unit={unit}
+            />
+          )}
 
           {tab === "stock" && <StockPanel product={product} family={family} onOpenProduct={onOpenProduct} />}
         </section>

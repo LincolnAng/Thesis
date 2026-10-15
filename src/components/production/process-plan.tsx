@@ -104,7 +104,7 @@ export function ProcessPlan() {
       products.map((p) => {
         const cost = productCostPerJar(p, costCtx);
         const hasRecipe = p.recipeIngredients.length > 0 || (p.recipeComponents ?? []).length > 0;
-        const known = hasRecipe && p.batchYield > 0 && cost.unpriced.length === 0;
+        const known = hasRecipe && cost.unpriced.length === 0;
         // What a batch costs apart from things made in-house, which are costed in their own run.
         const inHouse = cost.ingredientLines.filter((l) => products.some((x) => x.id === l.materialId)).reduce((t, l) => t + l.batchCost, 0);
         return [p.id, { known, each: cost.costPerJar, batch: cost.batchTotal, direct: cost.batchTotal - inHouse, price: effectiveProductPrice(p, cost) }];
@@ -263,7 +263,7 @@ export function ProcessPlan() {
                       </td>
                       <td className="px-3 py-2">
                         {p.missingBatchSize ? (
-                          <span className="text-[var(--status-warning)]">Set a batch size in Costing</span>
+                          <Link href={`/costing?product=${p.productId}`} className="text-[var(--status-warning)] underline decoration-dotted">Set a batch size</Link>
                         ) : p.batches === 0 ? (
                           <span className="text-muted-foreground">Nothing to make</span>
                         ) : p.canMakeNow >= p.batches ? (

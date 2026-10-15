@@ -7,6 +7,7 @@ import { formatPeso, pluralize } from "@/lib/format";
 import type { CostLine } from "@/lib/summary/cost-engine";
 import type { ProductCostBreakdown } from "@/lib/summary/recipe-cost";
 import type { Product } from "@/lib/store/types";
+import { perUnit, unitsPerBatch } from "@/lib/costing/per-unit";
 
 /**
  * The Cost tab: what one costs to make, built up in the order it is made —
@@ -14,11 +15,11 @@ import type { Product } from "@/lib/store/types";
  *   Bought ingredients  ₱18   → so far ₱18
  *   Made by you         ₱12   → so far ₱30
  *   Your time           ₱7    → so far ₱37
- *   Other costs         ₱0
  *   Packaging           ₱8    → ₱45 to make one jar
  *
- * Each stage opens to its lines (how much, at what price, and where that price came from).
- * Below it, a small planner for making several batches at once.
+ * Everything is per unit, since batches vary in size (see lib/costing/per-unit). Each stage opens
+ * to its lines: how much goes into one, at what price, and where that price came from. Below it,
+ * a small planner: make this many, and what it costs and needs.
  */
 
 const SOURCE: Record<CostLine["source"], [string, string]> = {
@@ -31,10 +32,7 @@ const SOURCE: Record<CostLine["source"], [string, string]> = {
 const IN_HOUSE = " (made in-house)";
 
 export function CostBuildUp({ product, cost, unit }: { product: Product; cost: ProductCostBreakdown; unit: string }) {
-  const yieldQty = product.batchYield > 0 ? product.batchYield : 0;
-  // Per one when the batch size is known; per batch otherwise.
-  const each = (batch: number) => (yieldQty > 0 ? batch / yieldQty : batch);
-  const per = yieldQty > 0 ? `a ${unit}` : "a batch";
+  const each = (batch: number) => batch / unitsPerBatch(product);
 
   const bought = cost.ingredientLines.filter((l) => !l.name.endsWith(IN_HOUSE));
   const made = cost.ingredientLines.filter((l) => l.name.endsWith(IN_HOUSE)).map((l) => ({ ...l, name: l.name.slice(0, -IN_HOUSE.length) }));
@@ -46,9 +44,9 @@ export function CostBuildUp({ product, cost, unit }: { product: Product; cost: P
     {
       title: "Your time",
       batch: cost.laborTotal,
-      note: cost.laborTotal > 0 ? (cost.laborIsOverride ? "A figure you typed in for the whole batch." : "Minutes a batch takes, at your hourly rate.") : "Counted as ₱0 — set the minutes in the Recipe tab.",
+      note: cost.laborTotal > 0 ? (cost.laborIsOverride ? "A peso amount you typed in." : `Minutes per ${unit}, at your hourly rate.`) : "Counted as ₱0 — set it under Your time in the Recipe tab.",
     },
-    { title: "Other costs", batch: cost.miscTotal, note: cost.miscTotal > 0 ? "Gas, electricity, a share of rent." : "None added." },
+    ...(cost.miscTotal > 0 ? [{ title: "Other costs", batch: cost.miscTotal, note: "Entered before costing went per unit." }] : []),
     { title: "Packaging", batch: cost.packagingTotal, lines: cost.packagingLines },
   ];
   const soFar = stages.map((_, i) => stages.slice(0, i + 1).reduce((t, x) => t + x.batch, 0));
@@ -69,7 +67,7 @@ export function CostBuildUp({ product, cost, unit }: { product: Product; cost: P
           />
         ))}
         <li className="flex items-baseline justify-between gap-3 border-t-2 border-line/20 bg-secondary/40 px-4 py-3">
-          <span className="text-[14px] font-semibold">Cost to make {per}</span>
+          <span className="text-[14px] font-semibold">Cost to make one {unit}</span>
           {cost.unpriced.length === 0 ? (
             <span className="font-display text-[22px] font-bold tabular-nums">{formatPeso(each(cost.batchTotal))}</span>
           ) : (
@@ -135,7 +133,7 @@ function Stage({
               <span className="flex flex-wrap items-baseline gap-x-2">
                 <span className="font-medium">{l.name}</span>
                 <span className="text-muted-foreground">
-                  {Math.round(l.quantityPerBatch * 100) / 100} {l.unit} × {formatPeso(l.unitCost)}
+                  {Math.round(each(l.quantityPerBatch) * 10000) / 10000} {l.unit} × {formatPeso(l.unitCost)}
                 </span>
                 <span className={`rounded-full px-1.5 text-[10.5px] font-semibold ${SOURCE[l.source][1]}`}>{SOURCE[l.source][0]}</span>
               </span>
@@ -148,16 +146,17 @@ function Stage({
   );
 }
 
-/** Making more than one batch: what it costs in all, and what you'd run short of. */
+/** Making a run of N: what it costs in all, and what you'd run short of. */
 function BatchPlanner({ product, cost, unit }: { product: Product; cost: ProductCostBreakdown; unit: string }) {
   const { rawMaterials } = useStore();
   const [open, setOpen] = useState(false);
-  const [batches, setBatches] = useState(2);
+  const [count, setCount] = useState(String(product.batchYield > 0 ? product.batchYield : 20));
+  const n = Math.max(0, Number(count) || 0);
   const short = product.recipeIngredients
     .map((r) => {
       const m = rawMaterials.find((x) => x.id === r.materialId);
       if (!m) return null;
-      const need = Math.round(r.quantity * batches * 100) / 100;
+      const need = Math.round(perUnit(product, r.quantity) * n * 100) / 100;
       const gap = Math.round((need - m.qty) * 100) / 100;
       return gap > 0 ? { name: m.name, unit: m.unit, have: m.qty, need, gap } : null;
     })
@@ -166,24 +165,30 @@ function BatchPlanner({ product, cost, unit }: { product: Product; cost: Product
   return (
     <div>
       <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="flex items-center gap-1 text-[13px] font-semibold text-cacao">
-        Making several batches?
+        Planning to make a batch?
         <ChevronDown className={`h-3.5 w-3.5 transition ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
         <div className="mt-3 flex flex-col gap-2 rounded-xl bg-secondary/50 p-3 text-[14px]">
           <div className="flex items-center gap-2">
-            <button type="button" aria-label="Fewer batches" onClick={() => setBatches((n) => Math.max(1, n - 1))} className="flex h-9 w-9 items-center justify-center rounded-lg border border-line/20 bg-card">
+            <button type="button" aria-label="Fewer" onClick={() => setCount(String(Math.max(1, n - 1)))} className="flex h-9 w-9 items-center justify-center rounded-lg border border-line/20 bg-card">
               <Minus className="h-4 w-4" />
             </button>
-            <span className="w-8 text-center font-semibold tabular-nums">{batches}</span>
-            <button type="button" aria-label="More batches" onClick={() => setBatches((n) => n + 1)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-line/20 bg-card">
+            <input
+              inputMode="numeric"
+              aria-label={`How many to make`}
+              value={count}
+              onChange={(e) => setCount(e.target.value.replace(/[^0-9]/g, ""))}
+              className="h-9 w-16 rounded-lg border border-input bg-card text-center font-semibold tabular-nums"
+            />
+            <button type="button" aria-label="More" onClick={() => setCount(String(n + 1))} className="flex h-9 w-9 items-center justify-center rounded-lg border border-line/20 bg-card">
               <Plus className="h-4 w-4" />
             </button>
-            <span className="text-muted-foreground">batches</span>
+            <span className="text-muted-foreground">{pluralize(n, unit).replace(/^\S+\s/, "")}</span>
           </div>
           <p>
-            Costs <span className="font-semibold">{formatPeso(cost.batchTotal * batches)}</span> in all and makes{" "}
-            <span className="font-semibold">{pluralize(product.batchYield * batches, unit)}</span>.
+            {pluralize(n, unit)} cost <span className="font-semibold">{formatPeso((cost.batchTotal / unitsPerBatch(product)) * n)}</span> to make
+            {cost.unpriced.length > 0 ? " so far — some ingredients have no price yet" : ""}.
           </p>
           {short.map((s) => (
             <p key={s.name} className="text-[13px] text-danger">

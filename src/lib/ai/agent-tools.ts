@@ -314,7 +314,7 @@ export function runTool(name: string, input: Record<string, unknown>, view: Agen
         const base = { name: fullName(p, view.products), unit: p.unit || "jar", price: r2(priceOf(view, p)), stock: p.stockQty, low_stock: p.lowStockThreshold > 0 && p.stockQty <= p.lowStockThreshold };
         if (view.role !== "executive") return base;
         const cost = productCostPerJar(p, view.ctx);
-        const unitCost = costPerUnit(cost.batchTotal, p.batchYield, cost.unpriced.length === 0 && p.recipeIngredients.length > 0);
+        const unitCost = costPerUnit(cost.batchTotal, p.batchYield > 0 ? p.batchYield : 1, cost.unpriced.length === 0 && p.recipeIngredients.length > 0);
         return { ...base, cost_per_unit: unitCost, margin_pct: unitCost != null && base.price > 0 ? r2(((base.price - unitCost) / base.price) * 100) : null };
       });
       return { result: json({ products: rows }) };
@@ -324,7 +324,7 @@ export function runTool(name: string, input: Record<string, unknown>, view: Agen
       if (!p) return { result: json({ error: `No product called "${input.product}". Use the products tool to see the names.` }), isError: true };
       const cost = productCostPerJar(p, view.ctx);
       const complete = cost.unpriced.length === 0 && p.recipeIngredients.length > 0;
-      const unitCost = costPerUnit(cost.batchTotal, p.batchYield, complete);
+      const unitCost = costPerUnit(cost.batchTotal, p.batchYield > 0 ? p.batchYield : 1, complete);
       const price = priceOf(view, p);
       return {
         result: json({

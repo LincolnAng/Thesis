@@ -1,8 +1,9 @@
 "use client";
 
 import { Plus, Trash2 } from "lucide-react";
-import { LaborEditor } from "@/components/finance/labor-editor";
-import { updateProduct } from "@/lib/store/store";
+import { setBusinessSetting, updateProduct } from "@/lib/store/store";
+import { HOURLY_LABOR_RATE_KEY } from "@/lib/summary/use-cost-context";
+import { perBatch, perUnit, unitsPerBatch } from "@/lib/costing/per-unit";
 import { useStore } from "@/lib/store/use-store";
 import { useCostContext } from "@/lib/summary/use-cost-context";
 import { ingredientRowCost, productCostPerJar } from "@/lib/summary/recipe-cost";
@@ -12,15 +13,16 @@ import { formatPeso } from "@/lib/format";
 import type { Product, RawMaterialStock, RecipeComponentRow, RecipeExtraRow, RecipeIngredientRow } from "@/lib/store/types";
 
 /**
- * The Recipe tab: what one batch takes, as four short lists in the order a batch is made —
+ * The Recipe tab: what goes into ONE unit — one jar, one pack — because batches vary in size and
+ * a cost per batch would change every time. Three short lists, in the order it's made:
  *
- *   Makes [12] jars a batch
- *   Ingredients   — bought ones and ones you make yourself (tablea), in one list
- *   Packaging     — jars, lids, labels
- *   Your time     — minutes × your hourly rate
- *   Other costs   — gas, electricity, a share of rent
+ *   Ingredients — bought ones and ones you make yourself (tablea), in one list
+ *   Packaging   — the jar, lid, label
+ *   Your time   — minutes per jar at your hourly rate, or a peso amount typed in
  *
- * Each list shows its total for the batch beside its heading. Everything saves as it is typed.
+ * Each shows its cost per unit beside its heading, and the total sits at the bottom. The recipe
+ * is stored as one batch's worth for production (see lib/costing/per-unit), so every amount here
+ * is converted on the way in and out. Everything saves as it is typed.
  */
 
 const newId = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
@@ -31,7 +33,10 @@ export function RecipePanel({ product }: { product: Product }) {
   const { rawMaterials, products } = useStore();
   const ctx = useCostContext();
   const cost = productCostPerJar(product, ctx);
-  const unitWord = product.unit || "jars";
+  const unit = (product.unit || "jar").replace(/s$/, "");
+  const one = (batchAmount: number) => batchAmount / unitsPerBatch(product);
+  // Every edit also fixes a missing batch size at 1, so what's typed per unit is stored as such.
+  const save = (patch: Partial<Product>) => updateProduct(product.id, product.batchYield > 0 ? patch : { ...patch, batchYield: 1 });
 
   const ingredientsList = rawMaterials.filter((m) => groupOf(m) === "ingredient");
   const packagingList = rawMaterials.filter((m) => groupOf(m) === "supply");
@@ -47,9 +52,9 @@ export function RecipePanel({ product }: { product: Product }) {
   const packagingRows = rows.filter(isPackagingRow);
   const componentCost = cost.ingredientLines.filter((l) => l.name.endsWith("(made in-house)")).reduce((s, l) => s + l.batchCost, 0);
 
-  const saveRows = (next: RecipeIngredientRow[]) => updateProduct(product.id, { recipeIngredients: next });
-  const saveComponents = (next: RecipeComponentRow[]) => updateProduct(product.id, { recipeComponents: next });
-  const saveMisc = (next: RecipeExtraRow[]) => updateProduct(product.id, { recipeMisc: next });
+  const saveRows = (next: RecipeIngredientRow[]) => save({ recipeIngredients: next });
+  const saveComponents = (next: RecipeComponentRow[]) => save({ recipeComponents: next });
+  const saveMisc = (next: RecipeExtraRow[]) => save({ recipeMisc: next });
   const patchRow = (id: string, patch: Partial<RecipeIngredientRow>) => saveRows(rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   const patchComponent = (id: string, patch: Partial<RecipeComponentRow>) => saveComponents(components.map((r) => (r.id === id ? { ...r, ...patch } : r)));
 
@@ -63,13 +68,13 @@ export function RecipePanel({ product }: { product: Product }) {
     }
     if (kind === "m") {
       const row = rows.find((r) => r.id === rowId);
-      updateProduct(product.id, {
+      save({
         recipeIngredients: rows.filter((r) => r.id !== rowId),
         recipeComponents: [...components, { id: newId("cmp"), productId: id, quantity: row?.quantity ?? 0 }],
       });
     } else {
       const row = components.find((r) => r.id === rowId);
-      updateProduct(product.id, {
+      save({
         recipeComponents: components.filter((r) => r.id !== rowId),
         recipeIngredients: [...rows, { id: newId("ing"), materialId: id, quantity: row?.quantity ?? 0 }],
       });
@@ -99,17 +104,21 @@ export function RecipePanel({ product }: { product: Product }) {
     </>
   );
 
+  const qtyProps = (batchQty: number, onBatch: (n: number) => void) => ({
+    qty: perUnit(product, batchQty),
+    onQty: (n: number) => onBatch(perBatch(product, n)),
+  });
+
   return (
     <div className="flex flex-col divide-y divide-line/10">
-      <div className="flex flex-wrap items-center gap-2 pb-4 text-[14px]">
-        <span>Makes</span>
-        <YieldInput product={product} />
-        <span>{unitWord} a batch</span>
-      </div>
+      <p className="pb-3 text-[14px]">
+        What goes into <span className="font-semibold">one {unit}</span>. Batches can be any size — the cost of one {unit} stays the same.
+      </p>
 
       <Section
         title="Ingredients"
-        total={cost.ingredientTotal}
+        total={one(cost.ingredientTotal)}
+        unit={unit}
         addLabel="Add ingredient"
         onAdd={() => {
           if (ingredientsList[0]) saveRows([...rows, { id: newId("ing"), materialId: ingredientsList[0].id, quantity: 0 }]);
@@ -119,10 +128,10 @@ export function RecipePanel({ product }: { product: Product }) {
         emptyText={
           ingredientsList.length === 0 && madeByYou.length === 0
             ? "No ingredients to pick from yet — add them under Raw materials first."
-            : "Nothing yet. Add each thing that goes into one batch."
+            : `Nothing yet. Add each thing that goes into one ${unit}.`
         }
         count={ingredientRows.length + components.length}
-        note={componentCost > 0 ? `Includes ${formatPeso(componentCost)} of things you make yourself.` : undefined}
+        note={componentCost > 0 ? `Includes ${formatPeso(one(componentCost))} of things you make yourself.` : undefined}
       >
         {ingredientRows.map((r) => (
           <Line
@@ -132,10 +141,9 @@ export function RecipePanel({ product }: { product: Product }) {
                 {ingredientOptions}
               </select>
             }
-            qty={r.quantity}
-            onQty={(n) => patchRow(r.id, { quantity: n })}
+            {...qtyProps(r.quantity, (n) => patchRow(r.id, { quantity: n }))}
             unit={rawMaterials.find((m) => m.id === r.materialId)?.unit ?? ""}
-            cost={formatPeso(ingredientRowCost(r, ctx))}
+            cost={priceText(one(ingredientRowCost(r, ctx)), cost.unpriced, rawMaterials.find((m) => m.id === r.materialId)?.name)}
             onRemove={() => saveRows(rows.filter((x) => x.id !== r.id))}
           />
         ))}
@@ -150,10 +158,9 @@ export function RecipePanel({ product }: { product: Product }) {
                   {ingredientOptions}
                 </select>
               }
-              qty={r.quantity}
-              onQty={(n) => patchComponent(r.id, { quantity: n })}
+              {...qtyProps(r.quantity, (n) => patchComponent(r.id, { quantity: n }))}
               unit={made?.unit || "pcs"}
-              cost={each > 0 ? formatPeso(each * r.quantity) : "No cost yet"}
+              cost={each > 0 ? formatPeso(one(each * r.quantity)) : "No cost yet"}
               onRemove={() => saveComponents(components.filter((x) => x.id !== r.id))}
             />
           );
@@ -162,11 +169,12 @@ export function RecipePanel({ product }: { product: Product }) {
 
       <Section
         title="Packaging"
-        total={cost.packagingTotal}
+        total={one(cost.packagingTotal)}
+        unit={unit}
         addLabel="Add packaging"
-        onAdd={() => packagingList[0] && saveRows([...rows, { id: newId("ing"), materialId: packagingList[0].id, quantity: 0 }])}
+        onAdd={() => packagingList[0] && saveRows([...rows, { id: newId("ing"), materialId: packagingList[0].id, quantity: 1 * unitsPerBatch(product) }])}
         canAdd={packagingList.length > 0}
-        emptyText={packagingList.length === 0 ? "No packaging to pick from yet — add jars, lids or labels under Packaging first." : "None yet. Add the jars, lids or labels one batch uses."}
+        emptyText={packagingList.length === 0 ? "No packaging to pick from yet — add jars, lids or labels under Packaging first." : `None yet. Add the jar, lid or label one ${unit} uses.`}
         count={packagingRows.length}
       >
         {packagingRows.map((r) => (
@@ -181,59 +189,101 @@ export function RecipePanel({ product }: { product: Product }) {
                 ))}
               </select>
             }
-            qty={r.quantity}
-            onQty={(n) => patchRow(r.id, { quantity: n })}
+            {...qtyProps(r.quantity, (n) => patchRow(r.id, { quantity: n }))}
             unit={rawMaterials.find((m) => m.id === r.materialId)?.unit ?? ""}
-            cost={formatPeso(ingredientRowCost(r, ctx))}
+            cost={priceText(one(ingredientRowCost(r, ctx)), cost.unpriced, rawMaterials.find((m) => m.id === r.materialId)?.name)}
             onRemove={() => saveRows(rows.filter((x) => x.id !== r.id))}
           />
         ))}
       </Section>
 
-      <Section title="Your time" total={cost.laborTotal} count={1}>
-        <LaborEditor product={product} hourlyRate={ctx.hourlyLaborRate} />
+      <Section title="Your time" total={one(cost.laborTotal)} unit={unit} count={1}>
+        <TimeEditor key={product.laborCostOverride != null ? "typed" : "timed"} product={product} unit={unit} hourlyRate={ctx.hourlyLaborRate} save={save} />
       </Section>
 
-      <Section
-        title="Other costs"
-        hint="Gas, electricity, a share of rent — anything else a batch costs."
-        total={cost.miscTotal}
-        addLabel="Add a cost"
-        onAdd={() => saveMisc([...product.recipeMisc, { id: newId("misc"), label: "", cost: 0 }])}
-        canAdd
-        emptyText="None added."
-        count={product.recipeMisc.length}
-      >
-        {product.recipeMisc.map((r) => (
-          <OtherCost
-            key={r.id}
-            row={r}
-            onChange={(patch) => saveMisc(product.recipeMisc.map((x) => (x.id === r.id ? { ...x, ...patch } : x)))}
-            onRemove={() => saveMisc(product.recipeMisc.filter((x) => x.id !== r.id))}
-          />
-        ))}
-      </Section>
+      {/* There are no fixed costs any more; anything entered before stays visible so it can be removed. */}
+      {product.recipeMisc.length > 0 && (
+        <Section title="Other costs" hint={`Entered before costing went per ${unit}. Remove any that no longer apply.`} total={one(cost.miscTotal)} unit={unit} count={product.recipeMisc.length}>
+          {product.recipeMisc.map((r) => (
+            <OtherCost
+              key={r.id}
+              row={r}
+              perUnit={perUnit(product, r.cost)}
+              onCost={(n) => saveMisc(product.recipeMisc.map((x) => (x.id === r.id ? { ...x, cost: perBatch(product, n) } : x)))}
+              onLabel={(label) => saveMisc(product.recipeMisc.map((x) => (x.id === r.id ? { ...x, label } : x)))}
+              onRemove={() => saveMisc(product.recipeMisc.filter((x) => x.id !== r.id))}
+            />
+          ))}
+        </Section>
+      )}
 
       <div className="flex items-baseline justify-between pt-4">
-        <span className="text-[14px] font-semibold">One batch costs</span>
+        <span className="text-[14px] font-semibold">One {unit} costs</span>
         <span className="font-display text-[20px] font-bold tabular-nums">
-          {cost.unpriced.length > 0 ? <span className="text-[14px] font-semibold text-muted-foreground">Not known yet</span> : formatPeso(cost.batchTotal)}
+          {cost.unpriced.length > 0 ? <span className="text-[14px] font-semibold text-muted-foreground">Not known yet</span> : formatPeso(one(cost.batchTotal))}
         </span>
       </div>
     </div>
   );
 }
 
-function YieldInput({ product }: { product: Product }) {
-  const field = useNumericDraft(product.batchYield, (n) => updateProduct(product.id, { batchYield: n }));
+/** A line's cost, or — when its ingredient has no price yet — says so instead of showing ₱0. */
+function priceText(amount: number, unpriced: string[], name: string | undefined): string {
+  return name && unpriced.includes(name) ? "No price yet" : formatPeso(amount);
+}
+
+/** Your time for one unit: minutes at the hourly rate, or a peso amount typed in. */
+function TimeEditor({ product, unit, hourlyRate, save }: { product: Product; unit: string; hourlyRate: number; save: (patch: Partial<Product>) => void }) {
+  const typed = product.laborCostOverride != null;
+  const minutes = useNumericDraft(perUnit(product, product.minutesPerBatch ?? 0), (n) => save({ minutesPerBatch: perBatch(product, n) }));
+  const rate = useNumericDraft(hourlyRate, (n) => setBusinessSetting(HOURLY_LABOR_RATE_KEY, String(n)));
+  const amount = useNumericDraft(perUnit(product, product.laborCostOverride ?? 0), (n) => save({ laborCostOverride: perBatch(product, n) }));
+  const fromTime = (perUnit(product, product.minutesPerBatch ?? 0) / 60) * hourlyRate;
+
   return (
-    <input
-      inputMode="numeric"
-      aria-label="How many one batch makes"
-      value={field.value}
-      onChange={(e) => field.onChange(e.target.value.replace(/[^0-9.]/g, ""))}
-      className={`${input} w-20 text-center font-semibold`}
-    />
+    <div className="flex flex-col gap-2">
+      <div className="flex w-fit rounded-lg bg-secondary p-0.5 text-[13px]" role="radiogroup" aria-label="How to count your time">
+        {(
+          [
+            [false, "Minutes × hourly rate"],
+            [true, "A peso amount"],
+          ] as const
+        ).map(([isTyped, label]) => (
+          <button
+            key={label}
+            type="button"
+            role="radio"
+            aria-checked={typed === isTyped}
+            onClick={() => typed !== isTyped && save({ laborCostOverride: isTyped ? perBatch(product, Math.round(fromTime * 100) / 100) : null })}
+            className={`rounded-md px-3 py-1.5 font-semibold ${typed === isTyped ? "bg-card shadow-sm" : "text-muted-foreground"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {typed ? (
+        <div className="flex flex-wrap items-center gap-2 text-[14px]">
+          <span className="text-muted-foreground">₱</span>
+          <input inputMode="decimal" aria-label={`Your time for one ${unit}, in pesos`} value={amount.value} onChange={(e) => amount.onChange(e.target.value.replace(/[^0-9.]/g, ""))} className={`${input} w-24 text-right`} />
+          <span className="text-muted-foreground">for each {unit}</span>
+        </div>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-2 text-[14px]">
+            <input inputMode="decimal" aria-label={`Minutes for one ${unit}`} value={minutes.value} onChange={(e) => minutes.onChange(e.target.value.replace(/[^0-9.]/g, ""))} className={`${input} w-20 text-right`} />
+            <span className="text-muted-foreground">minutes per {unit}, at ₱</span>
+            <input inputMode="decimal" aria-label="Hourly rate" value={rate.value} onChange={(e) => rate.onChange(e.target.value.replace(/[^0-9.]/g, ""))} className={`${input} w-20 text-right`} />
+            <span className="text-muted-foreground">
+              an hour = <span className="font-semibold text-foreground">{formatPeso(fromTime)}</span>
+            </span>
+          </div>
+          <p className="text-[12.5px] text-muted-foreground">
+            {hourlyRate <= 0 ? "Set what an hour of work is worth — until then your time counts as ₱0. " : ""}
+            The hourly rate is the same for every product; changing it here updates them all.
+          </p>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -241,6 +291,7 @@ function Section({
   title,
   hint,
   total,
+  unit,
   addLabel,
   onAdd,
   canAdd,
@@ -252,6 +303,7 @@ function Section({
   title: string;
   hint?: string;
   total: number;
+  unit: string;
   addLabel?: string;
   onAdd?: () => void;
   canAdd?: boolean;
@@ -264,7 +316,9 @@ function Section({
     <section className="flex flex-col gap-2 py-4">
       <div className="flex items-baseline justify-between gap-3">
         <h4 className="text-[15px] font-semibold">{title}</h4>
-        <span className="text-[13px] text-muted-foreground tabular-nums">{formatPeso(total)} a batch</span>
+        <span className="text-[13px] text-muted-foreground tabular-nums">
+          {formatPeso(total)} per {unit}
+        </span>
       </div>
       {hint && <p className="-mt-1.5 text-[12.5px] text-muted-foreground">{hint}</p>}
       {count === 0 && emptyText ? <p className="text-[13px] text-muted-foreground">{emptyText}</p> : children}
@@ -319,15 +373,27 @@ function Line({
   );
 }
 
-function OtherCost({ row, onChange, onRemove }: { row: RecipeExtraRow; onChange: (patch: Partial<RecipeExtraRow>) => void; onRemove: () => void }) {
-  const field = useNumericDraft(row.cost, (n) => onChange({ cost: n }));
+function OtherCost({
+  row,
+  perUnit: amount,
+  onCost,
+  onLabel,
+  onRemove,
+}: {
+  row: RecipeExtraRow;
+  perUnit: number;
+  onCost: (n: number) => void;
+  onLabel: (label: string) => void;
+  onRemove: () => void;
+}) {
+  const field = useNumericDraft(amount, onCost);
   return (
     <div className="flex items-center gap-2">
-      <input value={row.label} onChange={(e) => onChange({ label: e.target.value })} placeholder="What for?" className={`${input} min-w-0 flex-1`} />
+      <input value={row.label} onChange={(e) => onLabel(e.target.value)} placeholder="What for?" className={`${input} min-w-0 flex-1`} />
       <span className="text-[13px] text-muted-foreground">₱</span>
       <input
         inputMode="decimal"
-        aria-label="Cost a batch"
+        aria-label="Cost for one"
         value={field.value}
         onChange={(e) => field.onChange(e.target.value.replace(/[^0-9.]/g, ""))}
         className={`${input} w-24 shrink-0 text-right`}

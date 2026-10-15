@@ -12,7 +12,6 @@ import { useStore } from "@/lib/store/use-store";
 import { useCostContext } from "@/lib/summary/use-cost-context";
 import { effectiveProductPrice, productCostPerJar } from "@/lib/summary/recipe-cost";
 import { setProductPhoto, shrinkImage, useProductPhotos } from "@/lib/products/photos";
-import { costPerUnit } from "@/lib/costing/price-calc";
 import { formatPrice, pluralize } from "@/lib/format";
 import type { Product } from "@/lib/store/types";
 
@@ -185,16 +184,15 @@ function standing(p: Product, costCtx: ReturnType<typeof useCostContext>) {
   const price = effectiveProductPrice(p, cost);
   const noRecipe = p.recipeIngredients.length === 0 && (p.recipeComponents ?? []).length === 0;
   const complete = cost.unpriced.length === 0 && cost.unconvertible.length === 0 && p.recipeIngredients.length > 0;
-  const unitCost = costPerUnit(cost.batchTotal, p.batchYield, complete);
+  // Per unit, whatever the batch size (lib/costing/per-unit).
+  const unitCost = complete ? Math.round(cost.costPerJar * 100) / 100 : null;
   const next = noRecipe
     ? "Add the recipe"
     : cost.unpriced.length > 0
       ? `Add a price for ${cost.unpriced.length === 1 ? cost.unpriced[0] : pluralize(cost.unpriced.length, "ingredient")}`
       : cost.unconvertible.length > 0
         ? "Check the ingredient units"
-        : !(p.batchYield > 0)
-          ? "Say how many one batch makes"
-          : price <= 0
+        : price <= 0
             ? "Set a selling price"
             : null;
   return { price, unitCost, next };
