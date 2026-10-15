@@ -437,19 +437,23 @@ export function TransactionDialog({
           {kind === "sale" && (
             <>
               <div className="flex flex-col gap-1.5">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className={label}>Products in this order</span>
-                  <select
-                    value={priceType}
-                    onChange={(ev) => changePriceType(ev.target.value as Exclude<PriceType, null>)}
-                    className="h-9 rounded-lg border border-input bg-transparent px-2 text-[13px]"
-                    aria-label="Price type"
-                  >
-                    <option value="standard">Regular price</option>
-                    <option value="friend">Friend price</option>
-                    <option value="wholesale">Wholesale price</option>
-                  </select>
+                <span className={label}>Price type</span>
+                <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Price type">
+                  {(
+                    [
+                      ["standard", "Regular price"],
+                      ["friend", "Friend price"],
+                      ["wholesale", "Wholesale price"],
+                    ] as const
+                  ).map(([k, text]) => (
+                    <button key={k} type="button" role="radio" aria-checked={priceType === k} onClick={() => changePriceType(k)} className={chip(priceType === k)}>
+                      {text}
+                    </button>
+                  ))}
                 </div>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <span className={label}>Products in this order</span>
                 {catalog.length === 0 && lines.length === 0 && (
                   <p className="text-[13px] text-muted-foreground">No products yet — add them in Costing first.</p>
                 )}

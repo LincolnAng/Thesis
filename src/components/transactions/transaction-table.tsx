@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo, useState } from "react";
 import { Banknote, ChevronDown, ChevronRight, Pencil } from "lucide-react";
-import { EXPENSE_CATEGORY_LABELS, ENTRY_TYPE_LABELS, describePaymentMethod, formatDate, formatPeso } from "@/lib/format";
+import { EXPENSE_CATEGORY_LABELS, ENTRY_TYPE_LABELS, PRICE_TYPE_LABELS, describePaymentMethod, formatDate, formatPeso, formatTime } from "@/lib/format";
 import { dueInfo, obligationInfo, obligationKind, outstanding, paidSoFar, paymentsOf, termOf, canBeOwed } from "@/lib/transactions/ledger";
 import { lineSubtotal, quantitySold } from "@/lib/transactions/order-lines";
 import type { Entry } from "@/lib/store/types";
@@ -44,7 +44,10 @@ function methodOf(e: Entry): { method: string | null; bank: string | null } {
 /** Money moves in these types; spoilage and older owner-funded investments carry no payment. */
 const hasPayment = (e: Entry) => e.type === "SALE" || e.type === "EXPENSE" || e.type === "CAPITAL" || e.type === "ASSET";
 
-const GREY = "bg-secondary/70 text-muted-foreground/50";
+/** Shown where a column doesn't apply to a row, so a blank is never mistaken for missing data. */
+function NA() {
+  return <span className="font-semibold text-muted-foreground">N/A</span>;
+}
 
 /** The deadline of a receivable or payable, with where it stands. */
 function Deadline({ e }: { e: Entry }) {
@@ -74,36 +77,70 @@ function Deadline({ e }: { e: Entry }) {
   );
 }
 
-/** What opens under a row: the order's products, how it was paid, and every payment. */
+/** The receipt of one transaction: what it was, in what quantity and at what price, and who recorded it. */
+function Receipt({ e }: { e: Entry }) {
+  const sale = e.type === "SALE";
+  const qty = e.quantity && e.quantity > 0 ? e.quantity : null;
+  // A single-product sale has no lines of its own: its product, quantity and amount are the receipt.
+  const items =
+    e.lineItems?.length
+      ? e.lineItems.map((l) => ({ name: l.name, qty: l.quantity, price: l.unitPrice, sub: lineSubtotal(l) }))
+      : e.sku && (sale || e.type === "WASTE")
+        ? [{ name: e.sku, qty, price: qty && e.amount != null ? Math.round((e.amount / qty) * 100) / 100 : null, sub: e.amount }]
+        : [];
+  const th = "py-1 pr-2 text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground";
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Receipt</div>
+      <span className="text-muted-foreground">
+        {formatDate(e.timestamp)} · {formatTime(e.timestamp)}
+      </span>
+      {items.length > 0 ? (
+        <table className="mt-1 w-full">
+          <thead>
+            <tr>
+              <th className={`${th} text-left`}>{e.type === "WASTE" ? "Lost" : "Product"}</th>
+              <th className={th}>Qty</th>
+              <th className={th}>{e.type === "WASTE" ? "Cost" : "Price"}</th>
+              <th className={`${th} pr-0`}>Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((l, i) => (
+              <tr key={i} className="border-b border-line/5">
+                <td className="py-1 pr-2">{l.name}</td>
+                <td className="py-1 pr-2 text-right tabular-nums">{l.qty ?? "—"}</td>
+                <td className="py-1 pr-2 text-right tabular-nums">{l.price != null ? formatPeso(l.price) : "—"}</td>
+                <td className="py-1 text-right font-semibold tabular-nums">{l.sub != null ? formatPeso(l.sub) : "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <>
+          {e.sku && <span>{e.type === "EXPENSE" ? "For" : e.type === "ASSET" ? "Bought" : "Item"}: {e.sku}</span>}
+          {e.type === "EXPENSE" && e.category && <span>Category: {EXPENSE_CATEGORY_LABELS[e.category] ?? e.category}</span>}
+        </>
+      )}
+      {sale && e.priceType && <span>Price type: {PRICE_TYPE_LABELS[e.priceType] ?? e.priceType} price</span>}
+      {sale && <span>Total quantity sold: {quantitySold(e) ?? "—"}</span>}
+      {e.counterparty && <span>{sale ? "Customer" : e.type === "CAPITAL" ? "Put in by" : "Paid to"}: {e.counterparty}</span>}
+      <span className="mt-1 flex justify-between border-t border-line/15 pt-1.5 font-semibold">
+        <span>Total</span>
+        <span className="tabular-nums">{e.amount != null ? formatPeso(e.amount) : "—"}</span>
+      </span>
+      {e.loggedByName && <span className="text-muted-foreground">Recorded by {e.loggedByName}</span>}
+    </div>
+  );
+}
+
+/** What opens under a row: its receipt, and — for executives — everything about its payment. */
 function Details({ e, showPayment, owed }: { e: Entry; showPayment: boolean; owed?: OwedActions }) {
-  const lines = e.lineItems ?? [];
   const payments = paymentsOf(e);
   const info = obligationKind(e) ? obligationInfo(e, new Date()) : null;
   return (
     <div className="grid grid-cols-1 gap-4 px-4 py-3 text-[13px] min-[800px]:grid-cols-2">
-      {lines.length > 0 && (
-        <div>
-          <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Products in this order</div>
-          <table className="w-full">
-            <tbody>
-              {lines.map((l, i) => (
-                <tr key={i} className="border-b border-line/5 last:border-0">
-                  <td className="py-1 pr-2">{l.name}</td>
-                  <td className="py-1 pr-2 text-right tabular-nums">{l.quantity} ×</td>
-                  <td className="py-1 pr-2 text-right tabular-nums">{formatPeso(l.unitPrice)}</td>
-                  <td className="py-1 text-right font-semibold tabular-nums">{formatPeso(lineSubtotal(l))}</td>
-                </tr>
-              ))}
-              <tr>
-                <td className="pt-1.5 font-semibold">Total quantity sold</td>
-                <td className="pt-1.5 text-right font-semibold tabular-nums">{quantitySold(e)}</td>
-                <td />
-                <td className="pt-1.5 text-right font-semibold tabular-nums">{formatPeso(e.amount)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      )}
+      <Receipt e={e} />
       {showPayment && (canBeOwed(e) || e.type === "CAPITAL") && (
         <div className="flex flex-col gap-1">
           <div className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Payment</div>
@@ -166,9 +203,6 @@ function Details({ e, showPayment, owed }: { e: Entry; showPayment: boolean; owe
     </div>
   );
 }
-
-const hasDetails = (e: Entry, showPayment: boolean) =>
-  Boolean(e.lineItems?.length || e.notes || (showPayment && (canBeOwed(e) || e.type === "CAPITAL") && (termOf(e) !== "spot" || e.paymentMethod)));
 
 /** What can be done to an owed row. Executives only. */
 export interface OwedActions {
@@ -259,7 +293,6 @@ export function TransactionTable({
             const moneyIn = e.type === "SALE" || e.type === "CAPITAL";
             const qty = quantitySold(e);
             const { method, bank } = methodOf(e);
-            const expandable = hasDetails(e, showPayment);
             const isOpen = open.has(e.id);
             return (
               <Fragment key={e.id}>
@@ -282,6 +315,7 @@ export function TransactionTable({
                     )}
                     <span className="block text-[11.5px] text-muted-foreground">
                       {kindLabel(e)}
+                      {e.type === "SALE" && e.priceType ? ` · ${PRICE_TYPE_LABELS[e.priceType] ?? e.priceType} price` : ""}
                       {qty != null ? ` · ${qty} sold` : ""}
                       {e.type === "EXPENSE" && e.category ? ` · ${EXPENSE_CATEGORY_LABELS[e.category] ?? e.category}` : ""}
                     </span>
@@ -294,45 +328,45 @@ export function TransactionTable({
                     )}
                   </td>
                   {showPayment && (
-                    <td className={`${td} text-[12.5px] ${hasPayment(e) ? "" : GREY}`}>
-                      {method ? (
+                    <td className={`${td} text-[12.5px]`}>
+                      {!hasPayment(e) ? (
+                        <NA />
+                      ) : method ? (
                         <span
                           className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 font-semibold ${method === "bank_transfer" ? "bg-[#3F6E8C]/10 text-[#3F6E8C]" : "bg-secondary text-foreground"}`}
                         >
                           {method === "bank_transfer" ? "Bank transfer" : "Cash"}
                         </span>
                       ) : (
-                        <span className="text-muted-foreground">{hasPayment(e) && kind ? "Not paid yet" : "—"}</span>
+                        <span className="text-muted-foreground">{kind ? "Not paid yet" : "—"}</span>
                       )}
                     </td>
                   )}
                   {showPayment && (
-                    <td className={`${td} text-[12.5px] ${method === "bank_transfer" ? "" : GREY}`}>{method === "bank_transfer" ? (bank ?? "—") : "—"}</td>
+                    <td className={`${td} text-[12.5px]`}>{method === "bank_transfer" ? (bank ?? "—") : <NA />}</td>
                   )}
                   {showPayment && (
-                    <td className={`${td} text-[12.5px] ${kind ? "" : GREY}`}>{kind ? <Deadline e={e} /> : "—"}</td>
+                    <td className={`${td} text-[12.5px]`}>{kind ? <Deadline e={e} /> : <NA />}</td>
                   )}
                   <td className={`${td} whitespace-nowrap text-muted-foreground`}>{e.loggedByName ?? "—"}</td>
                   <td className="px-1 py-1 text-center align-middle">
                     <div className="flex items-center justify-center gap-0.5">
-                      {expandable && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setOpen((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(e.id)) next.delete(e.id);
-                              else next.add(e.id);
-                              return next;
-                            })
-                          }
-                          aria-expanded={isOpen}
-                          aria-label={isOpen ? "Hide details" : "Show details"}
-                          className="flex h-11 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
-                        >
-                          {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setOpen((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(e.id)) next.delete(e.id);
+                            else next.add(e.id);
+                            return next;
+                          })
+                        }
+                        aria-expanded={isOpen}
+                        aria-label={isOpen ? "Hide receipt" : "Show receipt"}
+                        className="flex h-11 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao"
+                      >
+                        {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                      </button>
                       {owed && kind && outstanding(e) > 0 && (
                         <button
                           type="button"

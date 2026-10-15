@@ -246,6 +246,7 @@ function TransactionsPageInner() {
             />
             <MoneyBox
               icon={<CircleDollarSign className="h-5 w-5" />}
+              heading={period === "all" ? "All time" : monthLabel(period)}
               label="Money earned"
               value={summary.earned}
               tone={summary.earned >= 0 ? "good" : "bad"}
@@ -465,6 +466,7 @@ function SplitCard({
 
 function MoneyBox({
   icon,
+  heading,
   label,
   value,
   note,
@@ -473,6 +475,8 @@ function MoneyBox({
   alert,
 }: {
   icon: React.ReactNode;
+  /** Filled card only: the month, set above the figure. */
+  heading?: string;
   label: string;
   value: number;
   note: string;
@@ -482,19 +486,21 @@ function MoneyBox({
 }) {
   const color = tone === "good" ? "text-success" : tone === "bad" ? "text-danger" : "text-foreground";
   if (filled) {
-    // The headline figure: green (red only when the month lost money), centred in its card.
+    // The headline figure: green (red only when the month lost money), centred in its card,
+    // with the month above it so the card reads on its own.
     return (
       <div
-        className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl border px-5 py-5 text-center text-white dark:text-ivory ${
+        className={`flex flex-col items-center justify-center gap-2 rounded-2xl border px-5 py-6 text-center text-white dark:text-ivory ${
           tone === "bad" ? "border-danger bg-danger" : "border-success bg-success"
         }`}
       >
+        {heading && <span className="font-display text-[18px] font-semibold tracking-wide">{heading}</span>}
         <span className="flex items-center justify-center gap-2 text-[14px] font-semibold opacity-90">
           {icon}
           {label}
         </span>
-        <span className="font-display text-[clamp(28px,3.4vw,38px)] font-bold leading-tight tabular-nums">{formatPeso(value)}</span>
-        <span className="max-w-[28ch] text-[12.5px] opacity-90">{note}</span>
+        <span className="font-display max-w-full break-words text-[clamp(32px,3.6vw,46px)] font-bold leading-none tabular-nums">{formatPeso(value)}</span>
+        <span className="mt-1 max-w-[30ch] text-[13px] opacity-90">{note}</span>
       </div>
     );
   }
