@@ -2,13 +2,12 @@
 
 import { useState } from "react";
 import {
-  BanknoteArrowDown,
-  BanknoteArrowUp,
   CalendarCheck,
   CalendarDays,
   Check,
   CircleCheck,
   CircleDot,
+  HandCoins,
   Hourglass,
   Package,
   Receipt,
@@ -134,9 +133,9 @@ export function RecordPaymentDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2.5">
             <span className="flex h-9 w-9 items-center justify-center rounded-full bg-cacao/10 text-cacao">
-              {incoming ? <BanknoteArrowDown className="h-5 w-5" /> : <BanknoteArrowUp className="h-5 w-5" />}
+              <HandCoins className="h-5 w-5" />
             </span>
-            Record a payment
+            Add payment
           </DialogTitle>
         </DialogHeader>
 

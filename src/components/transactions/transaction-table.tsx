@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import { BanknoteArrowDown, BanknoteArrowUp, ChevronDown, ChevronRight, Pencil } from "lucide-react";
+import { ChevronDown, ChevronRight, HandCoins, Pencil } from "lucide-react";
 import { EXPENSE_CATEGORY_LABELS, PRICE_TYPE_LABELS, describePaymentMethod, formatDate, formatPeso } from "@/lib/format";
 import { dueInfo, obligationInfo, obligationKind, outstanding, paymentsOf } from "@/lib/transactions/ledger";
 import { expandOrderLines } from "@/lib/transactions/order-lines";
@@ -124,14 +124,15 @@ function Details({ e, showPayment, owed }: { e: Entry; showPayment: boolean; owe
           )}
           {owed && info.status !== "settled" && (
             <div className="mt-1 flex flex-wrap gap-2">
-              <button type="button" onClick={() => owed.onPay(e)} className="min-h-10 rounded-lg bg-cacao px-4 text-[13px] font-semibold text-ivory">
-                Record a payment
+              <button type="button" onClick={() => owed.onPay(e)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line/25 px-3 text-[13px] font-medium transition hover:border-cacao hover:text-cacao">
+                <HandCoins className="h-4 w-4" />
+                Add payment
               </button>
-              <button type="button" onClick={() => owed.onMoveDue(e)} className="min-h-10 rounded-lg border border-line/25 px-4 text-[13px] font-semibold">
+              <button type="button" onClick={() => owed.onMoveDue(e)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line/25 px-3 text-[13px] font-medium transition hover:border-cacao hover:text-cacao">
                 Change due date
               </button>
               {info.status === "overdue" && (
-                <button type="button" onClick={() => owed.onDefault(e)} className="min-h-10 rounded-lg border border-danger/50 px-4 text-[13px] font-semibold text-danger">
+                <button type="button" onClick={() => owed.onDefault(e)} className="inline-flex min-h-9 items-center rounded-lg border border-danger/40 px-3 text-[13px] font-medium text-danger transition hover:bg-danger/10">
                   Mark as defaulted
                 </button>
               )}
@@ -313,11 +314,11 @@ export function TransactionTable({
                             <button
                               type="button"
                               onClick={() => owed.onPay(origin)}
-                              aria-label={kind === "receivable" ? "Record a payment received" : "Record a payment made"}
-                              className="inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-lg bg-cacao px-3 text-[12.5px] font-semibold text-ivory transition hover:brightness-110 active:scale-[0.97]"
+                              aria-label={kind === "receivable" ? "Add a payment received" : "Add a payment made"}
+                              className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg border border-line/20 px-2.5 text-[12px] font-medium text-muted-foreground transition hover:border-cacao hover:text-cacao active:scale-[0.97]"
                             >
-                              {kind === "receivable" ? <BanknoteArrowDown className="h-4 w-4" /> : <BanknoteArrowUp className="h-4 w-4" />}
-                              Record a payment
+                              <HandCoins className="h-3.5 w-3.5" />
+                              Add payment
                             </button>
                           )}
                           <div className="flex items-center justify-center gap-0.5">
