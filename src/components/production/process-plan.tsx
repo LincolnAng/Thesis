@@ -490,11 +490,9 @@ function FlowStageCard({ stage }: { stage: FlowStage }) {
   const watch = stage.items.some((i) => i.tone === "watch");
   const used = stage.items.some((i) => i.tone !== "idle");
   const tone: FlowTone = short ? "short" : watch ? "watch" : used ? "ok" : "idle";
-  // Finished products are what everything else is for, so that stage always has the heavy brown
-  // frame and more room; the badge and its items still say whether it's covered.
-  const ring = stage.featured
-    ? `border-2 border-cacao shadow-[0_0_0_4px_rgba(123,75,42,0.1)] ${{ short: "bg-danger/[0.04]", watch: "bg-card", ok: "bg-success/[0.03]", idle: "bg-card" }[tone]}`
-    : { short: "border-danger/40 bg-danger/[0.04]", watch: "border-[var(--status-warning)]/40 bg-secondary/40", ok: "border-success/30 bg-secondary/40", idle: "border-line/10 bg-secondary/30" }[tone];
+  // Finished products are what everything else is for, so that stage gets more room and larger
+  // names; its border follows its status like every other stage's.
+  const ring = { short: "border-danger/40 bg-danger/[0.04]", watch: "border-[var(--status-warning)]/40 bg-secondary/40", ok: "border-success/30 bg-secondary/40", idle: "border-line/10 bg-secondary/30" }[tone];
   const badge = {
     short: { text: `${short} short`, cls: "bg-danger/10 text-danger" },
     watch: { text: "Running low", cls: "bg-[var(--status-warning)]/15 text-[var(--status-warning)]" },
