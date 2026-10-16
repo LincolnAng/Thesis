@@ -4,7 +4,7 @@ import Link from "next/link";
 
 import { useMemo, useState } from "react";
 import { Page } from "@/components/layout/page";
-import { Panel, ProcessPlan } from "@/components/production/process-plan";
+import { ProcessPlan } from "@/components/production/process-plan";
 import { EventPlanDialog } from "@/components/inventory/event-plan-dialog";
 import { PlanSettingsDialog } from "@/components/inventory/plan-settings-dialog";
 import { SeasonalBreakdown } from "@/components/inventory/seasonal-breakdown";
@@ -12,13 +12,11 @@ import { PlanFixes } from "@/components/inventory/plan-fixes";
 import { CarouselNav } from "@/components/ui/carousel-nav";
 import { useProductionPlan } from "@/lib/summary/use-production-plan";
 import { planContingencies } from "@/lib/summary/plan-contingency";
-import { ConfidenceDonut } from "@/components/inventory/confidence-donut";
 import { AddStockDialog } from "@/components/stock/add-stock-dialog";
 import { AddProductDialog, EditProductDialog } from "@/components/stock/edit-product-dialog";
 import { useStore } from "@/lib/store/use-store";
 import { chipColor } from "@/lib/chart-colors";
 import { pluralize } from "@/lib/format";
-import { MOVING_AVERAGE_MONTHS, type ForecastReliability } from "@/lib/summary/forecast";
 import {
   STRATEGY_HINTS,
   STRATEGY_LABELS,
@@ -31,7 +29,6 @@ import {
   toggleUnavailableDay,
   unavailableDays,
 } from "@/lib/summary/business-config";
-import type { Product } from "@/lib/store/types";
 
 const STRATEGIES: ScheduleStrategy[] = ["fastest", "balanced", "min_expiry"];
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -145,92 +142,6 @@ function Calendar({
   );
 }
 
-/** One row per product: the bar is stock on hand, the black tick is next month's expected
- * sales. Least-covered products first. */
-function StockVsForecast({
-  products,
-  forecastOf,
-  reliabilityOf,
-  onPick,
-}: {
-  products: Product[];
-  forecastOf: (id: string) => number;
-  reliabilityOf: (id: string) => ForecastReliability | undefined;
-  onPick: (p: Product) => void;
-}) {
-  const max = Math.max(10, ...products.map((p) => Math.max(p.stockQty, forecastOf(p.id)))) * 1.05;
-  const rows = products
-    .map((p) => ({ p, f: forecastOf(p.id), gap: p.stockQty - forecastOf(p.id) }))
-    .sort((a, b) => a.p.stockQty / Math.max(1, a.f) - b.p.stockQty / Math.max(1, b.f));
-
-  // Two bars per product, each with its own figure at the end of it. The forecast used to be a
-  // thin tick on the stock bar with its number in a column far to the right — two things that
-  // have to be read together, placed as far apart as the row allowed.
-  // On a phone the name takes its own line above its bars, so neither has to be squeezed.
-  const COLS =
-    "grid grid-cols-[minmax(0,1fr)_56px_64px] items-center gap-x-4 gap-y-1.5 min-[640px]:grid-cols-[minmax(0,1.2fr)_minmax(0,2.4fr)_70px_64px] min-[640px]:gap-y-4";
-
-  return (
-    <div className="flex flex-col">
-      <div className={`${COLS} border-b border-line/10 pb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground`}>
-        <span className="hidden min-[640px]:block">Product</span>
-        <span>On hand vs. expected to sell</span>
-        <span className="text-right">Spare</span>
-        <span className="text-right">Confidence</span>
-      </div>
-
-      {rows.map(({ p, f, gap }) => {
-        const short = gap < 0;
-        const reliability = reliabilityOf(p.id);
-        const pct = (v: number) => `${Math.max(v > 0 ? 2 : 0, (v / max) * 100)}%`;
-        return (
-          <button
-            key={p.id}
-            type="button"
-            onClick={() => onPick(p)}
-            title="Click to edit"
-            className={`${COLS} -mx-2 w-[calc(100%+1rem)] rounded-lg px-2 py-2.5 text-left hover:bg-secondary`}
-          >
-            <span className="col-span-3 truncate text-[13px] font-medium min-[640px]:col-span-1">{p.name}</span>
-
-            <span className="flex flex-col gap-1">
-              <span className="flex items-center gap-2">
-                <span className="relative h-3.5 flex-1 rounded bg-track">
-                  <span
-                    className="absolute inset-y-0 left-0 rounded"
-                    style={{ width: pct(p.stockQty), background: "var(--brand-cacao)" }}
-                  />
-                </span>
-                <span className="w-[72px] shrink-0 text-[12px] tabular-nums">
-                  <span className="font-semibold">{p.stockQty}</span>
-                  <span className="text-muted-foreground"> on hand</span>
-                </span>
-              </span>
-              <span className="flex items-center gap-2">
-                <span className="relative h-3.5 flex-1 rounded bg-track">
-                  <span
-                    className="absolute inset-y-0 left-0 rounded"
-                    style={{ width: pct(f), background: "#E8A013" }}
-                  />
-                </span>
-                <span className="w-[72px] shrink-0 text-[12px] tabular-nums">
-                  <span className="font-semibold">{f}</span>
-                  <span className="text-muted-foreground"> expected</span>
-                </span>
-              </span>
-            </span>
-
-            <span className={`text-right text-[13px] font-semibold tabular-nums ${short ? "text-danger" : "text-success"}`}>
-              {short ? `−${-gap}` : `+${gap}`}
-            </span>
-            <span className="flex justify-end">{reliability && <ConfidenceDonut reliability={reliability} />}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 /**
  * Production and Calendar are one screen's two halves, split into their own tabs: Production
  * is stock, what to make and the forecast; Calendar is the production plan laid out by day.
@@ -238,7 +149,7 @@ function StockVsForecast({
  * to sit behind Advanced; as its own tab it shows for everyone.
  */
 export function ProductionScreen({ section }: { section: "production" | "calendar" }) {
-  const { products, machines, events, businessSettings } = useStore();
+  const { products, machines, events, businessSettings, loadedFromServer } = useStore();
   const [strategy, setStrategy] = useState<ScheduleStrategy>("fastest");
   const tab = section === "calendar" ? "plan" : "stock";
   const [addStockOpen, setAddStockOpen] = useState(false);
@@ -288,11 +199,6 @@ export function ProductionScreen({ section }: { section: "production" | "calenda
   );
 
   const forecastOf = (id: string) => plan.forecasts.find((f) => f.productId === id)?.forecastQty ?? 0;
-  // The months the forecast averages: the most recent complete months with sales.
-  const basisMonths = [...new Set(plan.forecasts.flatMap((f) => f.history.slice(-MOVING_AVERAGE_MONTHS).map((h) => h.month)))]
-    .sort()
-    .slice(-MOVING_AVERAGE_MONTHS)
-    .map((k) => fromIso(`${k}-01`).toLocaleDateString("en-US", { month: "short" }));
 
   const low = products
     .map((p) => ({ p, need: forecastOf(p.id), belowWarning: p.stockQty <= p.lowStockThreshold }))
@@ -341,7 +247,7 @@ export function ProductionScreen({ section }: { section: "production" | "calenda
       <div className="flex flex-col gap-5">
         {/* Without a machine every day has zero capacity, so nothing is ever placed on the
             calendar — which looks like the plan is broken rather than unconfigured. */}
-        {!plan.hasEquipment && (
+        {loadedFromServer && !plan.hasEquipment && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-danger/35 bg-danger/[0.04] px-5 py-4">
             <div className="min-w-0">
               <div className="font-display text-[17px] font-semibold">No equipment set up yet</div>
@@ -362,9 +268,11 @@ export function ProductionScreen({ section }: { section: "production" | "calenda
 
         {/* The banner above already covers the no-equipment case, and does it better — it has
             the button. Everything else that can stop the plan is spelled out here. */}
-        <PlanFixes fixes={fixes.filter((f) => f.id !== "no-equipment")} />
+        <PlanFixes fixes={fixes.filter((f) => f.id !== "no-equipment" && (section === "calendar" || !f.id.startsWith("short-")))} />
 
-        {/* Where things stand first — what's low, what to make, when — then the detail. */}
+        {/* Production answers "is anything short?" itself, from the demand down; the calendar view
+            keeps the three quick tiles. */}
+        {section === "calendar" && (
         <div className="grid grid-cols-1 gap-4 min-[1000px]:grid-cols-3">
           <div className={`rounded-2xl border bg-card px-5 py-4 ${low.length ? "border-danger/35" : "border-line/15"}`}>
             <TileHeader title="Running low" color="#B3261E" />
@@ -460,8 +368,10 @@ export function ProductionScreen({ section }: { section: "production" | "calenda
             </div>
           </div>
         </div>
+        )}
 
-        {section === "production" && <ProcessPlan />}
+        {section === "production" && <ProcessPlan
+            details={<SeasonalBreakdown forecasts={plan.forecasts} embedded skipMonth={toIsoDate(new Date(now.getFullYear(), now.getMonth() + 1, 1)).slice(0, 7)} />} onPickProduct={(id) => setEditingProductId(id)} />}
 
         {tab === "plan" ? (
           <div className="flex flex-col gap-4 rounded-2xl border border-line/15 bg-card p-5">
@@ -511,38 +421,7 @@ export function ProductionScreen({ section }: { section: "production" | "calenda
               <span className="ml-auto text-muted-foreground">Click a day to mark yourself off</span>
             </div>
           </div>
-        ) : (
-          <>
-            <Panel
-              title={`Stock on hand vs. forecast for ${nextMonth} ${new Date(now.getFullYear(), now.getMonth() + 1, 1).getFullYear()}`}
-              note={
-                basisMonths.length
-                  ? `Fitted on ${basisMonths.join(", ")} — "What to expect each month" below shows the working`
-                  : "No complete months of sales yet — the forecast fills in as sales are logged"
-              }
-              aside={
-                <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-2.5 w-3 rounded-sm bg-cacao" />
-                    On hand
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-2.5 w-3 rounded-sm" style={{ background: "#E8A013" }} />
-                    {`Expected to sell in ${nextMonth}`}
-                  </span>
-                </div>
-              }
-            >
-            <StockVsForecast
-              products={products}
-              forecastOf={forecastOf}
-              reliabilityOf={(id) => plan.forecasts.find((f) => f.productId === id)?.reliability}
-              onPick={(p) => setEditingProductId(p.id)}
-            />
-            </Panel>
-            <SeasonalBreakdown forecasts={plan.forecasts} />
-          </>
-        )}
+        ) : null}
       </div>
 
       {addStockOpen && (

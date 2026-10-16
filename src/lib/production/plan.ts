@@ -83,6 +83,9 @@ export interface PlanAlert {
   urgent: boolean;
   title: string;
   detail: string;
+  /** What it's about, so a screen can file it under the right step. */
+  productId?: string;
+  materialId?: string;
 }
 
 export interface PlanResult {
@@ -232,6 +235,7 @@ export function planProduction(input: PlanInput): PlanResult {
   for (const m of materialPlans.filter((x) => x.toBuy > 0 || x.belowReorderPoint).sort((a, b) => b.toBuy - a.toBuy)) {
     alerts.push({
       kind: "restock",
+      materialId: m.materialId,
       urgent: m.toBuy > 0,
       title: m.toBuy > 0 ? `Buy at least ${m.toBuy} ${m.unit} of ${m.name}` : `${m.name} is at its restock point`,
       detail:
@@ -243,6 +247,7 @@ export function planProduction(input: PlanInput): PlanResult {
   for (const p of productPlans.filter((x) => x.batches > 0)) {
     alerts.push({
       kind: "produce",
+      productId: p.productId,
       urgent: p.onHand === 0 || p.onHand < p.demand / 2,
       title: `Make ${p.batches} batch${p.batches === 1 ? "" : "es"} of ${p.name}`,
       detail:
@@ -253,6 +258,7 @@ export function planProduction(input: PlanInput): PlanResult {
     if (p.canMakeNow < p.batches) {
       alerts.push({
         kind: "limited",
+        productId: p.productId,
         urgent: true,
         title: `Only ${p.canMakeNow} of ${p.batches} ${p.name} batches can be made now`,
         detail: `Not enough ${p.limitedBy ?? "stock"} on hand for the rest.`,
@@ -262,6 +268,7 @@ export function planProduction(input: PlanInput): PlanResult {
   for (const p of productPlans.filter((x) => x.missingBatchSize)) {
     alerts.push({
       kind: "no_batch_size",
+      productId: p.productId,
       urgent: false,
       title: `${p.name} has no batch size`,
       detail: `${p.shortfall} are needed, but production can't be planned until it has a usual batch size (Production → Settings → Batch sizes).`,

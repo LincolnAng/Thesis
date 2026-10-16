@@ -229,7 +229,17 @@ function ProductFilter({
   );
 }
 
-export function SeasonalBreakdown({ forecasts }: { forecasts: ProductForecast[] }) {
+export function SeasonalBreakdown({
+  forecasts,
+  embedded = false,
+  skipMonth,
+}: {
+  forecasts: ProductForecast[];
+  /** Drawn as part of the card it sits in (Production's demand card) rather than a card of its own. */
+  embedded?: boolean;
+  /** A month already shown elsewhere ("2026-11"), left out of the list. */
+  skipMonth?: string;
+}) {
   const { businessSettings, products, entries } = useStore();
   // Every product is listed, including ones with no sales yet. Leaving them out made the
   // filter quietly disagree with the Products page about how many products exist, and "this
@@ -303,13 +313,50 @@ export function SeasonalBreakdown({ forecasts }: { forecasts: ProductForecast[] 
       });
   }, [chosenId, pattern, products, entries, businessSettings]);
 
+  // No sales yet: show the chart's frame — the coming twelve months with empty bars — so it's
+  // clear what will appear here, rather than a blank card with a sentence in it.
   if (withMonths.length === 0) {
+    const now = new Date();
+    const key = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const months = Array.from({ length: 13 }, (_, i) => new Date(now.getFullYear(), now.getMonth() + 1 + i, 1))
+      .filter((d) => key(d) !== skipMonth)
+      .slice(0, 12)
+      .map((d) => `${d.toLocaleDateString("en-US", { month: "short" })} '${String(d.getFullYear()).slice(2)}`);
     return (
-      <section className="rounded-2xl border border-line/15 bg-card p-5">
-        <h2 className="font-display text-[17px] font-semibold">Month by month</h2>
-        <p className="mt-1 text-[13px] text-muted-foreground">
-          Nothing to break down yet — log a few sales and this fills in on its own.
+      <section className={embedded ? "" : "rounded-2xl border border-line/15 bg-card p-5"}>
+        <h2 className={embedded ? "text-[14.5px] font-semibold" : "font-display text-[17px] font-semibold"}>What to expect each month</h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Nothing to show yet — once a full month of sales is logged, each month below fills in with how many jars to expect and how strong its season is.
         </p>
+        <div className="mt-3 overflow-x-auto">
+          <div className="min-w-[520px]" aria-hidden>
+            <div className={`${COLS} border-b border-line/10 pb-2 text-[10px] font-bold uppercase leading-tight tracking-wide text-muted-foreground`}>
+              <span>Month</span>
+              <span>Expected demand</span>
+              <span className="text-right">Count</span>
+              <span className="w-[116px] text-center">Season</span>
+              <span className="text-center">Confidence Level</span>
+            </div>
+            {months.map((label) => (
+              <div key={label} className={`${COLS} border-b border-line/10 py-1.5 text-[13px] last:border-0`}>
+                <span className="whitespace-nowrap text-muted-foreground">{label}</span>
+                <span className="block h-4 rounded bg-track" />
+                <span className="text-right text-muted-foreground/60">—</span>
+                <span className="flex items-center gap-2">
+                  <span className="w-[116px] shrink-0 rounded-md bg-track py-[3px] text-center text-[10px] font-bold tracking-wide text-muted-foreground/60">—</span>
+                  <span className="flex items-center gap-[2px]">
+                    {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+                      <span key={i} className="h-2.5 w-[3px] rounded-[1px]" style={{ background: EMPTY }} />
+                    ))}
+                  </span>
+                </span>
+                <span className="flex justify-center">
+                  <span className="h-5 w-5 rounded-full border-[3px] border-track" />
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       </section>
     );
   }
@@ -317,14 +364,14 @@ export function SeasonalBreakdown({ forecasts }: { forecasts: ProductForecast[] 
   // Scale on the ROUNDED jars, the same figure the labels show. Scaling on the raw units drew
   // three different bar lengths for three months that all read "1 jar" — the bar and the number
   // beside it are one fact, and a reader who sees them disagree is right to distrust both.
-  const max = Math.max(...chosen.monthly.map((m) => Math.round(m.units)), 1);
+  const max = Math.max(...chosen.monthly.filter((m) => m.month !== skipMonth).map((m) => Math.round(m.units)), 1);
 
   return (
-    <section className="rounded-2xl border border-line/15 bg-card p-5">
+    <section className={embedded ? "" : "rounded-2xl border border-line/15 bg-card p-5"}>
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h2 className="font-display text-[17px] font-semibold">What to expect each month</h2>
+            <h2 className={embedded ? "text-[14.5px] font-semibold" : "font-display text-[17px] font-semibold"}>What to expect each month</h2>
             <ConfidenceDonut reliability={chosen.reliability} showLabel />
           </div>
           <p className="mt-0.5 text-xs text-muted-foreground">{chosen.reliability.reason}</p>
@@ -366,6 +413,7 @@ export function SeasonalBreakdown({ forecasts }: { forecasts: ProductForecast[] 
       </div>
 
       {chosen.monthly.map((m, monthIdx) => {
+        if (m.month === skipMonth) return null;
         const { score, word } = seasonStrength(m.seasonIndex);
         const colour = seasonColor(score);
         const jars = Math.round(m.units);
