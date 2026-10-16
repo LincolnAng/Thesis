@@ -1,7 +1,6 @@
 "use client";
 
 import { Bar, BarChart, CartesianGrid, Legend, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { chipColor } from "@/lib/chart-colors";
 import { formatPeso, formatPesoAbbrev } from "@/lib/format";
 import { CHART_AXIS_TICK, CHART_GRID_STROKE, CHART_LEGEND_STYLE, CHART_Y_WIDTH, ChartTooltip } from "@/components/summary/chart-theme";
 
@@ -12,8 +11,9 @@ export interface MonthTotals {
 }
 
 // Fixed categorical slots (validated palette), not the reserved green/amber status colors.
-const SALES_COLOR = chipColor(1);
-const EXPENSES_COLOR = chipColor(2);
+// The same green and red as money in and money out everywhere else, and as Home's charts.
+const SALES_COLOR = "var(--color-success)";
+const EXPENSES_COLOR = "var(--color-danger)";
 
 /**
  * Sales and expenses per month, side by side, against the monthly sales target and the

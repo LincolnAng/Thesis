@@ -7,6 +7,7 @@ import { ArrowDownLeft, ArrowUpRight, CircleDollarSign } from "lucide-react";
 import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 import { CarouselNav } from "@/components/ui/carousel-nav";
 import { Page } from "@/components/layout/page";
+import { BUTTON, toggleButton } from "@/components/ui/kit";
 import { BudgetBreakdownChart } from "@/components/summary/budget-breakdown-chart";
 import { CategoryBudgetEditor } from "@/components/summary/category-budget-editor";
 import { Bar } from "@/components/summary/bar";
@@ -239,9 +240,7 @@ function TransactionsPageInner() {
           <button
             type="button"
             onClick={() => setPeriod(period === "all" ? months[0] : "all")}
-            className={`min-h-10 rounded-full border px-4 text-[14px] ${
-              period === "all" ? "border-cacao bg-cacao font-semibold text-ivory" : "border-line/15 bg-card font-medium text-muted-foreground"
-            }`}
+            className={toggleButton(period === "all")}
           >
             All time
           </button>
@@ -308,7 +307,7 @@ function TransactionsPageInner() {
         {exec && (
           <section className="flex flex-col gap-3 rounded-2xl border border-line/15 bg-card px-4 py-3" aria-labelledby="target-title">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 id="target-title" className="text-[14px] font-semibold">
+              <h2 id="target-title" className="font-display text-[17px] font-semibold">
                 Sales target & budget · {periodName}
               </h2>
               <button type="button" onClick={() => setEditBudgets((v) => !v)} className="min-h-8 text-[12.5px] font-semibold text-cacao">
@@ -350,7 +349,6 @@ function TransactionsPageInner() {
           {/* A carousel through the log: everything, then each kind in turn. */}
           <CarouselNav
             wrap
-            size="large"
             label={kinds.find(([k]) => k === effectiveKind)?.[1] ?? "All"}
             labelWidth="min-w-[160px]"
             onPrev={() => stepKind(-1)}
@@ -361,7 +359,7 @@ function TransactionsPageInner() {
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className="min-h-11 rounded-[10px] bg-cacao px-5 text-[14px] font-semibold text-ivory"
+            className={BUTTON.primary}
           >
             + Add transaction
           </button>

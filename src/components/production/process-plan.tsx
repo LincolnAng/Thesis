@@ -1,6 +1,8 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
+import { CarouselNav } from "@/components/ui/carousel-nav";
+import { Pill } from "@/components/ui/kit";
 import { ArrowDown, ArrowRight, Check as Check2, ChevronDown, Factory, Package, ShoppingCart, Sprout, TriangleAlert } from "lucide-react";
 import { useStore } from "@/lib/store/use-store";
 import { forecastAll } from "@/lib/summary/forecast";
@@ -274,6 +276,12 @@ export function ProcessPlan({ details, onPickProduct }: { details?: React.ReactN
   const [showAllDemand, setShowAllDemand] = useState(false);
   const [showMonths, setShowMonths] = useState(false);
   const pickedChip = chips.find((c) => c.id === picked);
+  /** Steps through "All products", then each product, and round again. */
+  const stepProduct = (dir: 1 | -1) => {
+    const order = [null, ...chips.map((c) => c.id)];
+    const at = Math.max(0, order.indexOf(pickedChip?.id ?? null));
+    setPicked(order[(at + dir + order.length) % order.length]);
+  };
   const stages = stagesFor(pickedChip ? pickedChip.id : null);
   const shortCount = shortIn(stagesFor(null));
 
@@ -405,22 +413,27 @@ export function ProcessPlan({ details, onPickProduct }: { details?: React.ReactN
             : `From raw materials to the packed jar, for every product. A step goes red when something in it won't cover ${month}, and says what to do.`
         }
         aside={
-          <span className={`rounded-full px-3 py-1 text-[13px] font-semibold ${shortCount ? "bg-danger/10 text-danger" : "bg-success/10 text-success"}`}>
-            {shortCount ? `${pluralize(shortCount, "thing")} short` : "Everything's covered"}
-          </span>
+          <Pill tone={shortCount ? "bad" : "good"}>{shortCount ? `${pluralize(shortCount, "thing")} short` : "Everything's covered"}</Pill>
         }
       >
+        {/* One product at a time, the way Transactions steps through kinds: all of them, then
+            each in turn, those with something short first. */}
         {chips.length > 1 && (
-          <div className="mb-4 flex flex-wrap gap-1.5" role="group" aria-label="Show the flowchart for">
-            <ProductChip active={!pickedChip} tone={shortCount ? "short" : "ok"} onClick={() => setPicked(null)}>
-              All products
-            </ProductChip>
-            {chips.map((c) => (
-              <ProductChip key={c.id} active={pickedChip?.id === c.id} tone={c.tone} onClick={() => setPicked(pickedChip?.id === c.id ? null : c.id)}>
-                {c.label}
-                {c.short > 0 && <span className={`ml-1 ${pickedChip?.id === c.id ? "text-ivory/80" : "text-danger"}`}>· {c.short} short</span>}
-              </ProductChip>
-            ))}
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            <CarouselNav
+              wrap
+              label={pickedChip ? `${pickedChip.label}${pickedChip.short ? ` · ${pickedChip.short} short` : ""}` : "All products"}
+              labelWidth="min-w-[220px]"
+              onPrev={() => stepProduct(-1)}
+              onNext={() => stepProduct(1)}
+              prevLabel="Previous product"
+              nextLabel="Next product"
+            />
+            <span className="text-[12.5px] text-muted-foreground">
+              {pickedChip
+                ? `${chips.findIndex((c) => c.id === pickedChip.id) + 1} of ${chips.length} products`
+                : `${pluralize(chips.length, "product")} · use the arrows to see one at a time`}
+            </span>
           </div>
         )}
 
@@ -493,12 +506,14 @@ function FlowStageCard({ stage }: { stage: FlowStage }) {
   // Finished products are what everything else is for, so that stage gets more room and larger
   // names; its border follows its status like every other stage's.
   const ring = { short: "border-danger/40 bg-danger/[0.04]", watch: "border-[var(--status-warning)]/40 bg-secondary/40", ok: "border-success/30 bg-secondary/40", idle: "border-line/10 bg-secondary/30" }[tone];
-  const badge = {
-    short: { text: `${short} short`, cls: "bg-danger/10 text-danger" },
-    watch: { text: "Running low", cls: "bg-[var(--status-warning)]/15 text-[var(--status-warning)]" },
-    ok: { text: "All good", cls: "bg-success/10 text-success" },
-    idle: { text: "Nothing needed", cls: "bg-track text-muted-foreground" },
-  }[tone];
+  const badge = (
+    {
+      short: { text: `${short} short`, tone: "bad" },
+      watch: { text: "Running low", tone: "warn" },
+      ok: { text: "All good", tone: "good" },
+      idle: { text: "Nothing needed", tone: "neutral" },
+    } as const
+  )[tone];
 
   return (
     <section id={stage.id} className={`min-w-0 scroll-mt-24 rounded-xl border ${stage.featured ? "p-3.5" : "p-3"} ${ring}`}>
@@ -509,7 +524,7 @@ function FlowStageCard({ stage }: { stage: FlowStage }) {
           {stage.icon}
           {stage.title}
         </p>
-        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11.5px] font-semibold ${badge.cls}`}>{badge.text}</span>
+        <Pill tone={badge.tone}>{badge.text}</Pill>
       </div>
       {stage.items.length === 0 ? (
         <p className="text-[12.5px] text-muted-foreground">{stage.empty}</p>
@@ -554,24 +569,6 @@ function FlowStageCard({ stage }: { stage: FlowStage }) {
         </ul>
       )}
     </section>
-  );
-}
-
-/** A product to narrow the flowchart to, with a dot for whether its path has anything short. */
-function ProductChip({ active, tone, onClick, children }: { active: boolean; tone: FlowTone; onClick: () => void; children: React.ReactNode }) {
-  const dot = { short: "bg-danger", watch: "bg-[var(--status-warning)]", ok: "bg-success", idle: "bg-muted-foreground/40" }[tone];
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`inline-flex min-h-8 items-center gap-1.5 rounded-full border px-3 text-[12.5px] font-semibold transition ${
-        active ? "border-cacao bg-cacao text-ivory" : "border-line/20 bg-card text-foreground hover:border-cacao/50"
-      }`}
-    >
-      <span className={`h-2 w-2 shrink-0 rounded-full ${dot} ${active ? "ring-2 ring-ivory/70" : ""}`} />
-      {children}
-    </button>
   );
 }
 

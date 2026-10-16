@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { useMemo, useState } from "react";
 import { Page } from "@/components/layout/page";
+import { BUTTON } from "@/components/ui/kit";
 import { ProcessPlan } from "@/components/production/process-plan";
 import { EventPlanDialog } from "@/components/inventory/event-plan-dialog";
 import { PlanSettingsDialog } from "@/components/inventory/plan-settings-dialog";
@@ -233,13 +234,13 @@ export function ProductionScreen({ section }: { section: "production" | "calenda
       title={section === "calendar" ? "Calendar" : "Production"}
       right={
         <>
-          <button type="button" onClick={() => setShowSettings(true)} className="rounded-[10px] border border-line/20 bg-card px-4 py-2.5 text-[13px] font-semibold">
+          <button type="button" onClick={() => setShowSettings(true)} className={BUTTON.secondary}>
             Settings
           </button>
-          <button type="button" onClick={() => setAddStockOpen(true)} className="rounded-[10px] border border-line/20 bg-card px-4 py-2.5 text-[13px] font-semibold">
+          <button type="button" onClick={() => setAddStockOpen(true)} className={BUTTON.secondary}>
             Add stock
           </button>
-          <button type="button" onClick={() => setAddProductOpen(true)} className="rounded-[10px] bg-cacao px-4 py-2.5 text-[13px] font-semibold text-ivory">
+          <button type="button" onClick={() => setAddProductOpen(true)} className={BUTTON.primary}>
             + Add product
           </button>
         </>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Page } from "@/components/layout/page";
+import { BUTTON, Segmented, toggleButton } from "@/components/ui/kit";
 import { CarouselNav } from "@/components/ui/carousel-nav";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EventPlanDialog } from "@/components/inventory/event-plan-dialog";
@@ -197,7 +198,7 @@ export function CalendarScreen() {
             <button
               type="button"
               onClick={() => setShowSettings(true)}
-              className="rounded-[10px] border border-line/20 bg-card px-4 py-2.5 text-[13px] font-semibold"
+              className={BUTTON.secondary}
             >
               Plan settings
             </button>
@@ -205,7 +206,7 @@ export function CalendarScreen() {
           <button
             type="button"
             onClick={() => setEventDialog({ date: view === "day" ? cursor : undefined })}
-            className="rounded-[10px] bg-cacao px-4 py-2.5 text-[13px] font-semibold text-ivory"
+            className={BUTTON.primary}
           >
             + Add event
           </button>
@@ -215,26 +216,16 @@ export function CalendarScreen() {
       <div className="flex flex-col gap-4">
         {/* View, dates, today */}
         <div className="flex flex-wrap items-center gap-3">
-          {/* Sized to the date nav beside it, the way Transactions' month row is. */}
-          <div className="flex rounded-full border border-line/15 bg-card p-0.5" role="group" aria-label="Calendar view">
-            {(
-              [
-                ["month", "Month"],
-                ["week", "Week"],
-                ["day", "Day"],
-              ] as const
-            ).map(([k, label]) => (
-              <button
-                key={k}
-                type="button"
-                aria-pressed={view === k}
-                onClick={() => setView(k)}
-                className={`h-8 rounded-full px-3.5 text-[13px] transition ${view === k ? "bg-cacao font-semibold text-ivory" : "font-medium text-muted-foreground hover:text-foreground"}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <Segmented
+            label="Calendar view"
+            value={view}
+            onChange={setView}
+            options={[
+              { value: "month", label: "Month" },
+              { value: "week", label: "Week" },
+              { value: "day", label: "Day" },
+            ]}
+          />
           <CarouselNav
             label={label}
             onPrev={() => step(-1)}
@@ -246,7 +237,7 @@ export function CalendarScreen() {
           <button
             type="button"
             onClick={() => setCursor(today)}
-            className="min-h-10 rounded-full border border-line/15 bg-card px-4 text-[14px] font-medium text-muted-foreground hover:text-foreground"
+            className={toggleButton(false)}
           >
             Today
           </button>
@@ -291,19 +282,12 @@ export function CalendarScreen() {
         {!hidden.has("production") && (
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <span className="font-semibold text-muted-foreground">Suggested production</span>
-            <div className="flex rounded-full bg-oat p-0.5">
-              {STRATEGIES.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setStrategy(s)}
-                  title={STRATEGY_HINTS[s]}
-                  className={`min-h-8 rounded-full px-3 text-[12.5px] ${strategy === s ? "bg-card font-semibold shadow-sm" : "text-muted-foreground"}`}
-                >
-                  {STRATEGY_LABELS[s]}
-                </button>
-              ))}
-            </div>
+            <Segmented
+              label="Suggested production"
+              value={strategy}
+              onChange={setStrategy}
+              options={STRATEGIES.map((s) => ({ value: s, label: STRATEGY_LABELS[s], title: STRATEGY_HINTS[s] }))}
+            />
             <span className="text-muted-foreground">{STRATEGY_HINTS[strategy]}</span>
           </div>
         )}

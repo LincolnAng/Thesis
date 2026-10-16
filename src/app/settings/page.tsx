@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Segmented } from "@/components/ui/kit";
 import { getSnapshot, restoreLocalCollections, setApiKeyMissing } from "@/lib/store/store";
 import type { BotLanguage } from "@/lib/sheets/settings";
 import { YourNameCard } from "@/components/settings/owner-name-card";
@@ -267,20 +268,17 @@ export default function SettingsPageInner() {
           <span className="flex items-center gap-2 text-sm font-medium text-foreground">
             <Type className="h-4 w-4" /> Text size
           </span>
-          <div className="flex w-fit gap-1 rounded-[10px] bg-secondary p-1">
-            {(["small", "medium", "large"] as const).map((size) => (
-              <button
-                key={size}
-                type="button"
-                onClick={() => setTextSize(size)}
-                className={`rounded-lg px-3.5 py-1.5 ${
-                  textSize === size ? "bg-card font-semibold shadow-sm" : "font-medium text-muted-foreground"
-                } ${size === "small" ? "text-[13px]" : size === "medium" ? "text-[15px]" : "text-[17px]"}`}
-              >
-                {TEXT_SIZE_LABELS[size]}
-              </button>
-            ))}
-          </div>
+          <Segmented
+            label="Text size"
+            value={textSize}
+            onChange={setTextSize}
+            options={(["small", "medium", "large"] as const).map((size) => ({
+              value: size,
+              label: TEXT_SIZE_LABELS[size],
+              // Each option shown at its own size, so the choice previews itself.
+              className: size === "small" ? "!text-[12px]" : size === "medium" ? "!text-[14px]" : "!text-[16px]",
+            }))}
+          />
         </CardContent>
       </Card>
     </>

@@ -1,5 +1,6 @@
 "use client";
 
+import { BUTTON } from "@/components/ui/kit";
 import type { ReactNode } from "react";
 import { useRef, useState } from "react";
 import { MaterialsPanel } from "@/components/products/materials-panel";
@@ -145,7 +146,7 @@ export function ProductsScreen({
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className="flex min-h-10 items-center gap-1.5 rounded-[10px] bg-cacao px-4 text-[14px] font-semibold text-ivory"
+            className={BUTTON.primary}
           >
             <Plus className="h-4 w-4" /> Add product
           </button>
