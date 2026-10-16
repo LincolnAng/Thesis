@@ -350,7 +350,8 @@ function TransactionsPageInner() {
           <CarouselNav
             wrap
             label={kinds.find(([k]) => k === effectiveKind)?.[1] ?? "All"}
-            labelWidth="min-w-[160px]"
+            labelWidth="w-[160px]"
+            position={{ index: Math.max(0, kinds.findIndex(([k]) => k === effectiveKind)), count: kinds.length }}
             onPrev={() => stepKind(-1)}
             onNext={() => stepKind(1)}
             prevLabel="Previous kind of transaction"

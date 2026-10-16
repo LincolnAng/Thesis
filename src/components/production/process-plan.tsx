@@ -413,25 +413,27 @@ export function ProcessPlan({ details, onPickProduct }: { details?: React.ReactN
             : `From raw materials to the packed jar, for every product. A step goes red when something in it won't cover ${month}, and says what to do.`
         }
         aside={
-          // Which product the chart shows, and how that product (or all of them) stands.
-          <div className="flex flex-wrap items-center gap-2">
-            {chips.length > 1 && (
-              <CarouselNav
-                wrap
-                label={pickedChip ? pickedChip.label : "All products"}
-                labelWidth="min-w-[190px]"
-                onPrev={() => stepProduct(-1)}
-                onNext={() => stepProduct(1)}
-                prevLabel="Previous product"
-                nextLabel="Next product"
-              />
-            )}
+          // How what's shown stands, then which product it is. The carousel is last and a fixed
+          // width, so its arrows never move under the cursor as the pill beside it changes.
+          <div className="flex flex-wrap items-center gap-2 min-[900px]:flex-nowrap">
             {pickedChip ? (
               <Pill tone={pickedChip.short ? "bad" : pickedChip.tone === "ok" ? "good" : "neutral"}>
                 {pickedChip.short ? `${pickedChip.short} short` : pickedChip.tone === "ok" ? "All good" : "Nothing needed"}
               </Pill>
             ) : (
               <Pill tone={shortCount ? "bad" : "good"}>{shortCount ? `${pluralize(shortCount, "thing")} short` : "Everything's covered"}</Pill>
+            )}
+            {chips.length > 1 && (
+              <CarouselNav
+                wrap
+                label={pickedChip ? pickedChip.label : "All products"}
+                labelWidth="w-[200px]"
+                position={{ index: pickedChip ? chips.findIndex((c) => c.id === pickedChip.id) + 1 : 0, count: chips.length + 1 }}
+                onPrev={() => stepProduct(-1)}
+                onNext={() => stepProduct(1)}
+                prevLabel="Previous product"
+                nextLabel="Next product"
+              />
             )}
           </div>
         }
