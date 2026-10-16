@@ -24,7 +24,7 @@ export function CarouselNav({
   atStart = false,
   atEnd = false,
   wrap = false,
-  labelWidth = "min-w-[140px]",
+  labelWidth = "w-[150px]",
   size = "default",
   prevLabel = "Previous",
   nextLabel = "Next",

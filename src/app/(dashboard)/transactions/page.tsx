@@ -230,6 +230,8 @@ function TransactionsPageInner() {
         <div className="flex flex-wrap items-center gap-2">
           <CarouselNav
             label={period === "all" ? "All time" : monthLabel(period)}
+            labelWidth="w-[150px]"
+            position={period === "all" || monthIndex < 0 ? undefined : { index: months.length - 1 - monthIndex, count: months.length }}
             onPrev={() => setPeriod(months[monthIndex + 1])}
             onNext={() => setPeriod(months[monthIndex - 1])}
             atStart={period === "all" || monthIndex >= months.length - 1}

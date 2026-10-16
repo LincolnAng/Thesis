@@ -80,6 +80,8 @@ function Calendar({
           onNext={() => setIndex((n) => Math.min(keys.length - 1, n + 1))}
           atStart={index <= 0}
           atEnd={index >= keys.length - 1}
+          labelWidth="w-[150px]"
+          position={{ index: Math.min(index, keys.length - 1), count: keys.length }}
           prevLabel="Earlier month"
           nextLabel="Later month"
         />

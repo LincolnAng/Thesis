@@ -178,6 +178,18 @@ export function CalendarScreen() {
         ? `${shortDate(weekDays[0])} – ${shortDate(weekDays[6])}`
         : longDate(cursor);
 
+  // The calendar runs on forever, so the carousel's dots say where in the bigger period you are:
+  // the month in its year, the week in its year, the day in its month.
+  const position = (() => {
+    const d = fromIso(view === "week" ? weekDays[0] : cursor);
+    if (view === "month") return { index: month.getMonth(), count: 12 };
+    if (view === "day") return { index: d.getDate() - 1, count: new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate() };
+    const jan1 = new Date(d.getFullYear(), 0, 1);
+    const dec31 = new Date(d.getFullYear(), 11, 31);
+    const weekOf = (x: Date) => Math.floor((x.getTime() - jan1.getTime()) / (7 * 86_400_000));
+    return { index: weekOf(d), count: weekOf(dec31) + 1 };
+  })();
+
   function step(n: number) {
     if (view === "month") {
       const d = new Date(month.getFullYear(), month.getMonth() + n, 1);
@@ -230,7 +242,8 @@ export function CalendarScreen() {
             label={label}
             onPrev={() => step(-1)}
             onNext={() => step(1)}
-            labelWidth="min-w-[170px]"
+            labelWidth="w-[230px]"
+            position={position}
             prevLabel={`Previous ${view}`}
             nextLabel={`Next ${view}`}
           />
