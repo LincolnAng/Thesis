@@ -10,6 +10,7 @@
  */
 
 import type { BotLanguage } from "@/lib/sheets/settings";
+import { languageRule } from "@/lib/ai/language";
 
 export type AdviceTopic =
   | "compliance"
@@ -24,11 +25,6 @@ export type AdviceTopic =
   | "pricing"
   | "general";
 
-const LANGUAGE_INSTRUCTION: Record<BotLanguage, string> = {
-  english: "Write every piece of natural language in English.",
-  filipino: "Write every piece of natural language in Filipino (Tagalog).",
-  cebuano: "Write every piece of natural language in Cebuano (Bisaya).",
-};
 
 /** Which playbook a question is about. Cheap keyword routing — the model gets the text anyway. */
 export function detectTopic(raw: string): AdviceTopic {
@@ -149,7 +145,7 @@ export function advisorSystemPrompt(topic: AdviceTopic, botLanguage: BotLanguage
 
 SHE CAN ASK YOU ANYTHING. There is no fixed list of topics: business questions, world facts, how-tos, ideas, or something with nothing to do with the business. Answer every one as well as you can. Only decline something genuinely harmful.
 
-${LANGUAGE_INSTRUCTION[botLanguage]}
+Write every piece of natural language this way: ${languageRule(botLanguage)}
 
 BE SHORT. This is the hardest and most important rule.
 

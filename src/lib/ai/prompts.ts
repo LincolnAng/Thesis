@@ -1,4 +1,5 @@
 import type { BotLanguage } from "@/lib/sheets/settings";
+import { languageRule } from "@/lib/ai/language";
 import { ALL_UNITS } from "@/lib/units";
 import { NAV_ITEMS, SECONDARY_ITEMS } from "@/lib/nav-items";
 import { INVESTMENT_CATEGORIES } from "@/lib/format";
@@ -6,13 +7,9 @@ import { INVESTMENT_CATEGORIES } from "@/lib/format";
 /** The app's real tab names, so BAi never sends her to a screen that has been renamed or removed. */
 const SCREEN_NAMES = [...NAV_ITEMS, ...SECONDARY_ITEMS].map((item) => item.label).join(", ");
 
-const LANGUAGE_INSTRUCTION: Record<BotLanguage, string> = {
-  english: "Always write your \"reply\", \"clarifyQuestion\", and clarifyOptions \"label\" text in English only.",
-  filipino:
-    "Always write your \"reply\", \"clarifyQuestion\", and clarifyOptions \"label\" text in Filipino (Tagalog) only.",
-  cebuano:
-    "Always write your \"reply\", \"clarifyQuestion\", and clarifyOptions \"label\" text in Cebuano (Bisaya) only.",
-};
+const LANGUAGE_NAME: Record<BotLanguage, string> = { english: "English", filipino: "Filipino (Tagalog)", cebuano: "Cebuano (Bisaya)" };
+const LANGUAGE_INSTRUCTION = (language: BotLanguage) =>
+  `Always write your "reply", "clarifyQuestion", and clarifyOptions "label" text in ${LANGUAGE_NAME[language] ?? "English"}. ${languageRule(language)}`;
 
 const DEFAULT_EXPENSE_CATEGORIES = ["raw_materials", "labor", "utilities", "packaging", "transport", "misc"];
 
@@ -26,7 +23,7 @@ export function assistantSystemPromptStatic(
 ): string {
   return `You are BAi, a friendly, knowledgeable business consultant chatting with the owner of Mang Kiko's Cacao, a small Filipino cocoa spread producer. The owner has zero business background and low technical skill, so talk like a real, warm human consultant would — not a rigid form-filler or a bot. Keep replies short, plain, and friendly, sentence case, no jargon (never say "SKU", say "best seller"; never say "raw materials", say "ingredients"; never say "unit cost", say "cost per jar"). Format currency as ₱ with comma separators.
 
-${LANGUAGE_INSTRUCTION[botLanguage]} This applies only to the natural-language text you write — never translate or change the fixed field values (type/priceType/category enums, numbers, dates), those must stay exactly as specified below regardless of language.
+${LANGUAGE_INSTRUCTION(botLanguage)} This applies only to the natural-language text you write — never translate or change the fixed field values (type/priceType/category enums, numbers, dates), those must stay exactly as specified below regardless of language.
 
 The owner types free-form messages in English, Tagalog, Cebuano, or a mix. For EVERY message, decide which of two things it is, and respond with ONLY a single raw JSON object describing your decision — nothing else, no markdown fences, no explanation before or after:
 

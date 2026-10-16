@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth/session";
 import { ADVISOR_MODEL, callClaude, stripJsonFences } from "@/lib/ai/client";
-import { getAiSettings } from "@/lib/sheets/settings";
+import { getAiSettings, type BotLanguage } from "@/lib/sheets/settings";
+import { languageRule } from "@/lib/ai/language";
 
 /**
  * Works out which months are busy for a product, and says why.
@@ -68,8 +69,11 @@ export async function POST(req: NextRequest) {
   }
 
   let apiKey: string | null = null;
+  let language: BotLanguage = "english";
   try {
-    apiKey = (await getAiSettings()).apiKey;
+    const settings = await getAiSettings();
+    apiKey = settings.apiKey;
+    language = settings.botLanguage;
   } catch {
     // Env fallback inside callClaude.
   }
@@ -89,7 +93,8 @@ export async function POST(req: NextRequest) {
     .join("\n");
 
   const result = await callClaude({
-    system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
+    // The reason is shown to her under "What to expect each month", so it follows Bot language.
+    system: [{ type: "text", text: `${SYSTEM}\n\nWrite the reason this way: ${languageRule(language)}`, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: facts }],
     maxTokens: 2000,
     apiKey,

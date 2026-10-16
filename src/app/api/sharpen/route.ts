@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth/session";
 import { callClaude, stripJsonFences } from "@/lib/ai/client";
-import { getAiSettings } from "@/lib/sheets/settings";
+import { getAiSettings, type BotLanguage } from "@/lib/sheets/settings";
+import { languageRule } from "@/lib/ai/language";
 
 /**
  * Turns a vague question into two to four sharper ones, written against the owner's real data.
@@ -50,10 +51,12 @@ export async function POST(req: NextRequest) {
 
   let apiKey: string | null = null;
   let model: string | null = null;
+  let language: BotLanguage = "english";
   try {
     const settings = await getAiSettings();
     apiKey = settings.apiKey;
     model = settings.model;
+    language = settings.botLanguage;
   } catch {
     // Fall through to env defaults.
   }
@@ -68,7 +71,8 @@ export async function POST(req: NextRequest) {
     .join("\n\n");
 
   const result = await callClaude({
-    system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
+    // She types in her own language, so the questions she picks from are written in it too.
+    system: [{ type: "text", text: `${SYSTEM}\n\nWrite the four suggestions this way: ${languageRule(language)}`, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: userPrompt }],
     maxTokens: 500,
     apiKey,

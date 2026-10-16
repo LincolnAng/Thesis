@@ -44,8 +44,8 @@ function readableAiError(detail: unknown): string {
 
 const LANGUAGE_LABELS: Record<BotLanguage, string> = {
   english: "English",
-  filipino: "Filipino",
-  cebuano: "Cebuano",
+  filipino: "Filipino (Tagalog)",
+  cebuano: "Cebuano (Bisaya)",
 };
 
 interface SettingsState {
@@ -398,8 +398,13 @@ export default function SettingsPageInner() {
         <div className="flex flex-col gap-4">
       <Card>
         <CardContent className="flex items-center justify-between gap-3">
-          <span className="flex items-center gap-2 text-sm font-medium text-foreground">
-            <Languages className="h-4 w-4" /> Bot language
+          <span className="flex min-w-0 flex-col gap-0.5">
+            <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <Languages className="h-4 w-4" /> Bot language
+            </span>
+            <span className="text-xs text-muted-foreground">
+              What BAi writes in: chat replies, advice, question suggestions and season notes. The app&apos;s own screens stay in English.
+            </span>
           </span>
           {settings && (
             <select

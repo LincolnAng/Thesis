@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { requireSession } from "@/lib/auth/session";
 import { costContextOf, loadBusinessDataFor } from "@/lib/auth/load-business-data";
-import { getAiSettings, type BotLanguage } from "@/lib/sheets/settings";
+import { getAiSettings } from "@/lib/sheets/settings";
+import { languageRule } from "@/lib/ai/language";
 import { ADVISOR_MODEL } from "@/lib/ai/client";
 import { runTool, toolsFor, type AgentView, type Proposal } from "@/lib/ai/agent-tools";
 import { NAV_ITEMS, SECONDARY_ITEMS } from "@/lib/nav-items";
@@ -41,11 +42,6 @@ export interface AgentReply {
   proposal: Proposal | null;
 }
 
-const LANGUAGE: Record<BotLanguage, string> = {
-  english: "Reply in English.",
-  filipino: "Reply in Filipino (Tagalog).",
-  cebuano: "Reply in Cebuano (Bisaya).",
-};
 
 const SCREENS = [...NAV_ITEMS, ...SECONDARY_ITEMS].map((i) => i.label).join(", ");
 
@@ -138,7 +134,7 @@ export async function POST(req: NextRequest) {
     (view.role === "executive"
       ? "an Executive, who can see all the shop's records, including costs, recipes, payroll and debts."
       : "an Employee, who can see sales, everyday expenses, spoilage, stock and selling prices only — not costs, recipes, salaries, investments or debts. Don't speculate about those.") +
-    ` ${LANGUAGE[settings.botLanguage]}`;
+    ` ${languageRule(settings.botLanguage)}`;
 
   // Alternate roles, merging any repeats, so the history is always valid.
   const messages: Anthropic.Beta.BetaMessageParam[] = [];
