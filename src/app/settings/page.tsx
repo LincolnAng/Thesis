@@ -3,22 +3,20 @@
 import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 import { useEffect, useState, type ChangeEvent } from "react";
 import { useTheme } from "next-themes";
-import { CalendarClock, ChevronDown, ChevronUp, Database, Download, KeyRound, Languages, Minus, Moon, Plus, Sheet, Trash2, Type, Upload } from "lucide-react";
+import Link from "next/link";
+import { ChevronDown, ChevronUp, Database, Download, KeyRound, Languages, Moon, Sheet, Type, Upload } from "lucide-react";
 import { TEXT_SIZE_LABELS, useTextSize } from "@/lib/summary/text-size";
-import { expiringWithinDays, setExpiringWithinDays } from "@/lib/summary/business-config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { getSnapshot, resetAllData, restoreLocalCollections, setApiKeyMissing } from "@/lib/store/store";
-import { useStore } from "@/lib/store/use-store";
+import { getSnapshot, restoreLocalCollections, setApiKeyMissing } from "@/lib/store/store";
 import type { BotLanguage } from "@/lib/sheets/settings";
-import { OwnerNameCard } from "@/components/settings/owner-name-card";
-import { ActivityCard, PeopleCard } from "@/components/settings/people-card";
+import { YourNameCard } from "@/components/settings/owner-name-card";
+import { ActivityCard } from "@/components/settings/people-card";
 import { SpreadsheetButton } from "@/components/settings/spreadsheet-button";
 import { UnitsCard } from "@/components/settings/units-card";
-import { SeasonalityCard } from "@/components/settings/seasonality-card";
 import { cn } from "@/lib/utils";
 import { Page, PageTabs } from "@/components/layout/page";
 
@@ -56,56 +54,6 @@ interface SettingsState {
   spreadsheetUrl: string | null;
 }
 
-/**
- * When a jar starts counting as "expiring".
- *
- * A counter rather than a dropdown of presets, because the right number depends on how she
- * sells: a week of notice is useless to someone who clears a batch in three days, and far too
- * little for someone who consigns to a shop. Zero means the day itself and nothing earlier.
- */
-function ExpiryWarningCard() {
-  const { businessSettings } = useStore();
-  const days = expiringWithinDays(businessSettings);
-  return (
-    <Card>
-      <CardContent className="flex flex-wrap items-center justify-between gap-3">
-        <span className="min-w-0">
-          <span className="flex items-center gap-2 text-sm font-medium text-foreground">
-            <CalendarClock className="h-4 w-4" /> Warn me this long before jars expire
-          </span>
-          <span className="mt-0.5 block text-xs text-muted-foreground">
-            {days === 0
-              ? "Only on the day they expire."
-              : `${days} ${days === 1 ? "day" : "days"} of notice before the date.`}
-          </span>
-        </span>
-        <div className="flex items-center gap-1 rounded-full border border-line/15 bg-card">
-          <button
-            type="button"
-            aria-label="Fewer days"
-            disabled={days <= 0}
-            onClick={() => setExpiringWithinDays(days - 1)}
-            className="flex h-9 w-9 items-center justify-center rounded-l-full text-muted-foreground transition-colors hover:bg-secondary disabled:opacity-30"
-          >
-            <Minus className="h-4 w-4" />
-          </button>
-          <span className="min-w-[72px] px-1 text-center text-[13px] font-semibold">
-            {days === 0 ? "Same day" : `${days} ${days === 1 ? "day" : "days"}`}
-          </span>
-          <button
-            type="button"
-            aria-label="More days"
-            onClick={() => setExpiringWithinDays(days + 1)}
-            className="flex h-9 w-9 items-center justify-center rounded-r-full text-muted-foreground transition-colors hover:bg-secondary"
-          >
-            <Plus className="h-4 w-4" />
-          </button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 export default function SettingsPageInner() {
   const exec = isExecutive(useCurrentUser());
   const { theme, setTheme } = useTheme();
@@ -122,8 +70,7 @@ export default function SettingsPageInner() {
   const [backupMessage, setBackupMessage] = useState<string | null>(null);
   const [keyTest, setKeyTest] = useState<{ ok: boolean; message: string } | null>(null);
   const [testing, setTesting] = useState(false);
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [tab, setTab] = useState<"general" | "seasons" | "people" | "activity" | "ai" | "sheet">("general");
+  const [tab, setTab] = useState<"general" | "activity" | "ai" | "sheet">("general");
   const [textSize, setTextSize] = useTextSize();
 
   // next-themes resolves the real theme synchronously on the client's first render
@@ -304,52 +251,15 @@ export default function SettingsPageInner() {
 
   // An employee's Settings is their own profile: the rest — AI key, spreadsheet, backups,
   // reset — is the owners', and the server refuses those requests from an employee anyway.
-  if (!exec) {
-    return (
-      <Page title="Settings">
-        <div className="w-full max-w-4xl">
-          <PeopleCard />
-        </div>
-      </Page>
-    );
-  }
-
-  return (
-    <Page title="Settings">
-    <div className="w-full max-w-4xl">
-      <p className="mb-4 text-sm text-muted-foreground">
-        Your details, who else uses this app, the AI assistant, and where your data is kept.
-      </p>
-
-      <div className="mb-5">
-        <PageTabs
-          tabs={[
-            ["general", "General"],
-            ["seasons", "Busy months"],
-            ["people", "People"],
-            ["activity", "History"],
-            ["ai", "AI assistant"],
-            ["sheet", "Google Sheet"],
-          ]}
-          value={tab}
-          onChange={setTab}
-        />
-      </div>
-
-      {tab === "seasons" && <SeasonalityCard />}
-
-      {tab === "general" && (
-        <div className="flex flex-col gap-4">
-      <OwnerNameCard />
-
+  // Dark mode and text size are this device's own.
+  const lookCards = (
+    <>
       <Card>
         <CardContent className="flex items-center justify-between gap-3">
           <span className="flex items-center gap-2 text-sm font-medium text-foreground">
             <Moon className="h-4 w-4" /> Dark mode
           </span>
-          {mounted && (
-            <Switch checked={theme === "dark"} onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")} />
-          )}
+          {mounted && <Switch checked={theme === "dark"} onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")} />}
         </CardContent>
       </Card>
 
@@ -374,9 +284,57 @@ export default function SettingsPageInner() {
           </div>
         </CardContent>
       </Card>
+    </>
+  );
 
+  if (!exec) {
+    return (
+      <Page title="Settings">
+        <div className="flex w-full max-w-4xl flex-col gap-4">
+          <YourNameCard />
+          {lookCards}
+          <p className="text-sm text-muted-foreground">
+            To change your PIN, go to{" "}
+            <Link href="/people?tab=team" className="font-semibold text-cacao underline-offset-2 hover:underline">
+              People → Team
+            </Link>
+            .
+          </p>
+        </div>
+      </Page>
+    );
+  }
 
-      <ExpiryWarningCard />
+  return (
+    <Page title="Settings">
+    <div className="w-full max-w-4xl">
+      <p className="mb-4 text-sm text-muted-foreground">
+        Your name and how the app looks, who did what, the AI assistant, and where your data is kept. Who can sign in is
+        under{" "}
+        <Link href="/people?tab=team" className="font-semibold text-cacao underline-offset-2 hover:underline">
+          People → Team
+        </Link>
+        .
+      </p>
+
+      <div className="mb-5">
+        <PageTabs
+          tabs={[
+            ["general", "General"],
+            ["activity", "History"],
+            ["ai", "AI assistant"],
+            ["sheet", "Google Sheet"],
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
+      </div>
+
+      {tab === "general" && (
+        <div className="flex flex-col gap-4">
+      <YourNameCard />
+
+      {lookCards}
 
       <UnitsCard />
         </div>
@@ -385,12 +343,6 @@ export default function SettingsPageInner() {
       {tab === "activity" && (
         <div className="flex flex-col gap-4">
           <ActivityCard />
-        </div>
-      )}
-
-      {tab === "people" && (
-        <div className="flex flex-col gap-4">
-          <PeopleCard />
         </div>
       )}
 
@@ -586,45 +538,6 @@ export default function SettingsPageInner() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base text-[var(--status-critical)]">
-            <Trash2 className="h-4 w-4" /> Reset business data
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Resets this device&apos;s view of products, recipes, stock levels, and suppliers back to the starting
-            defaults. Since these now sync with Google Sheets, that reset syncs back within moments unless you also
-            edit or delete the rows directly in the spreadsheet — open it above to do that. Your logged sales and
-            expenses are never touched by this button.
-          </p>
-          {showResetConfirm ? (
-            <div className="space-y-2 rounded-xl border border-[var(--status-critical)] bg-red-50 p-3 dark:bg-red-950/30">
-              <p className="text-sm font-medium text-foreground">Are you sure? This can&apos;t be undone.</p>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={() => {
-                    resetAllData();
-                    setShowResetConfirm(false);
-                  }}
-                >
-                  Yes, reset
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setShowResetConfirm(false)}>
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <Button size="sm" variant="destructive" onClick={() => setShowResetConfirm(true)}>
-              Reset business data
-            </Button>
-          )}
-        </CardContent>
-      </Card>
         </div>
       )}
 

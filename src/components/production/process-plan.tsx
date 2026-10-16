@@ -380,7 +380,7 @@ export function ProcessPlan({ details, onPickProduct }: { details?: React.ReactN
               className="group flex items-center gap-1.5 text-[13px] font-semibold text-cacao"
             >
               <ChevronDown className={`h-4 w-4 transition-transform ${showMonths ? "rotate-180" : "group-hover:translate-y-0.5"}`} />
-              {showMonths ? "Hide the months after" : `See the months after ${month}`}
+              {showMonths ? "Hide the months after" : `See the months after ${month}, and busy and quiet months`}
             </button>
             {showMonths && (
               <div id="next-months" className="mt-2">

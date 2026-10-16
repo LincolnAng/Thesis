@@ -20,7 +20,7 @@ import type { AppUser } from "@/lib/store/types";
  * keeps two people on one tablet apart, and anyone with access to the Google Sheet can see
  * everything in it.
  *
- * New profiles are added by an executive in Settings → People. The one exception is the very
+ * New profiles are added by an executive in People → Team. The one exception is the very
  * first profile, which is how a new shop gets in at all.
  */
 
@@ -222,7 +222,7 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
       <Centered>
         <h1 className="font-display text-[26px] font-semibold">Make your profile</h1>
         <p className="mt-1 text-[14px] leading-relaxed text-muted-foreground">
-          Everything you save gets your name on it. You can add the people who help you afterwards, in Settings → People.
+          Everything you save gets your name on it. You can add the people who help you afterwards, in People → Team.
         </p>
         <div className="mt-5 text-left">
           <FirstProfile />
@@ -325,7 +325,7 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
               ))}
             </div>
             <p className="mt-7 text-center text-[12px] text-muted-foreground">
-              Not here? Ask an Executive to add you in Settings → People.
+              Not here? Ask an Executive to add you in People → Team.
             </p>
           </>
         )}

@@ -7,8 +7,9 @@ import { Page, PageTabs } from "@/components/layout/page";
 import { CustomersTab } from "@/components/people/customers-tab";
 import { SuppliersTab } from "@/components/people/suppliers-tab";
 import { EventsTab } from "@/components/people/events-tab";
+import { PeopleCard } from "@/components/settings/people-card";
 
-type Tab = "customers" | "suppliers" | "events";
+type Tab = "customers" | "suppliers" | "events" | "team";
 
 function PeoplePageInner() {
   const searchParams = useSearchParams();
@@ -19,7 +20,7 @@ function PeoplePageInner() {
   const exec = isExecutive(useCurrentUser());
   // Kept in the URL so a link (or the old /suppliers and /events addresses) opens the right tab.
   const param = searchParams.get("tab");
-  const tab: Tab = (param === "suppliers" && exec) || param === "events" ? param : "customers";
+  const tab: Tab = (param === "suppliers" && exec) || param === "events" || param === "team" ? param : "customers";
 
   function selectTab(next: Tab) {
     router.replace(next === "customers" ? pathname : `${pathname}?tab=${next}`, { scroll: false });
@@ -35,10 +36,12 @@ function PeoplePageInner() {
                   ["customers", "Customers"],
                   ["suppliers", "Suppliers"],
                   ["events", "Events"],
+                  ["team", "Team"],
                 ]
               : [
                   ["customers", "Customers"],
                   ["events", "Events"],
+                  ["team", "Team"],
                 ]
           }
           value={tab}
@@ -49,6 +52,12 @@ function PeoplePageInner() {
         {tab === "customers" && <CustomersTab />}
         {tab === "suppliers" && <SuppliersTab />}
         {tab === "events" && <EventsTab />}
+        {/* Who signs in to this app: profiles, PINs and roles. Used to be under Settings. */}
+        {tab === "team" && (
+          <div className="max-w-4xl">
+            <PeopleCard />
+          </div>
+        )}
       </div>
     </Page>
   );

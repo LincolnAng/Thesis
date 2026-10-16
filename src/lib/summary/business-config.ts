@@ -17,7 +17,6 @@ type Settings = Record<string, string>;
 
 const KEYS = {
   salesTarget: "salesTargetMonthly",
-  ownerName: "ownerName",
   cacaoUtilization: "cacaoUtilizationPct",
   expiringWithin: "expiringWithinDays",
   caseSize: "wholesaleCaseSize",
@@ -47,16 +46,6 @@ function json<T>(value: string | undefined, fallback: T): T {
   } catch {
     return fallback;
   }
-}
-
-// --- Owner name -----------------------------------------------------------------
-
-/** What the Home greeting calls the owner — "Hi, Auntie Sandy". Empty until set in Settings. */
-export function ownerName(s: Settings): string {
-  return (s[KEYS.ownerName] ?? "").trim();
-}
-export function setOwnerName(name: string) {
-  setBusinessSetting(KEYS.ownerName, name.trim());
 }
 
 // --- Sales target -------------------------------------------------------------

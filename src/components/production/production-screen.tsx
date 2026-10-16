@@ -8,6 +8,7 @@ import { ProcessPlan } from "@/components/production/process-plan";
 import { EventPlanDialog } from "@/components/inventory/event-plan-dialog";
 import { PlanSettingsDialog } from "@/components/inventory/plan-settings-dialog";
 import { SeasonalBreakdown } from "@/components/inventory/seasonal-breakdown";
+import { SeasonalityCard } from "@/components/settings/seasonality-card";
 import { PlanFixes } from "@/components/inventory/plan-fixes";
 import { CarouselNav } from "@/components/ui/carousel-nav";
 import { useProductionPlan } from "@/lib/summary/use-production-plan";
@@ -371,7 +372,14 @@ export function ProductionScreen({ section }: { section: "production" | "calenda
         )}
 
         {section === "production" && <ProcessPlan
-            details={<SeasonalBreakdown forecasts={plan.forecasts} embedded skipMonth={toIsoDate(new Date(now.getFullYear(), now.getMonth() + 1, 1)).slice(0, 7)} />} onPickProduct={(id) => setEditingProductId(id)} />}
+            details={
+              <div className="flex flex-col gap-6">
+                <SeasonalBreakdown forecasts={plan.forecasts} embedded skipMonth={toIsoDate(new Date(now.getFullYear(), now.getMonth() + 1, 1)).slice(0, 7)} />
+                <div className="border-t border-line/10 pt-4">
+                  <SeasonalityCard embedded />
+                </div>
+              </div>
+            } onPickProduct={(id) => setEditingProductId(id)} />}
 
         {tab === "plan" ? (
           <div className="flex flex-col gap-4 rounded-2xl border border-line/15 bg-card p-5">

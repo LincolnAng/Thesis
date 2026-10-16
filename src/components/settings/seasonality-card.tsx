@@ -184,7 +184,7 @@ function ProductRow({
   );
 }
 
-export function SeasonalityCard() {
+export function SeasonalityCard({ embedded = false }: { embedded?: boolean } = {}) {
   const { businessSettings, products, entries } = useStore();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [allBusy, setAllBusy] = useState(false);
@@ -224,14 +224,8 @@ export function SeasonalityCard() {
 
   const unset = products.filter((p) => !productPattern(businessSettings, p.id)).length;
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <CalendarRange className="h-4 w-4" /> Busy and quiet months
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+  const body = (
+    <>
         <p className="text-xs leading-relaxed text-muted-foreground">
           You don&apos;t have to know this — the app works it out. Once a product has a year of sales, the pattern comes
           straight from your own figures. Before that, BAi works out a likely one and tells you why. Change anything
@@ -268,7 +262,29 @@ export function SeasonalityCard() {
           1.0 is an ordinary month, 1.5 means you sell half as much again, 0.8 a fifth less. The forecast uses these, so
           December stops being predicted from September.
         </p>
-      </CardContent>
+    </>
+  );
+
+  // On Production it sits under the months it shapes, as part of that card rather than a card
+  // of its own.
+  if (embedded) {
+    return (
+      <section className="space-y-4">
+        <h3 className="flex items-center gap-2 text-[14.5px] font-semibold">
+          <CalendarRange className="h-4 w-4" /> Busy and quiet months
+        </h3>
+        {body}
+      </section>
+    );
+  }
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <CalendarRange className="h-4 w-4" /> Busy and quiet months
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">{body}</CardContent>
     </Card>
   );
 }
