@@ -1,5 +1,6 @@
 "use client";
 
+import { fullName } from "@/lib/summary/product-sizes";
 import { Minus, Pencil, Plus } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -46,7 +47,7 @@ export function PlanSettingsDialog({
             <ul className="divide-y divide-border">
               {products.map((p) => (
                 <li key={p.id} className="flex items-center gap-3 py-2 text-sm">
-                  <span className="min-w-0 flex-1 truncate text-foreground">{p.name}</span>
+                  <span className="min-w-0 flex-1 truncate text-foreground">{fullName(p, products)}</span>
                   <SettingNumberInput
                     className="h-9 w-20"
                     value={p.batchYield}
@@ -64,7 +65,7 @@ export function PlanSettingsDialog({
             <ul className="divide-y divide-border">
               {products.map((p) => (
                 <li key={p.id} className="flex items-center gap-3 py-2 text-sm">
-                  <span className="min-w-0 flex-1 truncate text-foreground">{p.name}</span>
+                  <span className="min-w-0 flex-1 truncate text-foreground">{fullName(p, products)}</span>
                   <SettingNumberInput
                     className="h-9 w-20"
                     value={shelfLifeDays(businessSettings, p.id)}

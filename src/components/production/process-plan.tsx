@@ -1,5 +1,6 @@
 "use client";
 
+import { fullName } from "@/lib/summary/product-sizes";
 import { Fragment, useMemo, useState } from "react";
 import { CarouselNav } from "@/components/ui/carousel-nav";
 import { Pill } from "@/components/ui/kit";
@@ -66,7 +67,7 @@ export function ProcessPlan({ details, onPickProduct }: { details?: React.ReactN
             kind: "produce",
             productId: p.id,
             urgent: true,
-            title: `${lot.qty} ${p.name} past their date`,
+            title: `${lot.qty} ${fullName(p, products)} past their date`,
             detail: `From the batch made ${fmt(lot.madeOn)} — expired ${fmt(lot.expiresOn)}. Log them as spoilage so stock stays true.`,
           });
         } else if (lot.daysLeft <= window) {
@@ -74,7 +75,7 @@ export function ProcessPlan({ details, onPickProduct }: { details?: React.ReactN
             kind: "produce",
             productId: p.id,
             urgent: false,
-            title: `${lot.qty} ${p.name} expire in ${lot.daysLeft} day${lot.daysLeft === 1 ? "" : "s"}`,
+            title: `${lot.qty} ${fullName(p, products)} expire in ${lot.daysLeft} day${lot.daysLeft === 1 ? "" : "s"}`,
             detail: `From the batch made ${fmt(lot.madeOn)}. Sell these first.`,
           });
         }
@@ -196,15 +197,9 @@ export function ProcessPlan({ details, onPickProduct }: { details?: React.ReactN
     walk(id, 0);
     return { materials, parts };
   };
-  // Two products sharing a name get a number, everywhere they're named, so they can be told apart.
-  const seen = new Map<string, number>();
-  const labelOf = new Map(
-    [...chain.products, ...chain.inHouse].map((n) => {
-      const k = (seen.get(n.name) ?? 0) + 1;
-      seen.set(n.name, k);
-      return [n.id, k > 1 ? `${n.name} (${k})` : n.name];
-    }),
-  );
+  // A size is its own product sharing the family's name, so name it the way Costing does —
+  // "Classic Cacao Spread · 5 g" — or two sizes read as one product listed twice.
+  const labelOf = new Map(products.map((p) => [p.id, fullName(p, products)]));
   const nameOf = (id: string, fallback: string) => labelOf.get(id) ?? fallback;
   const toneRank: Record<FlowTone, number> = { short: 0, watch: 1, ok: 2, idle: 3 };
   const byTone = (a: FlowItem, b: FlowItem) => toneRank[a.tone] - toneRank[b.tone];
@@ -331,7 +326,7 @@ export function ProcessPlan({ details, onPickProduct }: { details?: React.ReactN
                       title="Edit this product"
                       className="min-w-0 text-left text-[14.5px] font-semibold decoration-cacao/40 underline-offset-2 hover:underline"
                     >
-                      {p.name}
+                      {nameOf(p.productId, p.name)}
                     </button>
                     <span className="shrink-0 text-[14.5px] tabular-nums">
                       <b>{p.onHand}</b>

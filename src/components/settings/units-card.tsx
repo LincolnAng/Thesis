@@ -1,5 +1,6 @@
 "use client";
 
+import { fullName } from "@/lib/summary/product-sizes";
 import { Ruler } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { UnitSelect } from "@/components/ui/unit-select";
@@ -37,7 +38,7 @@ export function UnitsCard() {
             <ul className="divide-y divide-border rounded-[var(--radius-panel)] border border-border">
               {products.map((product) => (
                 <li key={product.id} className="flex items-center gap-3 px-3 py-2">
-                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">{product.name}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">{fullName(product, products)}</span>
                   <UnitSelect
                     className="h-9 w-28"
                     allowEmpty={false}

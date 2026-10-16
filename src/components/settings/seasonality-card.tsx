@@ -21,6 +21,7 @@ import {
 } from "@/lib/summary/seasonality";
 import { workOutPattern } from "@/lib/summary/work-out-pattern";
 import type { Product } from "@/lib/store/types";
+import { fullName } from "@/lib/summary/product-sizes";
 
 /**
  * Which months are busy, per product — worked out rather than asked for.
@@ -75,7 +76,7 @@ function ProductRow({
   busy: boolean;
   onWorkOut: () => void;
 }) {
-  const { businessSettings } = useStore();
+  const { businessSettings, products } = useStore();
   const pattern = productPattern(businessSettings, product.id);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<number[]>(pattern?.months ?? Array(12).fill(1));
@@ -97,7 +98,7 @@ function ProductRow({
   return (
     <li className="space-y-2 py-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <span className="min-w-0 flex-1 truncate text-sm font-medium">{product.name}</span>
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">{fullName(product, products)}</span>
 
         {pattern ? (
           <>
