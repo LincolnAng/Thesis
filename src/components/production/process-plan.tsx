@@ -413,30 +413,29 @@ export function ProcessPlan({ details, onPickProduct }: { details?: React.ReactN
             : `From raw materials to the packed jar, for every product. A step goes red when something in it won't cover ${month}, and says what to do.`
         }
         aside={
-          <Pill tone={shortCount ? "bad" : "good"}>{shortCount ? `${pluralize(shortCount, "thing")} short` : "Everything's covered"}</Pill>
+          // Which product the chart shows, and how that product (or all of them) stands.
+          <div className="flex flex-wrap items-center gap-2">
+            {chips.length > 1 && (
+              <CarouselNav
+                wrap
+                label={pickedChip ? pickedChip.label : "All products"}
+                labelWidth="min-w-[190px]"
+                onPrev={() => stepProduct(-1)}
+                onNext={() => stepProduct(1)}
+                prevLabel="Previous product"
+                nextLabel="Next product"
+              />
+            )}
+            {pickedChip ? (
+              <Pill tone={pickedChip.short ? "bad" : pickedChip.tone === "ok" ? "good" : "neutral"}>
+                {pickedChip.short ? `${pickedChip.short} short` : pickedChip.tone === "ok" ? "All good" : "Nothing needed"}
+              </Pill>
+            ) : (
+              <Pill tone={shortCount ? "bad" : "good"}>{shortCount ? `${pluralize(shortCount, "thing")} short` : "Everything's covered"}</Pill>
+            )}
+          </div>
         }
       >
-        {/* One product at a time, the way Transactions steps through kinds: all of them, then
-            each in turn, those with something short first. */}
-        {chips.length > 1 && (
-          <div className="mb-4 flex flex-wrap items-center gap-3">
-            <CarouselNav
-              wrap
-              label={pickedChip ? `${pickedChip.label}${pickedChip.short ? ` · ${pickedChip.short} short` : ""}` : "All products"}
-              labelWidth="min-w-[220px]"
-              onPrev={() => stepProduct(-1)}
-              onNext={() => stepProduct(1)}
-              prevLabel="Previous product"
-              nextLabel="Next product"
-            />
-            <span className="text-[12.5px] text-muted-foreground">
-              {pickedChip
-                ? `${chips.findIndex((c) => c.id === pickedChip.id) + 1} of ${chips.length} products`
-                : `${pluralize(chips.length, "product")} · use the arrows to see one at a time`}
-            </span>
-          </div>
-        )}
-
         <div className="grid grid-cols-1 gap-2 min-[1100px]:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1.4fr)_auto_minmax(0,1fr)] min-[1100px]:gap-3">
           {stages.map((st, i) => (
             <Fragment key={st.key}>
@@ -594,12 +593,13 @@ export function Panel({
 }) {
   return (
     <section id={id} className={`h-full scroll-mt-24 rounded-2xl border border-line/15 bg-card ${flush ? "overflow-hidden" : "p-5"}`}>
-      <div className={`mb-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-2 ${flush ? "px-5 pt-4" : ""}`}>
-        <div className="min-w-0">
+      {/* The right-hand side stays put on wide screens; the line under the title wraps beside it. */}
+      <div className={`mb-3 flex flex-wrap items-start justify-between gap-x-6 gap-y-2 min-[900px]:flex-nowrap ${flush ? "px-5 pt-4" : ""}`}>
+        <div className="min-w-0 flex-1">
           <h3 className="font-display text-[17px] font-semibold">{title}</h3>
           {note && <p className="mt-0.5 text-xs text-muted-foreground">{note}</p>}
         </div>
-        {aside}
+        {aside && <div className="max-w-full min-[900px]:shrink-0">{aside}</div>}
       </div>
       {children}
     </section>
