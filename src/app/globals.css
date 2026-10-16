@@ -235,3 +235,9 @@
     white-space: nowrap;
   }
 }
+
+/* A page that grows or shrinks past the screen's height mustn't shift sideways as its scrollbar
+   comes and goes. */
+html {
+  scrollbar-gutter: stable;
+}

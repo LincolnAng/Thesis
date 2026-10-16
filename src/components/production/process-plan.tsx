@@ -1,7 +1,7 @@
 "use client";
 
-import { fullName } from "@/lib/summary/product-sizes";
-import { Fragment, useMemo, useState } from "react";
+import { familiesOf, fullName, sizeName } from "@/lib/summary/product-sizes";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { CarouselNav } from "@/components/ui/carousel-nav";
 import { Pill } from "@/components/ui/kit";
 import { ArrowDown, ArrowRight, Check as Check2, ChevronDown, Factory, Package, ShoppingCart, Sprout, TriangleAlert } from "lucide-react";
@@ -120,6 +120,8 @@ export function ProcessPlan({ details, onPickProduct }: { details?: React.ReactN
 
   // ── 1. The demand: one row per product anything is expected of, least covered first ──────
   const demandRows = plan.products.filter((p) => p.need > 0).sort((a, b) => a.onHand / a.need - b.onHand / b.need);
+  /** The demand for one product family: its sizes' needs added up, and each size on its own. */
+  type DemandGroup = { key: string; name: string; unit: string; need: number; onHand: number; shortfall: number; sizes: (typeof plan.products)[number][]; lead: (typeof plan.products)[number] };
   /** Where a product's number comes from, in words: usual sales + each event + other products. */
   const whyNeeded = (p: (typeof plan.products)[number]) => {
     const parts: string[] = [];
@@ -201,20 +203,80 @@ export function ProcessPlan({ details, onPickProduct }: { details?: React.ReactN
   // "Classic Cacao Spread · 5 g" — or two sizes read as one product listed twice.
   const labelOf = new Map(products.map((p) => [p.id, fullName(p, products)]));
   const nameOf = (id: string, fallback: string) => labelOf.get(id) ?? fallback;
+  // Sizes of one product are shown together under the family's name, each with its own need.
+  const families = familiesOf(products);
+  const familyOf = new Map(families.flatMap((f) => f.all.map((p) => [p.id, f] as const)));
+  const sizeLabelOf = (id: string) => {
+    const pr = byId.get(id);
+    return pr ? sizeName(pr) : "";
+  };
+  const demandGroups: DemandGroup[] = [];
+  for (const row of demandRows) {
+    const fam = familyOf.get(row.productId);
+    const key = fam?.head.id ?? row.productId;
+    if (demandGroups.some((g) => g.key === key)) continue;
+    // Every size of the family, needed or not, so the split is complete.
+    const sizes = fam && fam.all.length > 1 ? fam.all.map((m) => productPlan.get(m.id)).filter((x): x is (typeof plan.products)[number] => !!x) : [row];
+    const sum = (f: (x: (typeof plan.products)[number]) => number) => sizes.reduce((t, x) => t + f(x), 0);
+    demandGroups.push({
+      key,
+      name: fam && fam.all.length > 1 ? fam.head.name : nameOf(row.productId, row.name),
+      unit: row.unit,
+      need: sum((x) => x.need),
+      onHand: sum((x) => Math.min(x.onHand, x.need)),
+      // One size's spare jars can't stand in for another size, so shortfalls add up size by size.
+      shortfall: sum((x) => x.shortfall),
+      sizes: [...sizes].sort((a, b) => b.need - a.need),
+      lead: row,
+    });
+  }
+  demandGroups.sort((a, b) => b.shortfall / Math.max(1, b.need) - a.shortfall / Math.max(1, a.need));
   const toneRank: Record<FlowTone, number> = { short: 0, watch: 1, ok: 2, idle: 3 };
   const byTone = (a: FlowItem, b: FlowItem) => toneRank[a.tone] - toneRank[b.tone];
+  /** The products among `nodes`, a family at a time: a product with sizes is one item listing each size. */
+  const familyItems = (nodes: { id: string; name: string }[], keep: (id: string) => boolean): FlowItem[] => {
+    const done = new Set<string>();
+    const items: FlowItem[] = [];
+    for (const n of nodes.filter((x) => keep(x.id))) {
+      const fam = familyOf.get(n.id);
+      if (!fam || fam.all.length < 2) {
+        items.push(productItem(n.id, nameOf(n.id, n.name)));
+        continue;
+      }
+      if (done.has(fam.head.id)) continue;
+      done.add(fam.head.id);
+      const members = fam.all.filter((m) => keep(m.id) && nodes.some((x) => x.id === m.id));
+      const sizes = members.map((m) => productItem(m.id, sizeLabelOf(m.id))).sort(byTone);
+      const plans = members.map((m) => productPlan.get(m.id)).filter((x): x is (typeof plan.products)[number] => !!x && x.need > 0);
+      const need = plans.reduce((t, x) => t + x.need, 0);
+      const short = plans.reduce((t, x) => t + x.shortfall, 0);
+      const have = plans.reduce((t, x) => t + Math.min(x.onHand, x.need), 0);
+      items.push({
+        key: fam.head.id,
+        name: fam.head.name,
+        tone: sizes.reduce<FlowTone>((worst, it) => (toneRank[it.tone] < toneRank[worst] ? it.tone : worst), "idle"),
+        line: need > 0 ? `Need ${need} · have ${have}${short ? ` · ${short} short` : ""} · ${pluralize(members.length, "size")}` : `Nothing needed for ${month} · ${pluralize(members.length, "size")}`,
+        sizes,
+      });
+    }
+    return items.sort(byTone);
+  };
 
   /** The flowchart for every product at once, or for one product's path through it. */
   const stagesFor = (id: string | null): FlowStage[] => {
-    const path = id ? pathOf(id) : null;
+    const members = id ? (familyOf.get(id)?.all.map((m) => m.id) ?? [id]) : [];
+    const path = id
+      ? members.map(pathOf).reduce((a, b) => ({ materials: new Set([...a.materials, ...b.materials]), parts: new Set([...a.parts, ...b.parts]) }))
+      : null;
     const keepMaterial = (mid: string) => !path || path.materials.has(mid);
-    const keepPart = (pid: string) => !path || path.parts.has(pid) || pid === id;
+    const keepPart = (pid: string) => !path || path.parts.has(pid) || members.includes(pid);
     // An in-house item's path runs on into the products that use it.
-    const keepSold = (pid: string) => !id || pid === id || (inHouseSet.has(id) && pathOf(pid).parts.has(id));
+    const keepSold = (pid: string) =>
+      !id || members.includes(pid) || members.some((m) => inHouseSet.has(m) && pathOf(pid).parts.has(m));
     // Seen from one product, a material others use too shows the total for all of them.
     const shared = (feeds: string[]) => !!id && feeds.length > 1;
     // A product not being made this month isn't short of anything, even where others are.
-    const making = !id || (productPlan.get(id)?.batches ?? 0) > 0;
+    const making = !id || members.some((m) => (productPlan.get(m)?.batches ?? 0) > 0);
     const notForThis = (it: FlowItem): FlowItem =>
       making || it.tone !== "short" ? it : { key: it.key, name: it.name, tone: "idle", line: `Short for other products — ${nameOf(id!, "this one")} isn't being made for ${month}` };
     const materials = (nodes: { id: string; name: string; feeds: string[] }[]) =>
@@ -235,7 +297,7 @@ export function ProcessPlan({ details, onPickProduct }: { details?: React.ReactN
         key: "inhouse",
         icon: <Factory className="h-4 w-4" />,
         title: "Made in-house",
-        items: chain.inHouse.filter((n) => keepPart(n.id)).map((n) => productItem(n.id, nameOf(n.id, n.name))).sort(byTone),
+        items: familyItems(chain.inHouse, keepPart),
         empty: id ? "Nothing made in-house goes into this product." : "Nothing is made here to go into another product yet.",
       },
       {
@@ -244,7 +306,7 @@ export function ProcessPlan({ details, onPickProduct }: { details?: React.ReactN
         icon: <Package className="h-4 w-4" />,
         title: "Finished products",
         featured: true,
-        items: chain.products.filter((n) => keepSold(n.id)).map((n) => productItem(n.id, nameOf(n.id, n.name))).sort(byTone),
+        items: familyItems(chain.products, keepSold),
         empty: "No products yet.",
       },
       {
@@ -258,18 +320,41 @@ export function ProcessPlan({ details, onPickProduct }: { details?: React.ReactN
   };
   const shortIn = (st: FlowStage[]) => st.reduce((t, x) => t + x.items.filter((i) => i.tone === "short").length, 0);
 
-  // One chip per product, the ones with something short first.
-  const chips = [...chain.products, ...chain.inHouse]
-    .map((n) => {
-      const need = productPlan.get(n.id)?.need ?? 0;
-      const short = shortIn(stagesFor(n.id));
-      return { id: n.id, label: nameOf(n.id, n.name), tone: (short ? "short" : need > 0 ? "ok" : "idle") as FlowTone, short };
+  // One stop per product family (its sizes together), the ones with something short first.
+  const chipHeads = [...new Set([...chain.products, ...chain.inHouse].map((n) => familyOf.get(n.id)?.head.id ?? n.id))];
+  const chips = chipHeads
+    .map((id) => {
+      const fam = familyOf.get(id);
+      const need = (fam?.all ?? []).reduce((t, m) => t + (productPlan.get(m.id)?.need ?? 0), 0) || (productPlan.get(id)?.need ?? 0);
+      const short = shortIn(stagesFor(id));
+      const label = fam && fam.all.length > 1 ? fam.head.name : nameOf(id, byId.get(id)?.name ?? "Product");
+      return { id, label, tone: (short ? "short" : need > 0 ? "ok" : "idle") as FlowTone, short };
     })
     .sort((a, b) => toneRank[a.tone] - toneRank[b.tone]);
 
   const [picked, setPicked] = useState<string | null>(null);
   const [showAllDemand, setShowAllDemand] = useState(false);
   const [showMonths, setShowMonths] = useState(false);
+  // Stepping from a big view (all products) to a small one (one product) would shrink the page
+  // and jolt everything below and the scroll position with it. The chart holds the tallest
+  // height it has reached instead; a change of width (a turned tablet) starts that over.
+  const flowRef = useRef<HTMLDivElement>(null);
+  const [flowMin, setFlowMin] = useState(0);
+  useEffect(() => {
+    const el = flowRef.current;
+    if (!el) return;
+    let width = el.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (el.clientWidth !== width) {
+        width = el.clientWidth;
+        setFlowMin(0);
+        return;
+      }
+      setFlowMin((m) => Math.max(m, el.offsetHeight));
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [loadedFromServer]);
   const pickedChip = chips.find((c) => c.id === picked);
   /** Steps through "All products", then each product, and round again. */
   const stepProduct = (dir: 1 | -1) => {
@@ -302,37 +387,38 @@ export function ProcessPlan({ details, onPickProduct }: { details?: React.ReactN
         title={`What ${month} needs`}
         note={`How many of each product you should have for ${month}: your usual sales plus planned events. Every step below is checked against this.`}
       >
-        {demandRows.length === 0 ? (
+        {demandGroups.length === 0 ? (
           <p className="text-[13.5px] text-muted-foreground">
             No sales expected for {month} yet. Log a few sales or plan an event, and this fills in on its own.
           </p>
         ) : (
-          <ul className="flex flex-col gap-4">
-            {(showAllDemand ? demandRows : demandRows.filter((p, i) => p.shortfall > 0 || i < DEMAND_ROWS)).map((p) => {
-              const short = p.shortfall > 0;
-              const covered = Math.min(100, (p.onHand / p.need) * 100);
+          <ul className="flex flex-col gap-5">
+            {(showAllDemand ? demandGroups : demandGroups.filter((g, i) => g.shortfall > 0 || i < DEMAND_ROWS)).map((g) => {
+              const short = g.shortfall > 0;
+              const covered = Math.min(100, ((g.need - g.shortfall) / g.need) * 100);
               // The missing part is drawn at a readable width even when it's 1 jar in 100 — a
               // sliver at the end of a long bar is exactly the shortage nobody notices. The
               // numbers beside it give the real size.
               const gap = short ? Math.max(8, 100 - covered) : 0;
+              const sized = g.sizes.length > 1;
               // Only the usual-sales part is a guess; an event's number is what was planned.
-              const rough = (usual.get(p.productId) ?? 0) > 0 && (guess.get(p.productId) === "low" || guess.get(p.productId) === "none");
+              const rough = g.sizes.some((x) => (usual.get(x.productId) ?? 0) > 0 && (guess.get(x.productId) === "low" || guess.get(x.productId) === "none"));
               return (
-                <li key={p.productId}>
+                <li key={g.key}>
                   <div className="flex items-baseline justify-between gap-3">
                     <button
                       type="button"
-                      onClick={() => onPickProduct?.(p.productId)}
+                      onClick={() => onPickProduct?.(g.key)}
                       title="Edit this product"
                       className="min-w-0 text-left text-[14.5px] font-semibold decoration-cacao/40 underline-offset-2 hover:underline"
                     >
-                      {nameOf(p.productId, p.name)}
+                      {g.name}
                     </button>
                     <span className="shrink-0 text-[14.5px] tabular-nums">
-                      <b>{p.onHand}</b>
+                      <b>{g.need - g.shortfall}</b>
                       <span className="text-muted-foreground">
                         {" "}
-                        / {p.need} {p.unit}
+                        / {g.need} {g.unit}
                       </span>
                     </span>
                   </div>
@@ -341,34 +427,64 @@ export function ProcessPlan({ details, onPickProduct }: { details?: React.ReactN
                   <div
                     className="mt-1.5 flex h-2.5 overflow-hidden rounded-full bg-track"
                     role="img"
-                    aria-label={`${p.onHand} of ${p.need} on the shelf${short ? `, ${p.shortfall} short` : ""}`}
+                    aria-label={`${g.need - g.shortfall} of ${g.need} covered${short ? `, ${g.shortfall} short` : ""}`}
                   >
-                    {p.onHand > 0 && <div className={short ? "bg-cacao" : "bg-success"} style={{ width: `${short ? 100 - gap : covered}%` }} />}
-                    {short && <div className={`bg-danger ${p.onHand > 0 ? "border-l-2 border-card" : ""}`} style={{ width: `${gap}%` }} />}
+                    {covered > 0 && <div className={short ? "bg-cacao" : "bg-success"} style={{ width: `${short ? 100 - gap : covered}%` }} />}
+                    {short && <div className={`bg-danger ${covered > 0 ? "border-l-2 border-card" : ""}`} style={{ width: `${gap}%` }} />}
                   </div>
                   <div className="mt-1 flex items-baseline justify-between gap-3 text-[12.5px]">
                     <span className="min-w-0 text-muted-foreground">
-                      {whyNeeded(p) || "Expected sales"}
+                      {sized ? `${pluralize(g.sizes.length, "size")} — how much of each is below` : whyNeeded(g.lead) || "Expected sales"}
                       {rough && " · a rough guess until there are more sales"}
                     </span>
                     {short ? (
-                      <span className="shrink-0 font-semibold text-danger">{p.shortfall} short</span>
+                      <span className="shrink-0 font-semibold text-danger">{g.shortfall} short</span>
                     ) : (
                       <span className="shrink-0 font-semibold text-success">Covered</span>
                     )}
                   </div>
+
+                  {/* Each size's own share: what it needs, what's on its shelf, and why. */}
+                  {sized && (
+                    <ul className="mt-2 divide-y divide-line/10 rounded-lg bg-secondary/40 px-3">
+                      {g.sizes.map((x) => (
+                        <li key={x.productId} className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 py-1.5 text-[12.5px]">
+                          <span className="min-w-0">
+                            <span className="font-semibold">{sizeLabelOf(x.productId)}</span>
+                            <span className="text-muted-foreground"> · {x.need > 0 ? whyNeeded(x) || "expected sales" : `not needed for ${month}`}</span>
+                          </span>
+                          <span className="shrink-0 tabular-nums">
+                            {x.need > 0 ? (
+                              <>
+                                <span className="text-muted-foreground">
+                                  need <b className="text-foreground">{x.need}</b> · have {x.onHand}
+                                </span>
+                                {x.shortfall > 0 ? (
+                                  <span className="ml-2 font-semibold text-danger">{x.shortfall} short</span>
+                                ) : (
+                                  <span className="ml-2 font-semibold text-success">covered</span>
+                                )}
+                              </>
+                            ) : (
+                              <span className="text-muted-foreground">{x.onHand} on the shelf</span>
+                            )}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               );
             })}
           </ul>
         )}
-        {demandRows.filter((p, i) => p.shortfall > 0 || i < DEMAND_ROWS).length < demandRows.length && (
+        {demandGroups.filter((g, i) => g.shortfall > 0 || i < DEMAND_ROWS).length < demandGroups.length && (
           <button
             type="button"
             onClick={() => setShowAllDemand((v) => !v)}
             className="mt-3 text-[13px] font-semibold text-cacao underline-offset-2 hover:underline"
           >
-            {showAllDemand ? "Show fewer" : `Show all ${demandRows.length} products`}
+            {showAllDemand ? "Show fewer" : `Show all ${demandGroups.length} products`}
           </button>
         )}
 
@@ -404,8 +520,8 @@ export function ProcessPlan({ details, onPickProduct }: { details?: React.ReactN
         title="How it's made — is anything short?"
         note={
           pickedChip
-            ? `Just ${pickedChip.label}'s path. Materials it shares with other products show the total for all of them.`
-            : `From raw materials to the packed jar, for every product. A step goes red when something in it won't cover ${month}, and says what to do.`
+            ? `Just ${pickedChip.label}. Shared materials show the total for all products.`
+            : `Every product, raw materials to packed jar. Red means it won't cover ${month}.`
         }
         aside={
           // How what's shown stands, then which product it is. The carousel is last and a fixed
@@ -433,7 +549,7 @@ export function ProcessPlan({ details, onPickProduct }: { details?: React.ReactN
           </div>
         }
       >
-        <div className="grid grid-cols-1 gap-2 min-[1100px]:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1.4fr)_auto_minmax(0,1fr)] min-[1100px]:gap-3">
+        <div ref={flowRef} style={{ minHeight: flowMin || undefined }} className="grid grid-cols-1 content-start gap-2 min-[1100px]:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1.4fr)_auto_minmax(0,1fr)] min-[1100px]:gap-3">
           {stages.map((st, i) => (
             <Fragment key={st.key}>
               {i > 0 && <Arrow />}
@@ -471,6 +587,8 @@ interface FlowItem {
   action?: string;
   aside?: string;
   note?: string;
+  /** A product with sizes: each size's own need and what to do about it. */
+  sizes?: FlowItem[];
 }
 
 interface FlowStage {
@@ -542,6 +660,27 @@ function FlowStageCard({ stage }: { stage: FlowStage }) {
                 </div>
               )}
               {it.note && <p className={`mt-1 text-[12px] font-semibold ${it.tone === "short" ? "text-danger" : "text-[var(--status-warning)]"}`}>{it.note}</p>}
+              {it.sizes && (
+                <ul className="mt-2 space-y-2 border-l-2 border-line/15 pl-2.5">
+                  {it.sizes.map((sz) => (
+                    <li key={sz.key} className={sz.tone === "idle" ? "opacity-70" : ""}>
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="text-[12.5px] font-semibold">{sz.name}</span>
+                        {sz.tone === "ok" && <Check2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" strokeWidth={3} aria-label="Enough" />}
+                        {sz.tone === "short" && <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-danger" aria-label="Short" />}
+                      </div>
+                      <p className="text-[12px] text-muted-foreground">{sz.line}</p>
+                      {sz.action && (
+                        <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-2 rounded-md bg-danger/10 px-2 py-1 text-[12px] font-semibold text-danger">
+                          <span>→ {sz.action}</span>
+                          {sz.aside && <span className="font-normal text-muted-foreground">{sz.aside}</span>}
+                        </div>
+                      )}
+                      {sz.note && <p className={`mt-0.5 text-[11.5px] font-semibold ${sz.tone === "short" ? "text-danger" : "text-[var(--status-warning)]"}`}>{sz.note}</p>}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </li>
           ))}
           {folded.length > 0 && (
