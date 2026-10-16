@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Page, PageTabs } from "@/components/layout/page";
+import { Page } from "@/components/layout/page";
 import { CarouselNav } from "@/components/ui/carousel-nav";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EventPlanDialog } from "@/components/inventory/event-plan-dialog";
@@ -197,7 +197,7 @@ export function CalendarScreen() {
             <button
               type="button"
               onClick={() => setShowSettings(true)}
-              className="min-h-11 rounded-[10px] border border-line/20 bg-card px-4 text-[13px] font-semibold"
+              className="rounded-[10px] border border-line/20 bg-card px-4 py-2.5 text-[13px] font-semibold"
             >
               Plan settings
             </button>
@@ -205,7 +205,7 @@ export function CalendarScreen() {
           <button
             type="button"
             onClick={() => setEventDialog({ date: view === "day" ? cursor : undefined })}
-            className="min-h-11 rounded-[10px] bg-cacao px-4 text-[13px] font-semibold text-ivory"
+            className="rounded-[10px] bg-cacao px-4 py-2.5 text-[13px] font-semibold text-ivory"
           >
             + Add event
           </button>
@@ -215,15 +215,26 @@ export function CalendarScreen() {
       <div className="flex flex-col gap-4">
         {/* View, dates, today */}
         <div className="flex flex-wrap items-center gap-3">
-          <PageTabs
-            tabs={[
-              ["month", "Month"],
-              ["week", "Week"],
-              ["day", "Day"],
-            ]}
-            value={view}
-            onChange={setView}
-          />
+          {/* Sized to the date nav beside it, the way Transactions' month row is. */}
+          <div className="flex rounded-full border border-line/15 bg-card p-0.5" role="group" aria-label="Calendar view">
+            {(
+              [
+                ["month", "Month"],
+                ["week", "Week"],
+                ["day", "Day"],
+              ] as const
+            ).map(([k, label]) => (
+              <button
+                key={k}
+                type="button"
+                aria-pressed={view === k}
+                onClick={() => setView(k)}
+                className={`h-8 rounded-full px-3.5 text-[13px] transition ${view === k ? "bg-cacao font-semibold text-ivory" : "font-medium text-muted-foreground hover:text-foreground"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <CarouselNav
             label={label}
             onPrev={() => step(-1)}
@@ -235,7 +246,7 @@ export function CalendarScreen() {
           <button
             type="button"
             onClick={() => setCursor(today)}
-            className="min-h-11 rounded-full border border-line/20 bg-card px-4 text-[13px] font-semibold"
+            className="min-h-10 rounded-full border border-line/15 bg-card px-4 text-[14px] font-medium text-muted-foreground hover:text-foreground"
           >
             Today
           </button>
@@ -264,13 +275,13 @@ export function CalendarScreen() {
                     ? { background: `${CATEGORY_COLOR[c]}1A`, borderColor: `${CATEGORY_COLOR[c]}66`, color: CATEGORY_COLOR[c] }
                     : undefined
                 }
-                className={`flex min-h-11 items-center gap-2 rounded-full border px-3.5 text-[13px] font-semibold transition ${
+                className={`flex min-h-8 items-center gap-1.5 rounded-full border px-3 text-[12.5px] font-semibold transition ${
                   shown ? "" : "border-dashed border-line/25 bg-card text-muted-foreground"
                 }`}
               >
                 <Dot category={c} />
                 {CATEGORY_LABELS[c]}
-                <span className="rounded-full bg-card/80 px-1.5 text-[11px] font-semibold">{countIn(c)}</span>
+                <span className="rounded-full bg-card/80 px-1.5 text-[11px] font-semibold tabular-nums">{countIn(c)}</span>
               </button>
             );
           })}
@@ -287,7 +298,7 @@ export function CalendarScreen() {
                   type="button"
                   onClick={() => setStrategy(s)}
                   title={STRATEGY_HINTS[s]}
-                  className={`min-h-9 rounded-full px-3 ${strategy === s ? "bg-card font-semibold shadow-sm" : "text-muted-foreground"}`}
+                  className={`min-h-8 rounded-full px-3 text-[12.5px] ${strategy === s ? "bg-card font-semibold shadow-sm" : "text-muted-foreground"}`}
                 >
                   {STRATEGY_LABELS[s]}
                 </button>
