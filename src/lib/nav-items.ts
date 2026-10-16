@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Boxes, CalendarDays, Factory, Home, Settings, Tag, Users, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, Boxes, CalendarDays, Factory, Home, Settings, Tag, type LucideIcon } from "lucide-react";
 import type { Role } from "@/lib/store/types";
 
 export interface NavItem {
@@ -33,12 +33,8 @@ export function navItemsFor(role: Role | undefined): NavItem[] {
   return NAV_ITEMS.map((item) => (item.href === "/costing" ? { ...item, label: "Inventory", icon: Boxes } : item));
 }
 
-/**
- * Not tabs: reached from the profile menu (bottom of the sidebar, last tab on phones). People
- * holds customers, suppliers and events; Settings is the owner's — AI key, spreadsheet, reset.
- */
-export const PEOPLE_ITEM: NavItem = { href: "/people", label: "People", icon: Users };
+/** Not a tab: reached from the profile menu (bottom of the sidebar, last tab on phones). */
 export const SETTINGS_ITEM: NavItem = { href: "/settings", label: "Settings", icon: Settings };
 
-/** Everyone gets Settings — an employee's holds only their own profile (to change their PIN). */
-export const SECONDARY_ITEMS: NavItem[] = [PEOPLE_ITEM, SETTINGS_ITEM];
+/** Everyone gets Settings — an employee's holds their own name and display options. */
+export const SECONDARY_ITEMS: NavItem[] = [SETTINGS_ITEM];

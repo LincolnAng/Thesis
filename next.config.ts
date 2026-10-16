@@ -19,11 +19,14 @@ const nextConfig: NextConfig = {
       { source: "/products", destination: "/costing", permanent: false },
       { source: "/pricing", destination: "/costing", permanent: false },
       { source: "/inventory", destination: "/production", permanent: false },
-      { source: "/customers", destination: "/people", permanent: false },
-      { source: "/suppliers", destination: "/people?tab=suppliers", permanent: false },
-      // Ask AI now lives on Home, and Events is a tab under People.
+      // People (customers, suppliers, events, team) was removed; its old addresses land on the
+      // nearest page that still holds that kind of thing.
+      { source: "/people", destination: "/", permanent: false },
+      { source: "/customers", destination: "/transactions", permanent: false },
+      { source: "/suppliers", destination: "/transactions", permanent: false },
+      { source: "/events", destination: "/calendar", permanent: false },
+      // Ask AI now lives on Home.
       { source: "/chat", destination: "/", permanent: false },
-      { source: "/events", destination: "/people?tab=events", permanent: false },
     ];
   },
 };

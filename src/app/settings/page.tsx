@@ -3,7 +3,6 @@
 import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 import { useEffect, useState, type ChangeEvent } from "react";
 import { useTheme } from "next-themes";
-import Link from "next/link";
 import { ChevronDown, ChevronUp, Database, Download, KeyRound, Languages, Moon, Sheet, Type, Upload } from "lucide-react";
 import { TEXT_SIZE_LABELS, useTextSize } from "@/lib/summary/text-size";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -293,13 +292,6 @@ export default function SettingsPageInner() {
         <div className="flex w-full max-w-4xl flex-col gap-4">
           <YourNameCard />
           {lookCards}
-          <p className="text-sm text-muted-foreground">
-            To change your PIN, go to{" "}
-            <Link href="/people?tab=team" className="font-semibold text-cacao underline-offset-2 hover:underline">
-              People → Team
-            </Link>
-            .
-          </p>
         </div>
       </Page>
     );
@@ -309,12 +301,7 @@ export default function SettingsPageInner() {
     <Page title="Settings">
     <div className="w-full max-w-4xl">
       <p className="mb-4 text-sm text-muted-foreground">
-        Your name and how the app looks, who did what, the AI assistant, and where your data is kept. Who can sign in is
-        under{" "}
-        <Link href="/people?tab=team" className="font-semibold text-cacao underline-offset-2 hover:underline">
-          People → Team
-        </Link>
-        .
+        Your name and how the app looks, who did what, the AI assistant, and where your data is kept.
       </p>
 
       <div className="mb-5">

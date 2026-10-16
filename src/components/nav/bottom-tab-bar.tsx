@@ -18,8 +18,8 @@ import {
 const TAB = "flex min-w-16 flex-1 shrink-0 flex-col items-center gap-1 px-1 py-3 text-xs font-medium";
 
 /**
- * Phones and tablets: the five tabs, then "Me" — the profile menu that holds People, Settings
- * (executives) and switching who's holding the device.
+ * Phones and tablets: the five tabs, then "Me" — the profile menu that holds Settings and
+ * switching who's holding the device.
  */
 export function BottomTabBar() {
   const pathname = usePathname();

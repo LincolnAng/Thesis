@@ -131,8 +131,6 @@ export function buildCalendarEntries(input: CalendarInput): CalendarEntry[] {
         ...(event.notes ? [{ label: "Notes", value: event.notes }] : []),
       ],
       tone: event.status === "open" ? "good" : "neutral",
-      href: "/people?tab=events",
-      hrefLabel: "Open in People → Events",
     });
   }
 
@@ -153,8 +151,6 @@ export function buildCalendarEntries(input: CalendarInput): CalendarEntry[] {
         { label: out_ ? "Sent to" : "Back from", value: eventName(move.eventId) },
       ],
       tone: "neutral",
-      href: "/people?tab=events",
-      hrefLabel: "Open in People → Events",
     });
   }
 
