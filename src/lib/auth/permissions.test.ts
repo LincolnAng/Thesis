@@ -211,22 +211,35 @@ test("employees never receive payment history, defaults or deadline changes", ()
   for (const f of ["payments", "defaultedAt", "dueDateHistory", "paymentTerms"]) assert.ok(!(f in sale), f);
 });
 
-test("employees see staff names to time in, never rates or payslips", () => {
-  const out = redactForEmployee(sample(), (p) => p.standardPrice);
-  assert.deepEqual(out.staff.map((x) => [x.name, x.rate, x.position]), [["Khent", 0, ""]]);
+test("an employee sees only their own name and times — no one else's, no rates, no payslips", () => {
+  const data = sample();
+  data.staff.push({ id: "st3", name: "Shiela", payType: "daily", rate: 500, position: "", pwd: false, userId: "u-emp", startDate: null, active: true, allowanceOnly: false, createdAt: "" });
+  data.timeRecords.push({ id: "t2", staffId: "st3", date: "2026-10-21", timeIn: "08:10", timeOut: null, status: "present", otHours: 0, note: "", createdAt: "" });
+  const out = redactForEmployee(data, (p) => p.standardPrice, "u-emp");
+  assert.deepEqual(out.staff.map((x) => [x.name, x.rate]), [["Shiela", 0]]);
+  assert.deepEqual(out.timeRecords.map((r) => r.id), ["t2"]);
   assert.deepEqual(out.payroll, []);
-  assert.equal(out.timeRecords.length, 1);
+  // A profile not linked to anyone sees no one.
+  const other = redactForEmployee(data, (p) => p.standardPrice, "u-other");
+  assert.equal(other.staff.length + other.timeRecords.length, 0);
 });
 
-test("employees time in and out for today only, and can't set pay-related fields", () => {
+test("employees put in and fix only their own times, this pay period only, and can't set pay-related fields", () => {
   const now = new Date("2026-10-22T02:00:00Z"); // 10 AM in Manila
-  const base = { role: "employee" as const, user: me, collection: "timeRecords" as const, now };
+  const base = { role: "employee" as const, user: me, collection: "timeRecords" as const, now, ownStaffIds: ["st1"] };
   const ok = decideWrite({ ...base, op: "append", item: { id: "t9", staffId: "st1", date: "2026-10-22", timeIn: "08:03", status: "absent", otHours: 9 } });
   assert.ok(ok.allow);
   assert.equal(ok.allow && ok.item?.status, "present");
   assert.equal(ok.allow && ok.item?.otHours, 0);
   assert.equal(ok.allow && ok.item?.loggedByName, "Kuya Jun");
+  // A forgotten day earlier this period is fine; last period, the future and someone else are not.
+  assert.ok(decideWrite({ ...base, op: "append", item: { id: "t7", staffId: "st1", date: "2026-10-17", timeIn: "08:00", timeOut: "17:00" } }).allow);
   assert.equal(decideWrite({ ...base, op: "append", item: { id: "t8", staffId: "st1", date: "2026-10-10", timeIn: "08:00" } }).allow, false);
+  assert.equal(decideWrite({ ...base, op: "append", item: { id: "t6", staffId: "st1", date: "2026-10-23", timeIn: "08:00" } }).allow, false);
+  assert.equal(decideWrite({ ...base, op: "append", item: { id: "t5", staffId: "st2", date: "2026-10-22", timeIn: "08:00" } }).allow, false);
+  const theirs = { id: "t4", staffId: "st2", date: "2026-10-22", timeIn: "08:00", timeOut: null, status: "present", otHours: 0, createdAt: "x" };
+  assert.equal(decideWrite({ ...base, op: "update", item: { ...theirs, staffId: "st1" }, existing: theirs }).allow, false);
+
   const existing = { id: "t9", staffId: "st1", date: "2026-10-22", timeIn: "08:03", timeOut: null, status: "half", otHours: 1, createdAt: "x" };
   const out = decideWrite({ ...base, op: "update", item: { ...existing, timeOut: "17:10", status: "present", otHours: 5 }, existing });
   assert.ok(out.allow);

@@ -84,10 +84,15 @@ export default function HomePage() {
       }
     >
       <div className="space-y-12 pb-4">
-        <div className="mx-auto w-full max-w-[760px]">
-          <TodayReminders />
+        {/* BAi on the left, what's up today on the right; on a phone, what's up comes first. */}
+        <div className="grid gap-6 min-[1280px]:grid-cols-[minmax(0,1fr)_400px] min-[1280px]:items-start">
+          <div className="order-2 min-w-0 min-[1280px]:order-1">
+            <HomeChat />
+          </div>
+          <aside className="order-1 min-[1280px]:sticky min-[1280px]:top-[96px] min-[1280px]:order-2">
+            <TodayReminders />
+          </aside>
         </div>
-        <HomeChat />
         <TodayGlance glance={glance} />
         <Headliners items={headliners} />
         {exec && advanced && <AdvancedAnalytics />}

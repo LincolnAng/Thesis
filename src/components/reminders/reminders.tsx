@@ -147,7 +147,10 @@ export function ReminderBell() {
 export function TodayReminders() {
   const { today, upcoming, urgentCount } = useReminders();
   return (
-    <section aria-labelledby="whats-up" className="rounded-2xl border border-line/15 bg-card p-4 min-[640px]:p-5">
+    <section
+      aria-labelledby="whats-up"
+      className="rounded-2xl border border-line/15 bg-card p-4 min-[640px]:p-5 min-[1280px]:max-h-[calc(100svh-120px)] min-[1280px]:overflow-y-auto"
+    >
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <h2 id="whats-up" className="flex items-center gap-2 font-display text-[22px] font-semibold">
           <Bell className="h-5 w-5 text-cacao" strokeWidth={2} />
@@ -158,7 +161,7 @@ export function TodayReminders() {
           See the calendar
         </Link>
       </div>
-      <Lists today={today} upcoming={upcoming} max={6} />
+      <Lists today={today} upcoming={upcoming} max={8} />
     </section>
   );
 }

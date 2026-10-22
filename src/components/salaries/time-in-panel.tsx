@@ -4,16 +4,16 @@ import { useEffect, useState } from "react";
 import { Clock, LogIn, LogOut, Pencil } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useStore } from "@/lib/store/use-store";
-import { useCurrentUser } from "@/lib/auth/current-user";
+import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 import { saveTimeRecord } from "@/lib/store/store";
 import { formatClock, hoursWorked, manilaTime, manilaToday } from "@/lib/payroll/pay";
 import type { StaffMember, TimeRecord } from "@/lib/store/types";
 
 /**
- * Today's time in and out, one big button per person. Staff use it themselves (it's their
- * "Time in" tab); Executives see it at the top of the time record. The time is the clock's —
- * Philippine time — and anything mistyped can be fixed today; earlier days are an Executive's
- * to correct.
+ * Today's time in and out, one big button per person. An employee sees only themselves (the
+ * server sends no one else's name or times); Executives see everyone, at the top of the time
+ * record. The time is the clock's — Philippine time. Employees can fix their own times this pay
+ * period (see MyDays); anyone's, any day, is an Executive's to change.
  */
 
 const longToday = (iso: string) => {
@@ -74,7 +74,11 @@ export function TimeInPanel() {
 
       {people.length === 0 ? (
         <p className="rounded-2xl border border-line/15 bg-card px-4 py-6 text-center text-[14px] text-muted-foreground">
-          {loadedFromServer ? "No staff yet. An Executive adds them on the Salaries tab, under Staff." : "Loading…"}
+          {!loadedFromServer
+            ? "Loading…"
+            : isExecutive(me)
+              ? "No staff yet. Add them under Staff."
+              : "Your profile isn't linked to your name yet. Ask an Executive to pick your profile for you under Salaries → Staff."}
         </p>
       ) : (
         <ul className="flex flex-col divide-y divide-line/10 overflow-hidden rounded-2xl border border-line/15 bg-card">
@@ -139,7 +143,8 @@ export function TimeInPanel() {
   );
 }
 
-function FixTimesDialog({ member, record, date, onClose }: { member: StaffMember; record: TimeRecord | null; date: string; onClose: () => void }) {
+export function FixTimesDialog({ member, record, date, onClose }: { member: StaffMember; record: TimeRecord | null; date: string; onClose: () => void }) {
+  const me = useCurrentUser();
   const [timeIn, setTimeIn] = useState(record?.timeIn ?? "");
   const [timeOut, setTimeOut] = useState(record?.timeOut ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -161,8 +166,11 @@ function FixTimesDialog({ member, record, date, onClose }: { member: StaffMember
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="rounded-2xl sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>Fix {member.name}&apos;s times</DialogTitle>
-          <DialogDescription>For today only. Earlier days are corrected by an Executive.</DialogDescription>
+          <DialogTitle>{record?.timeIn ? `Fix ${member.name}'s times` : `Put in ${member.name}'s times`}</DialogTitle>
+          <DialogDescription>
+            {longToday(date)}. Saved with your name.
+            {isExecutive(me) ? "" : " Only days in this pay period can be changed here; anything earlier, an Executive changes."}
+          </DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-3">
           <label className="flex flex-col gap-1 text-[13px] font-semibold">

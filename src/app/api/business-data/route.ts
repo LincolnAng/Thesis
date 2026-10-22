@@ -11,6 +11,7 @@ import { businessSettingsCollection } from "@/lib/sheets/business-settings";
 import { usersCollection } from "@/lib/sheets/users";
 import { activityCollection } from "@/lib/sheets/activity";
 import { payrollCollection, staffCollection, timeRecordsCollection } from "@/lib/sheets/payroll";
+import type { StaffMember } from "@/lib/store/types";
 import type { SheetCollection } from "@/lib/sheets/collection";
 import { requireSession } from "@/lib/auth/session";
 import { decideWrite, needsExistingRow } from "@/lib/auth/permissions";
@@ -94,7 +95,15 @@ export async function POST(req: NextRequest) {
       const rows = (await collection.getAll()) as Record<string, unknown>[];
       existing = rows.find((row) => row.id === body.id);
     }
+    // An employee's time record can only be their own: which staff member is theirs is read
+    // from the sheet, never taken from the browser.
+    let ownStaffIds: string[] | undefined;
+    if (session.role === "employee" && body.collection === "timeRecords") {
+      const staff = (await staffCollection.getAll()) as StaffMember[];
+      ownStaffIds = staff.filter((s) => s.active && s.userId === session.userId).map((s) => s.id);
+    }
     const decision = decideWrite({
+      ownStaffIds,
       role: session.role,
       user: { id: session.userId, name: session.name },
       collection: body.collection,

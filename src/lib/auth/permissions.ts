@@ -1,6 +1,7 @@
 import type { ActivityEvent, Entry, EntryType, PayrollRecord, RawMaterialStock, Role, StaffMember, TimeRecord } from "@/lib/store/types";
 import type { ProductRow, RecipeRow } from "@/lib/store/sheet-shapes";
 import { entryIntegrityProblem } from "@/lib/transactions/ledger";
+import { daysIn, periodFor } from "@/lib/payroll/pay";
 
 /**
  * What each role may read and write — the one place that decides it, run on the server by
@@ -10,8 +11,8 @@ import { entryIntegrityProblem } from "@/lib/transactions/ledger";
  * Executives see and change everything. Employees log sales, spoilage, batches and event
  * stock, and see stock levels and selling prices — but never a cost, a margin, R&D, an expense
  * (payroll lives there), a supplier price, a budget, or the change log (whose "before" copies
- * would leak all of the above). They time themselves in and out, and see staff names — never
- * a rate or a payslip.
+ * would leak all of the above). They see and change only their own time in and out — never
+ * anyone else's, a rate or a payslip.
  *
  * The Google Sheet itself is outside these rules: anyone with access to it reads everything.
  */
@@ -107,7 +108,10 @@ export interface BusinessData {
  * on the server — a cost- or margin-based price can't be recomputed without the costs, so the
  * employee copy carries the answer as a fixed price instead of the recipe for it.
  */
-export function redactForEmployee(data: BusinessData, sellingPrice: (product: ProductRow) => number): BusinessData {
+export function redactForEmployee(data: BusinessData, sellingPrice: (product: ProductRow) => number, userId?: string): BusinessData {
+  // The staff member this profile times in as — an employee sees only their own time record.
+  const own = data.staff.filter((s) => s.active && userId && s.userId === userId);
+  const ownIds = new Set(own.map((s) => s.id));
   return {
     ...data,
     entries: data.entries
@@ -135,9 +139,9 @@ export function redactForEmployee(data: BusinessData, sellingPrice: (product: Pr
     supplierPrices: [],
     businessSettings: data.businessSettings.filter((s) => employeeCanSeeSetting(s.key)),
     activity: [],
-    // Names, so they can time in — never a rate, a pay type or anything else about pay.
-    staff: data.staff.filter((s) => s.active).map(staffNameOnly),
-    timeRecords: data.timeRecords,
+    // Their own name, to time in — never anyone else's, a rate, or anything else about pay.
+    staff: own.map(staffNameOnly),
+    timeRecords: data.timeRecords.filter((r) => ownIds.has(r.staffId)),
     payroll: [],
   };
 }
@@ -146,11 +150,16 @@ function staffNameOnly(s: StaffMember): StaffMember {
   return { id: s.id, name: s.name, payType: "daily", rate: 0, position: "", pwd: false, userId: s.userId, startDate: null, active: s.active, allowanceOnly: false, createdAt: s.createdAt };
 }
 
-/** The days an employee may time in or out on: today and yesterday (a shift past midnight), in Manila. */
+/**
+ * The days an employee may put in or fix their own times for, in Manila: every day of the
+ * current pay period up to today (a forgotten time in), and yesterday (a shift past midnight,
+ * or the day before a new period). Never the future, never an earlier, settled period.
+ */
 export function employeeTimeDays(now: Date): string[] {
   const today = now.toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
   const yesterday = new Date(now.getTime() - 86_400_000).toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
-  return [today, yesterday];
+  const period = daysIn({ start: periodFor(today).start, end: today });
+  return [...new Set([...period, yesterday])];
 }
 
 export interface WriteRequest {
@@ -164,6 +173,8 @@ export interface WriteRequest {
   existing?: Record<string, unknown>;
   /** For tests; the server's clock otherwise. */
   now?: Date;
+  /** The staff members this profile times in as (timeRecords writes by employees). */
+  ownStaffIds?: string[];
 }
 
 export type WriteDecision = { allow: true; item?: Record<string, unknown> } | { allow: false; reason: string };
@@ -243,10 +254,12 @@ export function decideWrite(req: WriteRequest): WriteDecision {
     case "activity":
       return op === "append" ? { allow: true, item: stamp(req) } : deny("forbidden");
     case "timeRecords": {
-      // Staff time themselves in and out — today (or last night's shift), nothing earlier, and
-      // only the clock times. Whether a day counts, and overtime, are an Executive's to set.
+      // Staff put in and fix their OWN times, for this pay period only — and only the clock
+      // times. Anyone else's, whether a day counts, and overtime are an Executive's to set.
       if (op !== "append" && op !== "update") return deny("forbidden");
       if (!item) return deny("forbidden");
+      const mine = req.ownStaffIds ?? [];
+      if (!mine.includes(String(item.staffId)) || (existing && !mine.includes(String(existing.staffId)))) return deny("not_your_time_record");
       const days = employeeTimeDays(req.now ?? new Date());
       if (!days.includes(String(item.date))) return deny("time_record_too_old");
       if (op === "update" && (!existing || !days.includes(String(existing.date)) || existing.staffId !== item.staffId)) return deny("forbidden");
