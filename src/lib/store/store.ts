@@ -535,9 +535,11 @@ async function loadAllFromServer() {
     }
     const json = await res.json();
     if (!json.success) return; // Sheets unreachable — keep local/paint-cache state
-    // Seeding an empty sheet from this device is an executive's job; an employee's copy is
-    // missing whole collections on purpose, and "empty" there means "not yours to see".
-    const canSeed = json.role === "executive";
+    // Seeding an empty sheet from this device's saved copy moved the shop's data into Sheets
+    // once, back when it lived in the browser. That's long done, and the sheet is the record
+    // now: an empty tab means it was cleared on purpose, so it is never refilled from here —
+    // otherwise any open laptop would quietly bring back data that was deleted.
+    const canSeed = false;
 
     const entriesMigration = await migrateCollectionIfEmpty<Entry>(
       canSeed,
