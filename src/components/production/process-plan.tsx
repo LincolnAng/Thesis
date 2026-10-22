@@ -4,7 +4,7 @@ import { familiesOf, fullName, sizeName } from "@/lib/summary/product-sizes";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { CarouselNav } from "@/components/ui/carousel-nav";
 import { Pill } from "@/components/ui/kit";
-import { ArrowDown, ArrowRight, Check as Check2, ChevronDown, Factory, Package, ShoppingCart, Sprout, TriangleAlert } from "lucide-react";
+import { ArrowDown, ArrowRight, Check as Check2, ChevronDown, Factory, Package, ShoppingCart, Sprout, TriangleAlert, X } from "lucide-react";
 import { useStore } from "@/lib/store/use-store";
 import { forecastAll } from "@/lib/summary/forecast";
 import { allStandings } from "@/lib/summary/material-stock";
@@ -25,7 +25,8 @@ import { formatPeso, pluralize } from "@/lib/format";
  * that is either covered (green) or names what's short in one plain line, with what to do.
  *
  * Written for someone new to this, so there are no tables and one simple bar per product. The
- * recipe flowchart and the month-by-month working sit behind "See how it's worked out".
+ * recipe flowchart is just coloured boxes — green enough, red short — and a box's numbers show
+ * only once it's clicked.
  */
 export function ProcessPlan({ details, onPickProduct }: { details?: React.ReactNode; onPickProduct?: (productId: string) => void } = {}) {
   const { products, rawMaterials, entries, events, businessSettings, loadedFromServer } = useStore();
@@ -363,6 +364,14 @@ export function ProcessPlan({ details, onPickProduct }: { details?: React.ReactN
     setPicked(order[(at + dir + order.length) % order.length]);
   };
   const stages = stagesFor(pickedChip ? pickedChip.id : null);
+  // The one box whose details are open. Stepping to another product keeps it open if it's there too.
+  const [selected, setSelected] = useState<{ stage: string; key: string } | null>(null);
+  const selectedItem = (() => {
+    if (!selected) return null;
+    const st = stages.find((x) => x.key === selected.stage);
+    const item = st?.items.find((x) => x.key === selected.key);
+    return st && item ? { stage: st.key, title: st.title, item } : null;
+  })();
   const shortCount = shortIn(stagesFor(null));
 
 
@@ -521,7 +530,7 @@ export function ProcessPlan({ details, onPickProduct }: { details?: React.ReactN
         note={
           pickedChip
             ? `Just ${pickedChip.label}. Shared materials show the total for all products.`
-            : `Every product, raw materials to packed jar. Red means it won't cover ${month}.`
+            : `Every product, raw materials to packed jar. Green is enough for ${month}, red is short. Click a box for the details.`
         }
         aside={
           // How what's shown stands, then which product it is. The carousel is last and a fixed
@@ -553,10 +562,16 @@ export function ProcessPlan({ details, onPickProduct }: { details?: React.ReactN
           {stages.map((st, i) => (
             <Fragment key={st.key}>
               {i > 0 && <Arrow />}
-              <FlowStageCard key={`${st.key}-${pickedChip?.id ?? "all"}`} stage={st} />
+              <FlowColumn
+                stage={st}
+                selected={selectedItem?.stage === st.key ? selectedItem.item.key : null}
+                onSelect={(key) => setSelected((cur) => (cur?.stage === st.key && cur.key === key ? null : { stage: st.key, key }))}
+              />
             </Fragment>
           ))}
         </div>
+
+        {selectedItem && <FlowDetails item={selectedItem.item} stage={selectedItem.title} onClose={() => setSelected(null)} />}
 
         {buyTotal > 0 && (
           <p className="mt-4 border-t border-line/10 pt-3 text-[13px] text-muted-foreground">
@@ -572,8 +587,6 @@ export function ProcessPlan({ details, onPickProduct }: { details?: React.ReactN
 
 type FlowTone = "ok" | "short" | "watch" | "idle";
 
-/** How many items a stage shows before the covered ones fold away. */
-const FOLD_AFTER = 4;
 /** How many products the demand list shows (besides any that are short) before "Show all". */
 const DEMAND_ROWS = 5;
 
@@ -602,108 +615,104 @@ interface FlowStage {
   featured?: boolean;
 }
 
-/** One stage of the flowchart: red when anything in it is short, green when it's all covered. */
-function FlowStageCard({ stage }: { stage: FlowStage }) {
-  const [open, setOpen] = useState(false);
-  const featured = !!stage.featured;
-  const short = stage.items.filter((i) => i.tone === "short").length;
-  // With many products a stage would be a wall of "enough"s. Whatever needs doing always shows;
-  // past a few, the fine ones fold into one line.
-  const urgent = stage.items.filter((i) => i.tone === "short" || i.tone === "watch");
-  const fine = stage.items.filter((i) => i.tone === "ok" || i.tone === "idle");
-  const room = Math.max(0, FOLD_AFTER - urgent.length);
-  const folded = open || fine.length <= room + 1 ? [] : fine.slice(room);
-  const shown = [...urgent, ...fine.slice(0, fine.length - folded.length)];
-  const watch = stage.items.some((i) => i.tone === "watch");
-  const used = stage.items.some((i) => i.tone !== "idle");
-  const tone: FlowTone = short ? "short" : watch ? "watch" : used ? "ok" : "idle";
-  // Finished products are what everything else is for, so that stage gets more room and larger
-  // names; its border follows its status like every other stage's.
-  const ring = { short: "border-danger/40 bg-danger/[0.04]", watch: "border-[var(--status-warning)]/40 bg-secondary/40", ok: "border-success/30 bg-secondary/40", idle: "border-line/10 bg-secondary/30" }[tone];
-  const badge = (
-    {
-      short: { text: `${short} short`, tone: "bad" },
-      watch: { text: "Running low", tone: "warn" },
-      ok: { text: "All good", tone: "good" },
-      idle: { text: "Nothing needed", tone: "neutral" },
-    } as const
-  )[tone];
+/** Green for enough (or enough but running low), red for short, grey for not needed this month. */
+const NODE_TONE: Record<FlowTone, string> = {
+  short: "border-danger/50 bg-danger/10",
+  watch: "border-success/45 bg-success/10",
+  ok: "border-success/45 bg-success/10",
+  idle: "border-line/15 bg-card text-muted-foreground",
+};
 
+/** One stage of the flowchart: a column of boxes, one per item, coloured by whether it's enough. */
+function FlowColumn({ stage, selected, onSelect }: { stage: FlowStage; selected: string | null; onSelect: (key: string) => void }) {
   return (
-    <section id={stage.id} className={`min-w-0 scroll-mt-24 rounded-xl border ${stage.featured ? "p-3.5" : "p-3"} ${ring}`}>
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
-        <p
-          className={`flex items-center gap-1.5 whitespace-nowrap font-bold uppercase tracking-wide ${stage.featured ? "text-[13px] text-cacao" : "text-[12px] text-muted-foreground"}`}
-        >
-          {stage.icon}
-          {stage.title}
-        </p>
-        <Pill tone={badge.tone}>{badge.text}</Pill>
-      </div>
+    <section id={stage.id} className="min-w-0 scroll-mt-24">
+      <p
+        className={`mb-2 flex items-center justify-center gap-1.5 whitespace-nowrap font-bold uppercase tracking-wide ${stage.featured ? "text-[13px] text-cacao" : "text-[12px] text-muted-foreground"}`}
+      >
+        {stage.icon}
+        {stage.title}
+      </p>
       {stage.items.length === 0 ? (
-        <p className="text-[12.5px] text-muted-foreground">{stage.empty}</p>
+        <p className="rounded-lg border border-dashed border-line/20 px-2.5 py-2 text-center text-[12px] text-muted-foreground">{stage.empty}</p>
       ) : (
-        <ul className="space-y-1.5">
-          {shown.map((it) => (
-            <li key={it.key} className={`rounded-lg bg-card px-2.5 py-2 ${it.tone === "idle" ? "opacity-70" : ""}`}>
-              <div className="flex items-start justify-between gap-2">
-                <span className={`min-w-0 font-medium ${featured ? "text-[14.5px] font-semibold" : "text-[13.5px]"}`}>{it.name}</span>
-                {it.tone === "ok" && <Check2 className="mt-0.5 h-4 w-4 shrink-0 text-success" strokeWidth={3} aria-label="Enough" />}
-                {it.tone === "short" && <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-danger" aria-label="Short" />}
-                {it.tone === "watch" && <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-[var(--status-warning)]" aria-label="Running low" />}
-              </div>
-              <p className="text-[12px] text-muted-foreground">{it.line}</p>
-              {it.action && (
-                <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-x-2 rounded-md bg-danger/10 px-2 py-1 text-[12.5px] font-semibold text-danger">
-                  <span>→ {it.action}</span>
-                  {it.aside && <span className="font-normal text-muted-foreground">{it.aside}</span>}
-                </div>
-              )}
-              {it.note && <p className={`mt-1 text-[12px] font-semibold ${it.tone === "short" ? "text-danger" : "text-[var(--status-warning)]"}`}>{it.note}</p>}
-              {it.sizes && (
-                <ul className="mt-2 space-y-2 border-l-2 border-line/15 pl-2.5">
-                  {it.sizes.map((sz) => (
-                    <li key={sz.key} className={sz.tone === "idle" ? "opacity-70" : ""}>
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="text-[12.5px] font-semibold">{sz.name}</span>
-                        {sz.tone === "ok" && <Check2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" strokeWidth={3} aria-label="Enough" />}
-                        {sz.tone === "short" && <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-danger" aria-label="Short" />}
-                      </div>
-                      <p className="text-[12px] text-muted-foreground">{sz.line}</p>
-                      {sz.action && (
-                        <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-2 rounded-md bg-danger/10 px-2 py-1 text-[12px] font-semibold text-danger">
-                          <span>→ {sz.action}</span>
-                          {sz.aside && <span className="font-normal text-muted-foreground">{sz.aside}</span>}
-                        </div>
-                      )}
-                      {sz.note && <p className={`mt-0.5 text-[11.5px] font-semibold ${sz.tone === "short" ? "text-danger" : "text-[var(--status-warning)]"}`}>{sz.note}</p>}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </li>
-          ))}
-          {folded.length > 0 && (
-            <li>
-              <button
-                type="button"
-                onClick={() => setOpen(true)}
-                className="w-full rounded-lg border border-dashed border-line/25 px-2.5 py-1.5 text-left text-[12.5px] font-semibold text-muted-foreground hover:border-cacao/50 hover:text-cacao"
-              >
-                + {folded.length} more, all fine
-              </button>
-            </li>
-          )}
-          {open && fine.length > room + 1 && (
-            <li>
-              <button type="button" onClick={() => setOpen(false)} className="px-1 text-[12.5px] font-semibold text-muted-foreground hover:text-cacao">
-                Show fewer
-              </button>
-            </li>
-          )}
+        <ul className="flex flex-col gap-1.5">
+          {stage.items.map((it) => {
+            const on = selected === it.key;
+            return (
+              <li key={it.key}>
+                <button
+                  type="button"
+                  onClick={() => onSelect(it.key)}
+                  aria-expanded={on}
+                  className={`flex w-full items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors hover:brightness-95 ${NODE_TONE[it.tone]} ${on ? "ring-2 ring-cacao ring-offset-1 ring-offset-card" : ""}`}
+                >
+                  <span className={`min-w-0 truncate font-semibold ${stage.featured ? "text-[14px]" : "text-[13px]"}`}>{it.name}</span>
+                  <ToneIcon tone={it.tone} />
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>
+  );
+}
+
+function ToneIcon({ tone, small }: { tone: FlowTone; small?: boolean }) {
+  const size = small ? "h-3.5 w-3.5" : "h-4 w-4";
+  if (tone === "short") return <TriangleAlert className={`${size} shrink-0 text-danger`} aria-label="Short" />;
+  if (tone === "ok" || tone === "watch") return <Check2 className={`${size} shrink-0 text-success`} strokeWidth={3} aria-label="Enough" />;
+  return null;
+}
+
+/** What one box in the flowchart stands for, shown under the chart once it's clicked. */
+function FlowDetails({ item, stage, onClose }: { item: FlowItem; stage: string; onClose: () => void }) {
+  const status = { short: { text: "Short", tone: "bad" }, watch: { text: "Enough, running low", tone: "warn" }, ok: { text: "Enough", tone: "good" }, idle: { text: "Not needed", tone: "neutral" } } as const;
+  return (
+    <div className="mt-4 rounded-xl border border-line/15 bg-secondary/40 p-4">
+      <div className="mb-1 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11.5px] font-bold uppercase tracking-wide text-muted-foreground">{stage}</p>
+          <p className="text-[15px] font-semibold">{item.name}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Pill tone={status[item.tone].tone}>{status[item.tone].text}</Pill>
+          <button type="button" onClick={onClose} aria-label="Close details" className="rounded-md p-1 text-muted-foreground hover:bg-card hover:text-foreground">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+      <ItemBody item={item} />
+      {item.sizes && (
+        <ul className="mt-3 grid gap-2 min-[700px]:grid-cols-2">
+          {item.sizes.map((sz) => (
+            <li key={sz.key} className={`rounded-lg border px-3 py-2 ${NODE_TONE[sz.tone]}`}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[13px] font-semibold">{sz.name}</span>
+                <ToneIcon tone={sz.tone} small />
+              </div>
+              <ItemBody item={sz} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function ItemBody({ item }: { item: FlowItem }) {
+  return (
+    <>
+      <p className="text-[12.5px] text-muted-foreground">{item.line}</p>
+      {item.action && (
+        <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-x-2 rounded-md bg-danger/10 px-2 py-1 text-[12.5px] font-semibold text-danger">
+          <span>→ {item.action}</span>
+          {item.aside && <span className="font-normal text-muted-foreground">{item.aside}</span>}
+        </div>
+      )}
+      {item.note && <p className={`mt-1 text-[12px] font-semibold ${item.tone === "short" ? "text-danger" : "text-[var(--status-warning)]"}`}>{item.note}</p>}
+    </>
   );
 }
 
