@@ -16,7 +16,8 @@ function supplierFromRow(row: string[]): SupplierRow | null {
 }
 
 export const suppliersCollection = createSheetCollection<SupplierRow>({
-  sheetName: "Suppliers",
+  sheetName: "Materials & Suppliers",
+  section: "Supplier",
   header: SUPPLIER_HEADER,
   idColumn: "id",
   deletedColumn: "deletedAt",
@@ -37,7 +38,8 @@ function historyFromRow(row: string[]): SupplierPriceHistoryRow | null {
 }
 
 export const supplierPriceHistoryCollection = createSheetCollection<SupplierPriceHistoryRow>({
-  sheetName: "Supplier Price History",
+  sheetName: "Materials & Suppliers",
+  section: "Price history",
   header: HISTORY_HEADER,
   idColumn: "id",
   deletedColumn: "deletedAt",

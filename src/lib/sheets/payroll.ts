@@ -13,7 +13,8 @@ const num = (s: string | undefined) => Number(s) || 0;
 const STAFF_HEADER = ["id", "name", "payType", "rate", "position", "pwd", "userId", "startDate", "active", "createdAt", "deletedAt", "allowanceOnly"];
 
 export const staffCollection = createSheetCollection<StaffMember>({
-  sheetName: "Staff",
+  sheetName: "People & Payroll",
+  section: "Staff",
   header: STAFF_HEADER,
   idColumn: "id",
   deletedColumn: "deletedAt",
@@ -40,7 +41,8 @@ const STATUSES: DayStatus[] = ["present", "half", "absent", "off", "leave"];
 const TIME_HEADER = ["id", "staffId", "date", "timeIn", "timeOut", "status", "otHours", "note", "loggedById", "loggedByName", "createdAt", "deletedAt"];
 
 export const timeRecordsCollection = createSheetCollection<TimeRecord>({
-  sheetName: "Time Records",
+  sheetName: "People & Payroll",
+  section: "Time record",
   header: TIME_HEADER,
   idColumn: "id",
   deletedColumn: "deletedAt",
@@ -66,7 +68,8 @@ export const timeRecordsCollection = createSheetCollection<TimeRecord>({
 const PAYROLL_HEADER = ["id", "staffId", "kind", "periodStart", "periodEnd", "basic", "overtime", "deductions", "deductionNote", "net", "paidOn", "entryId", "createdAt", "deletedAt", "sss", "philhealth", "pagibig"];
 
 export const payrollCollection = createSheetCollection<PayrollRecord>({
-  sheetName: "Payroll",
+  sheetName: "People & Payroll",
+  section: "Payroll",
   header: PAYROLL_HEADER,
   idColumn: "id",
   deletedColumn: "deletedAt",

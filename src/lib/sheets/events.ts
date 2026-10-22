@@ -27,7 +27,8 @@ function eventFromRow(row: string[]): BusinessEvent | null {
 }
 
 export const eventsCollection = createSheetCollection<BusinessEvent>({
-  sheetName: "Events",
+  sheetName: "Events & Stock",
+  section: "Event",
   header: EVENT_HEADER,
   idColumn: "id",
   deletedColumn: "deletedAt",
@@ -64,7 +65,8 @@ function movementFromRow(row: string[]): EventStockMovement | null {
 }
 
 export const eventStockCollection = createSheetCollection<EventStockMovement>({
-  sheetName: "Event Stock",
+  sheetName: "Events & Stock",
+  section: "Event stock",
   header: MOVEMENT_HEADER,
   idColumn: "id",
   deletedColumn: "deletedAt",

@@ -17,7 +17,8 @@ function fromRow(row: string[]): BudgetRow | null {
 }
 
 export const budgetsCollection = createSheetCollection<BudgetRow>({
-  sheetName: "Budgets",
+  sheetName: "Shop Setup",
+  section: "Budget",
   header: HEADER,
   idColumn: "category",
   deletedColumn: "deletedAt",

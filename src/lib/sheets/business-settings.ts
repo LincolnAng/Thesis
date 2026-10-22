@@ -24,7 +24,8 @@ function fromRow(row: string[]): BusinessSettingRow | null {
 }
 
 export const businessSettingsCollection = createSheetCollection<BusinessSettingRow>({
-  sheetName: "Business Settings",
+  sheetName: "Shop Setup",
+  section: "Setting",
   header: HEADER,
   idColumn: "key",
   deletedColumn: "deletedAt",

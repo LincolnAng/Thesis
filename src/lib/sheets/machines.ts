@@ -21,7 +21,8 @@ function fromRow(row: string[]): Machine | null {
 }
 
 export const machinesCollection = createSheetCollection<Machine>({
-  sheetName: "Machines",
+  sheetName: "Shop Setup",
+  section: "Machine",
   header: MACHINE_HEADER,
   idColumn: "id",
   deletedColumn: "deletedAt",

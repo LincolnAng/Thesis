@@ -55,7 +55,8 @@ function activityFromRow(row: string[]): ActivityEvent | null {
 }
 
 export const activityCollection = createSheetCollection<ActivityEvent>({
-  sheetName: "Activity",
+  sheetName: "Logs",
+  section: "Activity",
   header: ACTIVITY_HEADER,
   idColumn: "id",
   deletedColumn: "deletedAt",

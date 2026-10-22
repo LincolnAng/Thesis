@@ -22,7 +22,8 @@ function fromRow(row: string[]): SupplierPrice | null {
 }
 
 export const supplierPricesCollection = createSheetCollection<SupplierPrice>({
-  sheetName: "Supplier Prices",
+  sheetName: "Materials & Suppliers",
+  section: "Supplier price",
   header: HEADER,
   idColumn: "id",
   deletedColumn: "deletedAt",

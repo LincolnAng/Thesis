@@ -37,7 +37,8 @@ function fromRow(row: string[]): RawMaterialStock | null {
 }
 
 export const rawMaterialsCollection = createSheetCollection<RawMaterialStock>({
-  sheetName: "Raw Materials",
+  sheetName: "Materials & Suppliers",
+  section: "Raw material",
   header: HEADER,
   idColumn: "id",
   deletedColumn: "deletedAt",

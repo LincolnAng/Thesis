@@ -109,7 +109,8 @@ function productFromRow(row: string[]): ProductRow | null {
 }
 
 export const productsCollection = createSheetCollection<ProductRow>({
-  sheetName: "Products",
+  sheetName: "Products & Recipes",
+  section: "Product",
   header: PRODUCT_HEADER,
   idColumn: "id",
   deletedColumn: "deletedAt",
@@ -147,7 +148,8 @@ function recipeFromRow(row: string[]): RecipeRow | null {
 }
 
 export const recipesCollection = createSheetCollection<RecipeRow>({
-  sheetName: "Recipes",
+  sheetName: "Products & Recipes",
+  section: "Recipe line",
   header: RECIPE_HEADER,
   idColumn: "id",
   deletedColumn: "deletedAt",

@@ -1,8 +1,6 @@
-import { appendSheetValues, batchUpdateValues, ensureSheetExists, getSheetValues, updateSheetValues } from "./client";
+import { batchUpdateValues, updateSheetValues } from "./client";
+import { createSheetCollection } from "./collection";
 import type { ChatMessage } from "@/lib/home/chat-types";
-
-const CHAT_SHEET = "ChatHistory";
-const CHAT_HEADER = ["id", "role", "kind", "createdAt", "payload"];
 
 function toRow(message: ChatMessage): string[] {
   const obj = message as unknown as Record<string, unknown>;
@@ -27,54 +25,43 @@ function fromRow(row: string[]): ChatMessage | null {
   return base as unknown as ChatMessage;
 }
 
-export async function getChatHistory(): Promise<ChatMessage[]> {
-  const rows = await getSheetValues(`${CHAT_SHEET}!A:E`);
-  return rows
-    .map(fromRow)
-    .filter((m): m is ChatMessage => m !== null)
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-}
+// Deleting a message marks its payload rather than a deletedAt column, so fromRow (null for a
+// deleted one) is what keeps them out.
+const chatCollection = createSheetCollection<ChatMessage>({
+  sheetName: "Logs",
+  section: "Chat",
+  header: ["id", "role", "kind", "createdAt", "payload"],
+  idColumn: "id",
+  toRow,
+  fromRow: (row) => fromRow(row),
+});
 
-async function findRowIndex(id: string): Promise<number | null> {
-  const rows = await getSheetValues(`${CHAT_SHEET}!A:E`);
-  const index = rows.findIndex((row) => row[0] === id);
-  return index === -1 ? null : index;
+const DELETED = [[JSON.stringify({ deleted: true })]];
+
+export async function getChatHistory(): Promise<ChatMessage[]> {
+  return (await chatCollection.getAll()).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
 export async function appendChatMessage(message: ChatMessage): Promise<void> {
-  await ensureSheetExists(CHAT_SHEET, CHAT_HEADER);
-  await appendSheetValues(`${CHAT_SHEET}!A:E`, [toRow(message)]);
+  await chatCollection.append(message);
 }
 
 export async function updateChatMessage(id: string, message: ChatMessage): Promise<void> {
-  await ensureSheetExists(CHAT_SHEET, CHAT_HEADER);
-  const index = await findRowIndex(id);
-  if (index !== null) {
-    const targetRow = index + 1;
-    await updateSheetValues(`${CHAT_SHEET}!A${targetRow}:E${targetRow}`, [toRow(message)]);
-  } else {
-    // Its original append may not have landed yet — append this as a new row rather
-    // than guessing at a row number (that guess is exactly the race this replaced).
-    await appendSheetValues(`${CHAT_SHEET}!A:E`, [toRow(message)]);
-  }
+  await chatCollection.update(id, message);
 }
 
 export async function deleteChatMessage(id: string): Promise<void> {
-  const index = await findRowIndex(id);
-  if (index === null) return;
-  const targetRow = index + 1;
-  await updateSheetValues(`${CHAT_SHEET}!E${targetRow}`, [[JSON.stringify({ deleted: true })]]);
+  const found = (await chatCollection.getRows()).find((r) => r.values[0] === id);
+  if (found) await updateSheetValues(chatCollection.cellRange(found.row, "payload"), DELETED);
 }
 
 /** Soft-deletes every message belonging to one conversation in a single batched
  * write, rather than one `deleteChatMessage` call per message. */
 export async function deleteChatSession(sessionId: string): Promise<void> {
-  const rows = await getSheetValues(`${CHAT_SHEET}!A:E`);
   const updates: { range: string; values: string[][] }[] = [];
-
-  rows.forEach((row, index) => {
-    const [id, , , , payloadRaw] = row;
-    if (!id || id === "id") return; // header/blank row
+  for (const { values, row } of await chatCollection.getRows()) {
+    const [id, , , , payloadRaw] = values;
+    if (!id || id === "id") continue; // header/blank row
 
     let payload: Record<string, unknown> = {};
     try {
@@ -82,11 +69,8 @@ export async function deleteChatSession(sessionId: string): Promise<void> {
     } catch {
       payload = {};
     }
-    if (payload.deleted || payload.sessionId !== sessionId) return;
-
-    const targetRow = index + 1;
-    updates.push({ range: `${CHAT_SHEET}!E${targetRow}`, values: [[JSON.stringify({ deleted: true })]] });
-  });
-
+    if (payload.deleted || payload.sessionId !== sessionId) continue;
+    updates.push({ range: chatCollection.cellRange(row, "payload"), values: DELETED });
+  }
   await batchUpdateValues(updates);
 }

@@ -78,7 +78,8 @@ export function toPublicProfile(u: UserRecord): AppUser {
 }
 
 export const usersCollection = createSheetCollection<UserRecord>({
-  sheetName: "Users",
+  sheetName: "People & Payroll",
+  section: "User",
   header: USER_HEADER,
   idColumn: "id",
   deletedColumn: "deletedAt",

@@ -1,7 +1,16 @@
-import { ensureSheetExists, getSheetValues, updateSheetValues } from "./client";
+import { createSheetCollection } from "./collection";
 
-const SETTINGS_SHEET = "Settings";
-const SETTINGS_HEADER = ["key", "value"];
+// Kept apart from the shop's own settings ("Setting" rows) by section: those go to every
+// device, and this one holds the API key, which must not.
+const aiSettingsCollection = createSheetCollection<{ key: string; value: string }>({
+  sheetName: "Shop Setup",
+  section: "AI setting",
+  header: ["key", "value", "deletedAt"],
+  idColumn: "key",
+  deletedColumn: "deletedAt",
+  toRow: (s) => [s.key, s.value, ""],
+  fromRow: (row) => ({ key: row[0], value: row[1] ?? "" }),
+});
 const KEY_API_KEY = "anthropic_api_key";
 const KEY_MODEL = "anthropic_model";
 const KEY_BOT_LANGUAGE = "bot_language";
@@ -35,11 +44,7 @@ export async function getAiSettings(): Promise<AiSettings> {
 }
 
 async function readAiSettings(): Promise<AiSettings> {
-  const rows = await getSheetValues(`${SETTINGS_SHEET}!A:B`);
-  const byKey = new Map<string, string>();
-  for (const [key, value] of rows) {
-    if (key) byKey.set(key, value ?? "");
-  }
+  const byKey = new Map((await aiSettingsCollection.getAll()).map((s) => [s.key, s.value]));
   const storedLanguage = byKey.get(KEY_BOT_LANGUAGE)?.trim();
   return {
     apiKey: byKey.get(KEY_API_KEY)?.trim() || null,
@@ -50,28 +55,12 @@ async function readAiSettings(): Promise<AiSettings> {
 
 export async function saveAiSettings(patch: { apiKey?: string; model?: string; botLanguage?: BotLanguage }): Promise<void> {
   clearAiSettingsCache();
-  await ensureSheetExists(SETTINGS_SHEET, SETTINGS_HEADER);
-  const rows = await getSheetValues(`${SETTINGS_SHEET}!A:B`);
-
-  const rowIndexByKey = new Map<string, number>();
-  rows.forEach((row, index) => {
-    if (row[0]) rowIndexByKey.set(row[0], index + 1); // sheet rows are 1-indexed
-  });
-
   const updates: Array<[string, string]> = [];
   if (patch.apiKey !== undefined) updates.push([KEY_API_KEY, patch.apiKey]);
   if (patch.model !== undefined) updates.push([KEY_MODEL, patch.model]);
   if (patch.botLanguage !== undefined) updates.push([KEY_BOT_LANGUAGE, patch.botLanguage]);
-
-  for (const [key, value] of updates) {
-    const existingRow = rowIndexByKey.get(key);
-    const targetRow = existingRow ?? rows.length + 1;
-    await updateSheetValues(`${SETTINGS_SHEET}!A${targetRow}:B${targetRow}`, [[key, value]]);
-    if (!existingRow) {
-      rows.push([key, value]);
-      rowIndexByKey.set(key, targetRow);
-    }
-  }
+  // update() writes over the key's row, or adds one when there isn't one yet.
+  for (const [key, value] of updates) await aiSettingsCollection.update(key, { key, value });
 }
 
 export function maskApiKey(key: string): string {
