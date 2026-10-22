@@ -143,7 +143,7 @@ export function redactForEmployee(data: BusinessData, sellingPrice: (product: Pr
 }
 
 function staffNameOnly(s: StaffMember): StaffMember {
-  return { id: s.id, name: s.name, payType: "daily", rate: 0, position: "", pwd: false, userId: s.userId, startDate: null, active: s.active, createdAt: s.createdAt };
+  return { id: s.id, name: s.name, payType: "daily", rate: 0, position: "", pwd: false, userId: s.userId, startDate: null, active: s.active, allowanceOnly: false, createdAt: s.createdAt };
 }
 
 /** The days an employee may time in or out on: today and yesterday (a shift past midnight), in Manila. */

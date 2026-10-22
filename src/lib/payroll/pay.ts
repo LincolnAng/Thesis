@@ -1,19 +1,25 @@
 import type { PayrollRecord, StaffMember, TimeRecord } from "@/lib/store/types";
+import { contributionsFor, DEFAULT_CONTRIBUTIONS_FROM, type Contributions } from "@/lib/payroll/contributions";
 
 /**
  * How much each person is owed — worked out from their rate and their daily time record, so
  * nobody adds up days by hand. Pure: no store, no React (pay.test.ts).
  *
  * The shop's rules (agreed with the owners):
- * - Paid twice a month: the 1st–15th on the 15th, and the 16th–end of month on the 30th
- *   (the last day, in February).
+ * - Paid twice a month: the 1st–15th on the 15th, and the 16th–end of month on the last day
+ *   of the month (the 30th or 31st; the 28th or 29th in February).
  * - Daily-rate staff are paid for the days they worked: a full day at their rate, a half day
  *   at half. Days off, absences and leave are unpaid.
- * - Monthly staff get half their monthly rate each payday. Absences don't reduce it.
+ * - Monthly staff get half their monthly rate each payday, less the monthly rate ÷ 30 for each
+ *   day absent (half that for a half day). Days off and leave aren't deducted.
+ * - Staff paid an allowance only (not a salary) have nothing deducted: no absences, no
+ *   government contributions.
  * - Overtime is paid at 125% of the hourly rate, and only the hours an Executive approved.
  *   The hourly rate is the daily rate ÷ 8; for monthly staff, the monthly rate × 12 ÷ 313
  *   working days (a six-day week) ÷ 8.
- * - No government deductions (SSS, PhilHealth, Pag-IBIG) yet; cash advances are taken off.
+ * - SSS, PhilHealth and Pag-IBIG (lib/payroll/contributions) are taken off on the end-of-month
+ *   payday, for the whole month, from the date the shop starts them. Cash advances are taken
+ *   off whenever they're entered.
  * - 13th month pay is the basic pay earned in the calendar year ÷ 12 (overtime isn't counted),
  *   due on or before December 24.
  */
@@ -24,6 +30,8 @@ export const WORK_DAYS_PER_YEAR = 313;
 /** Over this many hours on the clock, an hour is taken off for lunch. */
 const LUNCH_AFTER_HOURS = 5;
 export const THIRTEENTH_DUE = { month: 12, day: 24 };
+/** A monthly rate ÷ this is one day's pay, for deducting absences. */
+export const DAYS_PER_MONTH_FOR_ABSENCES = 30;
 
 export interface PayPeriod {
   /** "YYYY-MM-DD" */
@@ -56,7 +64,7 @@ export function periodFor(iso: string): PayPeriod {
   return {
     start: `${y}-${pad(m0 + 1)}-${pad(startDay)}`,
     end: `${y}-${pad(m0 + 1)}-${pad(endDay)}`,
-    payday: `${y}-${pad(m0 + 1)}-${pad(first ? 15 : Math.min(30, last))}`,
+    payday: `${y}-${pad(m0 + 1)}-${pad(first ? 15 : last)}`,
     label: `${month} ${startDay}–${endDay}, ${y}`,
   };
 }
@@ -117,11 +125,24 @@ export interface PayLine {
   otHours: number;
   /** Overtime hours on the clock that no one has approved yet (not paid). */
   unapprovedExtra: number;
+  /** Absence days a monthly worker is docked for (a half day counts 0.5). */
+  absentDays: number;
+  /** Taken off a monthly worker's basic for absences. */
+  absenceDeduction: number;
   basic: number;
   overtime: number;
   gross: number;
+  /** The month's SSS, PhilHealth and Pag-IBIG — only on the end-of-month payday, once they've started. */
+  contributions: Contributions | null;
+  /** Gross less contributions — before any cash advance. */
+  net: number;
   /** Set when this period has already been paid. */
   paid: PayrollRecord | null;
+}
+
+export interface PayOptions {
+  /** "YYYY-MM-DD" the shop starts deducting government contributions. */
+  contributionsFrom?: string;
 }
 
 /** Monthly staff who started partway through a period are paid for the days from their start. */
@@ -134,17 +155,45 @@ function monthlyShare(s: StaffMember, p: PayPeriod): number {
   return (half * worked) / all;
 }
 
-export function payFor(staff: StaffMember, period: PayPeriod, records: TimeRecord[], payroll: PayrollRecord[] = []): PayLine {
+/** Absence days a monthly worker is docked for, from `start` to `end`: absent = 1, half day = 0.5. */
+function absenceUnits(staff: StaffMember, records: TimeRecord[], start: string, end: string): number {
+  if (staff.payType !== "monthly" || staff.allowanceOnly) return 0;
+  return records
+    .filter((r) => r.staffId === staff.id && r.date >= start && r.date <= end)
+    .reduce((n, r) => n + (r.status === "absent" ? 1 : r.status === "half" ? 0.5 : 0), 0);
+}
+
+const absenceAmount = (staff: StaffMember, units: number) => (staff.rate / DAYS_PER_MONTH_FOR_ABSENCES) * units;
+
+/** Pay for one period before government contributions. */
+function basePay(staff: StaffMember, period: PayPeriod, records: TimeRecord[]) {
   const mine = records.filter((r) => r.staffId === staff.id && r.date >= period.start && r.date <= period.end);
   const fullDays = mine.filter((r) => r.status === "present").length;
   const halfDays = mine.filter((r) => r.status === "half").length;
   const unpaidDays = mine.filter((r) => dayCredit(r) === 0).length;
   const otHours = mine.reduce((n, r) => n + (r.otHours || 0), 0);
   const unapprovedExtra = mine.reduce((n, r) => n + Math.max(0, extraHours(r) - (r.otHours || 0)), 0);
-  const basic = r2(staff.payType === "daily" ? staff.rate * (fullDays + halfDays / 2) : monthlyShare(staff, period));
+  const absentDays = absenceUnits(staff, records, period.start, period.end);
+  const share = monthlyShare(staff, period);
+  const absenceDeduction = r2(Math.min(share, absenceAmount(staff, absentDays)));
+  const basic = r2(staff.payType === "daily" ? staff.rate * (fullDays + halfDays / 2) : share - absenceDeduction);
   const overtime = r2(otHours * hourlyRate(staff) * OT_PREMIUM);
+  return { fullDays, halfDays, unpaidDays, otHours, unapprovedExtra, absentDays, absenceDeduction, basic, overtime, gross: r2(basic + overtime) };
+}
+
+export function payFor(staff: StaffMember, period: PayPeriod, records: TimeRecord[], payroll: PayrollRecord[] = [], options: PayOptions = {}): PayLine {
+  const base = basePay(staff, period, records);
+  const from = options.contributionsFrom ?? DEFAULT_CONTRIBUTIONS_FROM;
+  const endOfMonth = period.start.endsWith("-16");
+  let contributions: Contributions | null = null;
+  if (endOfMonth && !staff.allowanceOnly && period.end >= from) {
+    // The whole month's, from both halves' pay.
+    const first = basePay(staff, shiftPeriod(period, -1), records);
+    contributions = contributionsFor(first.basic + base.basic, first.gross + base.gross);
+  }
+  const net = r2(Math.max(0, base.gross - (contributions?.employeeTotal ?? 0)));
   const paid = payroll.find((p) => p.kind === "regular" && p.staffId === staff.id && p.periodStart === period.start) ?? null;
-  return { staff, period, fullDays, halfDays, unpaidDays, otHours, unapprovedExtra, basic, overtime, gross: r2(basic + overtime), paid };
+  return { staff, period, ...base, contributions, net, paid };
 }
 
 export interface ThirteenthMonth {
@@ -173,11 +222,12 @@ export function thirteenthMonth(staff: StaffMember, year: number, today: string,
   for (let p = periodFor(`${year}-01-01`); p.start <= upTo; p = shiftPeriod(p, 1)) {
     if (staff.startDate && staff.startDate > p.end) continue;
     periods += 1;
-    if (staff.payType === "daily") basicSoFar += payFor(staff, p, records).basic;
+    if (staff.payType === "daily" || p.end <= upTo) basicSoFar += basePay(staff, p, records).basic;
     else {
       // The current period counts only the days gone so far.
       const share = monthlyShare(staff, p);
-      basicSoFar += p.end <= upTo ? share : (share * daysIn({ start: p.start, end: upTo }).length) / daysIn(p).length;
+      const sofar = (share * daysIn({ start: p.start, end: upTo }).length) / daysIn(p).length;
+      basicSoFar += Math.max(0, sofar - absenceAmount(staff, absenceUnits(staff, records, p.start, upTo)));
     }
   }
   basicSoFar = r2(basicSoFar);

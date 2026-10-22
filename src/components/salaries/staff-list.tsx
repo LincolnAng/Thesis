@@ -42,6 +42,7 @@ export function StaffList() {
                 <p className="flex flex-wrap items-center gap-1.5 text-[15px] font-semibold">
                   {s.name}
                   {s.pwd && <Pill tone="brand">PWD</Pill>}
+                  {s.allowanceOnly && <Pill>Allowance</Pill>}
                   {!s.active && <Pill>No longer working</Pill>}
                 </p>
                 <p className="text-[13px] text-muted-foreground">{[s.position, s.startDate ? `since ${s.startDate}` : null].filter(Boolean).join(" · ") || "—"}</p>
@@ -74,12 +75,13 @@ function StaffDialog({ member, onClose }: { member: StaffMember | null; onClose:
   const [pwd, setPwd] = useState(member?.pwd ?? false);
   const [userId, setUserId] = useState(member?.userId ?? "");
   const [active, setActive] = useState(member?.active ?? true);
+  const [allowanceOnly, setAllowanceOnly] = useState(member?.allowanceOnly ?? false);
   const [error, setError] = useState<string | null>(null);
 
   function save() {
     if (!name.trim()) return setError("Enter their name.");
     if (!(Number(rate) > 0)) return setError("Enter their rate.");
-    const data = { name: name.trim(), position: position.trim(), payType, rate: Number(rate), startDate: startDate || null, pwd, userId: userId || null, active };
+    const data = { name: name.trim(), position: position.trim(), payType, rate: Number(rate), startDate: startDate || null, pwd, userId: userId || null, active, allowanceOnly };
     if (member) updateStaff(member.id, data);
     else addStaff(data);
     onClose();
@@ -140,6 +142,13 @@ function StaffDialog({ member, onClose }: { member: StaffMember | null; onClose:
           <label className="col-span-2 flex min-h-11 items-center gap-2 text-[14px]">
             <input type="checkbox" checked={pwd} onChange={(e) => setPwd(e.target.checked)} className="h-5 w-5 accent-[var(--color-cacao,#5a3a22)]" />
             Person with disability (PWD)
+          </label>
+          <label className="col-span-2 flex min-h-11 items-start gap-2 text-[14px]">
+            <input type="checkbox" checked={allowanceOnly} onChange={(e) => setAllowanceOnly(e.target.checked)} className="mt-0.5 h-5 w-5" />
+            <span>
+              Allowance only, not a salary
+              <span className="block text-[12px] text-muted-foreground">Nothing is taken off: no absences, no SSS, PhilHealth or Pag-IBIG.</span>
+            </span>
           </label>
           {member && (
             <label className="col-span-2 flex min-h-11 items-center gap-2 text-[14px]">

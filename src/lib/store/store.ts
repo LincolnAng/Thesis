@@ -1435,7 +1435,15 @@ export function recordSalaryPayment(input: Omit<PayrollRecord, "id" | "createdAt
     category: "labor",
     rawText: "Salaries tab",
     confidence: 1,
-    notes: input.deductions > 0 ? `Less ${formatPeso(input.deductions)}${input.deductionNote ? ` (${input.deductionNote})` : ""}` : null,
+    notes:
+      [
+        input.sss + input.philhealth + input.pagibig > 0
+          ? `Less SSS ${formatPeso(input.sss)}, PhilHealth ${formatPeso(input.philhealth)}, Pag-IBIG ${formatPeso(input.pagibig)}`
+          : "",
+        input.deductions > 0 ? `Less ${formatPeso(input.deductions)}${input.deductionNote ? ` (${input.deductionNote})` : ""}` : "",
+      ]
+        .filter(Boolean)
+        .join("; ") || null,
     paymentTerm: "spot",
     paymentMethod: "cash",
   });
@@ -1452,4 +1460,52 @@ export function undoSalaryPayment(id: string) {
   setState((prev) => ({ ...prev, payroll: prev.payroll.filter((p) => p.id !== id) }));
   void mirrorOp("payroll", "delete", { id });
   if (record.entryId && state.entries.some((e) => e.id === record.entryId)) deleteEntry(record.entryId);
+}
+
+/**
+ * Sends a month's contributions to SSS, PhilHealth or Pag-IBIG: the workers' shares already
+ * taken from their pay plus the shop's share, recorded as one expense in Transactions.
+ */
+export function recordRemittance(agency: "sss" | "philhealth" | "pagibig", agencyName: string, month: string, amount: number, paidOn: string): PayrollRecord {
+  const [y, m, d] = paidOn.split("-").map(Number);
+  const now = new Date();
+  const monthLabel = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1, 1).toLocaleDateString("en-PH", { month: "long", year: "numeric" });
+  const entry = addEntry({
+    timestamp: new Date(y, m - 1, d, now.getHours(), now.getMinutes()).toISOString(),
+    type: "EXPENSE",
+    amount,
+    quantity: null,
+    unit: null,
+    sku: `${agencyName} contributions — ${monthLabel}`,
+    counterparty: agencyName,
+    location: null,
+    priceType: null,
+    category: "labor",
+    rawText: "Salaries tab",
+    confidence: 1,
+    notes: "Workers' shares (taken from pay) plus the shop's share",
+    paymentTerm: "spot",
+  });
+  const lastDay = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate();
+  const record: PayrollRecord = {
+    id: genId("pay"),
+    staffId: agency,
+    kind: "remittance",
+    periodStart: `${month}-01`,
+    periodEnd: `${month}-${String(lastDay).padStart(2, "0")}`,
+    basic: 0,
+    overtime: 0,
+    deductions: 0,
+    deductionNote: "",
+    net: amount,
+    paidOn,
+    entryId: entry.id,
+    createdAt: new Date().toISOString(),
+    sss: agency === "sss" ? amount : 0,
+    philhealth: agency === "philhealth" ? amount : 0,
+    pagibig: agency === "pagibig" ? amount : 0,
+  };
+  setState((prev) => ({ ...prev, payroll: [...prev.payroll, record] }));
+  void saveSalaryRow("payroll", "append", record);
+  return record;
 }

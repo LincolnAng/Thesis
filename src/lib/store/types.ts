@@ -400,6 +400,8 @@ export interface StaffMember {
   /** First day of work, "YYYY-MM-DD"; pay before it isn't owed. */
   startDate: string | null;
   active: boolean;
+  /** Paid an allowance, not a salary: no absence deductions and no SSS, PhilHealth or Pag-IBIG. */
+  allowanceOnly: boolean;
   createdAt: string;
 }
 
@@ -424,11 +426,14 @@ export interface TimeRecord {
   createdAt: string;
 }
 
-/** A payment made to someone: a regular payday, or their 13th month pay. */
+/**
+ * A payment: to someone on a regular payday or for their 13th month pay, or — kind "remittance"
+ * — the month's contributions paid to SSS, PhilHealth or Pag-IBIG (staffId is then the agency).
+ */
 export interface PayrollRecord {
   id: string;
   staffId: string;
-  kind: "regular" | "13th";
+  kind: "regular" | "13th" | "remittance";
   periodStart: string;
   periodEnd: string;
   basic: number;
@@ -441,4 +446,8 @@ export interface PayrollRecord {
   /** The salary expense this payment recorded in Transactions. */
   entryId: string | null;
   createdAt: string;
+  /** Employee shares taken off this payday (0 when none). For a remittance: the total sent. */
+  sss: number;
+  philhealth: number;
+  pagibig: number;
 }

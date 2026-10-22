@@ -16,6 +16,8 @@ export interface PayBreakdown {
   /** Label / amount lines that add up to the gross. */
   lines: { label: string; amount: number }[];
   gross: number;
+  /** Taken off before the cash advance — SSS, PhilHealth, Pag-IBIG. */
+  withheld?: { label: string; amount: number }[];
   defaultDate: string;
 }
 
@@ -33,8 +35,10 @@ export function PayDialog({
   const [paidOn, setPaidOn] = useState(breakdown.defaultDate);
   const [less, setLess] = useState("");
   const [note, setNote] = useState("");
-  const deductions = Math.min(breakdown.gross, Number(less) || 0);
-  const net = Math.round((breakdown.gross - deductions) * 100) / 100;
+  const withheld = (breakdown.withheld ?? []).reduce((n, w) => n + w.amount, 0);
+  const afterWithheld = Math.max(0, breakdown.gross - withheld);
+  const deductions = Math.min(afterWithheld, Number(less) || 0);
+  const net = Math.round((afterWithheld - deductions) * 100) / 100;
   const field = "h-11 rounded-lg border border-input bg-transparent px-3 text-[15px] outline-none focus:border-cacao";
 
   return (
@@ -56,6 +60,12 @@ export function PayDialog({
             <span>Gross pay</span>
             <span className="tabular-nums">{formatPeso(breakdown.gross)}</span>
           </li>
+          {(breakdown.withheld ?? []).map((w) => (
+            <li key={w.label} className="flex justify-between gap-3 text-muted-foreground">
+              <span>Less {w.label}</span>
+              <span className="tabular-nums">−{formatPeso(w.amount)}</span>
+            </li>
+          ))}
         </ul>
 
         <div className="grid grid-cols-2 gap-3">
@@ -77,7 +87,10 @@ export function PayDialog({
           <span className="text-[14px] font-semibold">Take-home pay</span>
           <span className="font-display text-[22px] font-bold tabular-nums text-cacao">{formatPeso(net)}</span>
         </div>
-        <p className="text-[12px] text-muted-foreground">Recorded in Transactions as a salary expense, paid in cash. No SSS, PhilHealth or Pag-IBIG is taken off.</p>
+        <p className="text-[12px] text-muted-foreground">
+          Recorded in Transactions as a salary expense, paid in cash.
+          {withheld > 0 ? " What's taken off for SSS, PhilHealth and Pag-IBIG is sent to them with the shop's share — see Contributions." : ""}
+        </p>
 
         <div className="flex gap-2">
           <button
@@ -106,6 +119,7 @@ export function printPayslip(p: {
   position: string;
   period: string;
   lines: { label: string; amount: number }[];
+  withheld?: { label: string; amount: number }[];
   deductions: number;
   deductionNote: string;
   net: number;
@@ -119,7 +133,7 @@ export function printPayslip(p: {
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Payslip — ${esc(p.name)}</title>
 <style>body{font-family:system-ui,sans-serif;padding:24px;color:#222}table{width:100%;border-collapse:collapse;margin-top:12px}td{padding:6px 0}h1{font-size:18px;margin:0}p{margin:2px 0;color:#555}.sign{margin-top:48px;display:flex;justify-content:space-between;gap:24px}.sign div{flex:1;border-top:1px solid #333;padding-top:4px;font-size:12px;text-align:center}</style>
 </head><body><h1>${esc(p.business)} — Payslip</h1><p>${esc(p.name)}${p.position ? ` · ${esc(p.position)}` : ""}</p><p>${esc(p.period)} · paid ${esc(p.paidOn)}</p>
-<table>${p.lines.map((l) => row(l.label, formatPeso(l.amount))).join("")}${row("Gross pay", formatPeso(gross), true)}${
+<table>${p.lines.map((l) => row(l.label, formatPeso(l.amount))).join("")}${row("Gross pay", formatPeso(gross), true)}${(p.withheld ?? []).map((w) => row(`Less ${w.label}`, `−${formatPeso(w.amount)}`)).join("")}${
     p.deductions > 0 ? row(`Less${p.deductionNote ? ` — ${p.deductionNote}` : ""}`, `−${formatPeso(p.deductions)}`) : ""
   }${row("Take-home pay", formatPeso(p.net), true)}</table>
 <div class="sign"><div>Released by</div><div>Received by ${esc(p.name)}</div></div>

@@ -7,6 +7,8 @@ import { CarouselNav } from "@/components/ui/carousel-nav";
 import { Pill } from "@/components/ui/kit";
 import { useStore } from "@/lib/store/use-store";
 import { recordSalaryPayment, undoSalaryPayment } from "@/lib/store/store";
+import { useContributionsFrom } from "@/lib/payroll/use-contributions-from";
+import { ContributionsView } from "@/components/salaries/contributions-view";
 import { formatPeso, pluralize } from "@/lib/format";
 import { manilaToday, payFor, periodFor, shiftPeriod, thirteenthMonth, type PayLine, type ThirteenthMonth } from "@/lib/payroll/pay";
 import type { PayrollRecord, StaffMember } from "@/lib/store/types";
@@ -23,11 +25,12 @@ import { TimeInPanel } from "@/components/salaries/time-in-panel";
  * The rules (paydays, overtime, 13th month) are in lib/payroll/pay.
  */
 
-type Tab = "payroll" | "time" | "thirteenth" | "staff";
+type Tab = "payroll" | "time" | "thirteenth" | "contributions" | "staff";
 const TABS = [
   ["payroll", "Payroll"],
   ["time", "Time record"],
   ["thirteenth", "13th month"],
+  ["contributions", "SSS · PhilHealth · Pag-IBIG"],
   ["staff", "Staff"],
 ] as const;
 
@@ -49,6 +52,7 @@ export function SalariesScreen() {
       {tab === "payroll" && <PayrollView />}
       {tab === "time" && <TimeView />}
       {tab === "thirteenth" && <ThirteenthView />}
+      {tab === "contributions" && <ContributionsView />}
       {tab === "staff" && <StaffList />}
     </Page>
   );
@@ -59,9 +63,29 @@ function payLines(line: PayLine): { label: string; amount: number }[] {
   const lines =
     s.payType === "daily"
       ? [{ label: `${line.fullDays + line.halfDays / 2} days × ${formatPeso(s.rate)}${line.halfDays ? ` (${pluralize(line.halfDays, "half day")})` : ""}`, amount: line.basic }]
-      : [{ label: `Half of ${formatPeso(s.rate)} a month`, amount: line.basic }];
+      : line.absenceDeduction > 0
+        ? [
+            { label: `Half of ${formatPeso(s.rate)} a month`, amount: line.basic + line.absenceDeduction },
+            { label: `Absent ${line.absentDays} ${line.absentDays === 1 ? "day" : "days"} × ${formatPeso(s.rate / 30)} (÷ 30)`, amount: -line.absenceDeduction },
+          ]
+        : [{ label: `Half of ${formatPeso(s.rate)} a month`, amount: line.basic }];
   if (line.overtime > 0) lines.push({ label: `Overtime, ${line.otHours} h at 125%`, amount: line.overtime });
   return lines;
+}
+
+/** SSS, PhilHealth and Pag-IBIG taken off this payday — from the record once paid, else as worked out. */
+function withheldLines(line: PayLine): { label: string; amount: number }[] {
+  const c = line.paid
+    ? { sss: line.paid.sss, philhealth: line.paid.philhealth, pagibig: line.paid.pagibig }
+    : line.contributions
+      ? { sss: line.contributions.sss.employee, philhealth: line.contributions.philhealth.employee, pagibig: line.contributions.pagibig.employee }
+      : null;
+  if (!c) return [];
+  return [
+    { label: "SSS", amount: c.sss },
+    { label: "PhilHealth", amount: c.philhealth },
+    { label: "Pag-IBIG", amount: c.pagibig },
+  ].filter((w) => w.amount > 0);
 }
 
 function PeriodNav({ period, onShift, today }: { period: ReturnType<typeof periodFor>; onShift: (n: number) => void; today: string }) {
@@ -78,13 +102,14 @@ function PeriodNav({ period, onShift, today }: { period: ReturnType<typeof perio
 
 function PayrollView() {
   const { staff, timeRecords, payroll } = useStore();
+  const contributionsFrom = useContributionsFrom();
   const today = manilaToday();
   const [period, setPeriod] = useState(() => periodFor(today));
   const [paying, setPaying] = useState<{ line: PayLine; breakdown: PayBreakdown } | null>(null);
 
   const people = peopleFor(staff, (s) => timeRecords.some((r) => r.staffId === s.id && r.date >= period.start && r.date <= period.end));
-  const lines = people.map((s) => payFor(s, period, timeRecords, payroll));
-  const total = lines.reduce((n, l) => n + (l.paid ? l.paid.net : l.gross), 0);
+  const lines = people.map((s) => payFor(s, period, timeRecords, payroll, { contributionsFrom }));
+  const total = lines.reduce((n, l) => n + (l.paid ? l.paid.net : l.net), 0);
   const unpaid = lines.filter((l) => !l.paid && l.gross > 0);
   const waitingOt = lines.reduce((n, l) => n + l.unapprovedExtra, 0);
 
@@ -95,6 +120,7 @@ function PayrollView() {
       position: line.staff.position,
       period: period.label,
       lines: payLines(line),
+      withheld: withheldLines(line),
       deductions: paid.deductions,
       deductionNote: paid.deductionNote,
       net: paid.net,
@@ -127,7 +153,7 @@ function PayrollView() {
       )}
 
       <div className="overflow-x-auto rounded-2xl border border-line/15 bg-card">
-        <table className="w-full min-w-[760px] border-collapse text-[14px]">
+        <table className="w-full min-w-[860px] border-collapse text-[14px]">
           <thead>
             <tr className="text-left text-[12px] text-muted-foreground">
               <th className="px-3 py-2 font-semibold">Name</th>
@@ -136,6 +162,7 @@ function PayrollView() {
               <th className="px-3 py-2 text-center font-semibold">Overtime</th>
               <th className="px-3 py-2 text-right font-semibold">Basic</th>
               <th className="px-3 py-2 text-right font-semibold">OT pay</th>
+              <th className="px-3 py-2 text-right font-semibold" title="SSS, PhilHealth and Pag-IBIG">Gov&apos;t</th>
               <th className="px-3 py-2 text-right font-semibold">To pay</th>
               <th className="px-3 py-2" />
             </tr>
@@ -146,6 +173,7 @@ function PayrollView() {
                 <td className="px-3 py-2.5 font-semibold">
                   {line.staff.name}
                   {line.staff.pwd && <Pill tone="brand" className="ml-1.5">PWD</Pill>}
+                  {line.staff.allowanceOnly && <Pill className="ml-1.5">Allowance</Pill>}
                 </td>
                 <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{rateLabel(line.staff)}</td>
                 <td className="px-3 py-2.5 text-center tabular-nums">
@@ -162,10 +190,20 @@ function PayrollView() {
                   {line.otHours ? `${line.otHours} h` : "—"}
                   {line.unapprovedExtra > 0 && <span className="block text-[11px] font-semibold text-[var(--status-warning)]">+{line.unapprovedExtra} h to approve</span>}
                 </td>
-                <td className="px-3 py-2.5 text-right tabular-nums">{formatPeso(line.basic)}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums">
+                  {formatPeso(line.basic)}
+                  {line.absenceDeduction > 0 && (
+                    <span className="block text-[11px] text-danger">
+                      −{formatPeso(line.absenceDeduction)} for {line.absentDays} absent
+                    </span>
+                  )}
+                </td>
                 <td className="px-3 py-2.5 text-right tabular-nums">{line.overtime ? formatPeso(line.overtime) : "—"}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums">
+                  {withheldLines(line).length ? `−${formatPeso(withheldLines(line).reduce((n, w) => n + w.amount, 0))}` : "—"}
+                </td>
                 <td className="px-3 py-2.5 text-right font-bold tabular-nums">
-                  {formatPeso(line.paid ? line.paid.net : line.gross)}
+                  {formatPeso(line.paid ? line.paid.net : line.net)}
                   {line.paid && line.paid.deductions > 0 && <span className="block text-[11px] font-normal text-muted-foreground">less {formatPeso(line.paid.deductions)}</span>}
                 </td>
                 <td className="whitespace-nowrap px-3 py-2.5 text-right">
@@ -191,7 +229,13 @@ function PayrollView() {
                       onClick={() =>
                         setPaying({
                           line,
-                          breakdown: { title: `Pay for ${period.label}`, lines: payLines(line), gross: line.gross, defaultDate: today < period.payday ? today : period.payday },
+                          breakdown: {
+                            title: `Pay for ${period.label}`,
+                            lines: payLines(line),
+                            gross: line.gross,
+                            withheld: withheldLines(line),
+                            defaultDate: today < period.payday ? today : period.payday,
+                          },
                         })
                       }
                       className="min-h-10 rounded-[10px] bg-cacao px-4 text-[13px] font-semibold text-ivory disabled:opacity-30"
@@ -206,8 +250,9 @@ function PayrollView() {
         </table>
       </div>
       <p className="text-[12.5px] text-muted-foreground">
-        Daily-rate staff: days on the time record × rate (half days at half). Monthly staff: half the monthly rate each payday, whatever the absences.
-        Overtime: approved hours at 125%. No SSS, PhilHealth or Pag-IBIG is taken off.
+        Daily-rate staff: days on the time record × rate (half days at half). Monthly staff: half the monthly rate each payday, less the rate ÷ 30 for each
+        day absent. Allowances have nothing taken off. Overtime: approved hours at 125%. SSS, PhilHealth and Pag-IBIG come off the end-of-month payday,
+        for the whole month, from {fmtDay(contributionsFrom)}, {contributionsFrom.slice(0, 4)}.
       </p>
 
       {paying && (
@@ -217,8 +262,20 @@ function PayrollView() {
           onClose={() => setPaying(null)}
           onPay={(p) => {
             const line = paying.line;
+            const w = (label: string) => withheldLines(line).find((x) => x.label === label)?.amount ?? 0;
             recordSalaryPayment(
-              { staffId: line.staff.id, kind: "regular", periodStart: period.start, periodEnd: period.end, basic: line.basic, overtime: line.overtime, ...p },
+              {
+                staffId: line.staff.id,
+                kind: "regular",
+                periodStart: period.start,
+                periodEnd: period.end,
+                basic: line.basic,
+                overtime: line.overtime,
+                sss: w("SSS"),
+                philhealth: w("PhilHealth"),
+                pagibig: w("Pag-IBIG"),
+                ...p,
+              },
               line.staff.name,
               `Salary — ${period.label}`,
             );
@@ -352,7 +409,7 @@ function ThirteenthView() {
           onClose={() => setPaying(null)}
           onPay={(p) => {
             recordSalaryPayment(
-              { staffId: paying.staff.id, kind: "13th", periodStart: `${year}-01-01`, periodEnd: `${year}-12-31`, basic: paying.soFar, overtime: 0, ...p },
+              { staffId: paying.staff.id, kind: "13th", periodStart: `${year}-01-01`, periodEnd: `${year}-12-31`, basic: paying.soFar, overtime: 0, sss: 0, philhealth: 0, pagibig: 0, ...p },
               paying.staff.name,
               `13th month pay — ${year}`,
             );

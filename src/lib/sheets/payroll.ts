@@ -9,15 +9,16 @@ import type { DayStatus, PayrollRecord, StaffMember, TimeRecord } from "@/lib/st
 
 const num = (s: string | undefined) => Number(s) || 0;
 
-const STAFF_HEADER = ["id", "name", "payType", "rate", "position", "pwd", "userId", "startDate", "active", "createdAt", "deletedAt"];
+// New columns go on the end, so a tab made before them keeps lining up.
+const STAFF_HEADER = ["id", "name", "payType", "rate", "position", "pwd", "userId", "startDate", "active", "createdAt", "deletedAt", "allowanceOnly"];
 
 export const staffCollection = createSheetCollection<StaffMember>({
   sheetName: "Staff",
   header: STAFF_HEADER,
   idColumn: "id",
   deletedColumn: "deletedAt",
-  toRow: (s) => [s.id, s.name, s.payType, String(s.rate), s.position, s.pwd ? "yes" : "", s.userId ?? "", s.startDate ?? "", s.active ? "yes" : "no", s.createdAt, ""],
-  fromRow: ([id, name, payType, rate, position, pwd, userId, startDate, active, createdAt]) =>
+  toRow: (s) => [s.id, s.name, s.payType, String(s.rate), s.position, s.pwd ? "yes" : "", s.userId ?? "", s.startDate ?? "", s.active ? "yes" : "no", s.createdAt, "", s.allowanceOnly ? "yes" : ""],
+  fromRow: ([id, name, payType, rate, position, pwd, userId, startDate, active, createdAt, , allowanceOnly]) =>
     id
       ? {
           id,
@@ -29,6 +30,7 @@ export const staffCollection = createSheetCollection<StaffMember>({
           userId: userId || null,
           startDate: startDate || null,
           active: active !== "no",
+          allowanceOnly: allowanceOnly === "yes",
           createdAt: createdAt || new Date().toISOString(),
         }
       : null,
@@ -61,20 +63,20 @@ export const timeRecordsCollection = createSheetCollection<TimeRecord>({
       : null,
 });
 
-const PAYROLL_HEADER = ["id", "staffId", "kind", "periodStart", "periodEnd", "basic", "overtime", "deductions", "deductionNote", "net", "paidOn", "entryId", "createdAt", "deletedAt"];
+const PAYROLL_HEADER = ["id", "staffId", "kind", "periodStart", "periodEnd", "basic", "overtime", "deductions", "deductionNote", "net", "paidOn", "entryId", "createdAt", "deletedAt", "sss", "philhealth", "pagibig"];
 
 export const payrollCollection = createSheetCollection<PayrollRecord>({
   sheetName: "Payroll",
   header: PAYROLL_HEADER,
   idColumn: "id",
   deletedColumn: "deletedAt",
-  toRow: (p) => [p.id, p.staffId, p.kind, p.periodStart, p.periodEnd, String(p.basic), String(p.overtime), String(p.deductions), p.deductionNote ?? "", String(p.net), p.paidOn, p.entryId ?? "", p.createdAt, ""],
-  fromRow: ([id, staffId, kind, periodStart, periodEnd, basic, overtime, deductions, deductionNote, net, paidOn, entryId, createdAt]) =>
+  toRow: (p) => [p.id, p.staffId, p.kind, p.periodStart, p.periodEnd, String(p.basic), String(p.overtime), String(p.deductions), p.deductionNote ?? "", String(p.net), p.paidOn, p.entryId ?? "", p.createdAt, "", String(p.sss || 0), String(p.philhealth || 0), String(p.pagibig || 0)],
+  fromRow: ([id, staffId, kind, periodStart, periodEnd, basic, overtime, deductions, deductionNote, net, paidOn, entryId, createdAt, , sss, philhealth, pagibig]) =>
     id && staffId
       ? {
           id,
           staffId,
-          kind: kind === "13th" ? "13th" : "regular",
+          kind: kind === "13th" || kind === "remittance" ? kind : "regular",
           periodStart: periodStart ?? "",
           periodEnd: periodEnd ?? "",
           basic: num(basic),
@@ -85,6 +87,9 @@ export const payrollCollection = createSheetCollection<PayrollRecord>({
           paidOn: paidOn ?? "",
           entryId: entryId || null,
           createdAt: createdAt || new Date().toISOString(),
+          sss: num(sss),
+          philhealth: num(philhealth),
+          pagibig: num(pagibig),
         }
       : null,
 });
