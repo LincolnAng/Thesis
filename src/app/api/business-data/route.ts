@@ -10,6 +10,7 @@ import { supplierPricesCollection } from "@/lib/sheets/supplier-prices";
 import { businessSettingsCollection } from "@/lib/sheets/business-settings";
 import { usersCollection } from "@/lib/sheets/users";
 import { activityCollection } from "@/lib/sheets/activity";
+import { payrollCollection, staffCollection, timeRecordsCollection } from "@/lib/sheets/payroll";
 import type { SheetCollection } from "@/lib/sheets/collection";
 import { requireSession } from "@/lib/auth/session";
 import { decideWrite, needsExistingRow } from "@/lib/auth/permissions";
@@ -30,6 +31,9 @@ const COLLECTIONS = {
   businessSettings: businessSettingsCollection,
   users: usersCollection,
   activity: activityCollection,
+  staff: staffCollection,
+  timeRecords: timeRecordsCollection,
+  payroll: payrollCollection,
 } as const;
 
 type CollectionName = keyof typeof COLLECTIONS;

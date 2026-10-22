@@ -20,7 +20,7 @@ export type ReminderTone = "bad" | "warn" | "info";
 
 export interface Reminder {
   id: string;
-  category: CalendarCategory | "followup";
+  category: CalendarCategory | "followup" | "salaries";
   tone: ReminderTone;
   title: string;
   detail?: string;
@@ -71,13 +71,19 @@ function fromCalendar(e: CalendarEntry, today: string): Reminder {
 }
 
 const RANK: Record<ReminderTone, number> = { bad: 0, warn: 1, info: 2 };
-const ORDER: Record<Reminder["category"], number> = { payments: 0, followup: 1, alerts: 2, events: 3, production: 4, shipments: 5, dayoffs: 6 };
+const ORDER: Record<Reminder["category"], number> = { payments: 0, salaries: 1, followup: 2, alerts: 3, events: 4, production: 5, shipments: 6, dayoffs: 7 };
 const sortReminders = (list: Reminder[]) =>
   [...list].sort((a, b) => RANK[a.tone] - RANK[b.tone] || ORDER[a.category] - ORDER[b.category] || a.date.localeCompare(b.date));
 
-export function buildReminders(calendar: CalendarEntry[], entries: Entry[], today: string): Reminders {
-  const todays: Reminder[] = [];
-  const upcoming: Reminder[] = [];
+export function buildReminders(
+  calendar: CalendarEntry[],
+  entries: Entry[],
+  today: string,
+  /** Reminders from elsewhere — salaries (lib/payroll/reminders). */
+  extra: { today: Reminder[]; upcoming: Reminder[] } = { today: [], upcoming: [] },
+): Reminders {
+  const todays: Reminder[] = [...extra.today];
+  const upcoming: Reminder[] = [...extra.upcoming];
   const horizon = addDays(today, COMING_UP_DAYS);
 
   for (const e of calendar) {

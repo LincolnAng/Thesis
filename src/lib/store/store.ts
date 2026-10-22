@@ -38,6 +38,9 @@ import type {
   AppUser,
   Role,
   ActivityEvent,
+  StaffMember,
+  TimeRecord,
+  PayrollRecord,
 } from "./types";
 
 export interface StoreState {
@@ -53,6 +56,10 @@ export interface StoreState {
   /** Everyone who uses this app on the shared device, and what they've changed. */
   users: AppUser[];
   activity: ActivityEvent[];
+  /** Salaries (executives); an employee's copy has names only and no payroll. */
+  staff: StaffMember[];
+  timeRecords: TimeRecord[];
+  payroll: PayrollRecord[];
   /** Business-level numbers the owner sets once — hourly labor rate today. */
   businessSettings: Record<string, string>;
   tokenUsage: TokenUsage;
@@ -102,6 +109,9 @@ function defaultState(): StoreState {
     supplierPrices: [],
     users: [],
     activity: [],
+    staff: [],
+    timeRecords: [],
+    payroll: [],
     businessSettings: {},
     tokenUsage: {
       totalInputTokens: 0,
@@ -279,6 +289,9 @@ const COLLECTION_NOUNS: Record<string, string> = {
   machines: "equipment",
   businessSettings: "setting",
   users: "person",
+  staff: "staff member",
+  timeRecords: "time record",
+  payroll: "salary payment",
 };
 
 const OP_VERBS: Record<string, string> = { append: "added", update: "changed", delete: "deleted" };
@@ -637,6 +650,10 @@ async function loadAllFromServer() {
         supplierPrices: supplierPricesMigration.items,
         users: Array.isArray(json.users) ? (json.users as AppUser[]) : prev.users,
         activity: Array.isArray(json.activity) ? (json.activity as ActivityEvent[]) : prev.activity,
+        staff: Array.isArray(json.staff) ? (json.staff as StaffMember[]) : prev.staff,
+        // A time-in still on its way to the sheet stays on screen until the sheet has it.
+        timeRecords: Array.isArray(json.timeRecords) ? mergePending(json.timeRecords as TimeRecord[], prev.timeRecords) : prev.timeRecords,
+        payroll: Array.isArray(json.payroll) ? mergePending(json.payroll as PayrollRecord[], prev.payroll) : prev.payroll,
         businessSettings: businessSettingRowsToRecord(businessSettingsMigration.items),
         loadedFromServer: true,
       };
@@ -1329,4 +1346,110 @@ export function recordBatch(productId: string, jars: number) {
     confidence: 1,
     notes: null,
   });
+}
+
+// --- Salaries ----------------------------------------------------------------------------
+
+/** Rows saved here but not yet back from the sheet, kept so a poll doesn't make them blink out. */
+const pendingSalaryIds = new Set<string>();
+
+function mergePending<T extends { id: string }>(server: T[], local: T[]): T[] {
+  const ids = new Set(server.map((r) => r.id));
+  for (const id of [...pendingSalaryIds]) if (ids.has(id)) pendingSalaryIds.delete(id);
+  // While a change is in flight, the local copy is newer than the server's.
+  const pending = local.filter((r) => pendingSalaryIds.has(r.id));
+  const pendingIds = new Set(pending.map((r) => r.id));
+  return [...server.filter((r) => !pendingIds.has(r.id)), ...pending];
+}
+
+async function saveSalaryRow(collection: "staff" | "timeRecords" | "payroll", op: "append" | "update", item: { id: string }): Promise<boolean> {
+  pendingSalaryIds.add(item.id);
+  const ok = await mirrorOp(collection, op, { id: op === "update" ? item.id : undefined, item });
+  // Once the server has it, the next poll will return it; until then keep showing ours.
+  if (!ok) pendingSalaryIds.delete(item.id);
+  return ok;
+}
+
+export function addStaff(input: Omit<StaffMember, "id" | "createdAt">): StaffMember {
+  const member: StaffMember = { ...input, id: genId("stf"), createdAt: new Date().toISOString() };
+  setState((prev) => ({ ...prev, staff: [...prev.staff, member] }));
+  void saveSalaryRow("staff", "append", member);
+  return member;
+}
+
+export function updateStaff(id: string, patch: Partial<StaffMember>) {
+  const current = state.staff.find((s) => s.id === id);
+  if (!current) return;
+  const updated = { ...current, ...patch, id };
+  setState((prev) => ({ ...prev, staff: prev.staff.map((s) => (s.id === id ? updated : s)) }));
+  void saveSalaryRow("staff", "update", updated);
+}
+
+export function deleteStaff(id: string) {
+  setState((prev) => ({ ...prev, staff: prev.staff.filter((s) => s.id !== id) }));
+  void mirrorOp("staff", "delete", { id });
+}
+
+/** Adds or changes one person's day on the time record. Resolves true once the sheet has it. */
+export function saveTimeRecord(record: Omit<TimeRecord, "id" | "createdAt"> & { id?: string; createdAt?: string }): Promise<boolean> {
+  const existing = record.id
+    ? state.timeRecords.find((r) => r.id === record.id)
+    : state.timeRecords.find((r) => r.staffId === record.staffId && r.date === record.date);
+  const who = currentUser();
+  const row: TimeRecord = {
+    ...record,
+    id: existing?.id ?? genId("dtr"),
+    createdAt: existing?.createdAt ?? new Date().toISOString(),
+    loggedById: who?.id ?? null,
+    loggedByName: who?.name ?? null,
+  };
+  setState((prev) => ({
+    ...prev,
+    timeRecords: existing ? prev.timeRecords.map((r) => (r.id === row.id ? row : r)) : [...prev.timeRecords, row],
+  }));
+  return saveSalaryRow("timeRecords", existing ? "update" : "append", row);
+}
+
+export function deleteTimeRecord(id: string) {
+  setState((prev) => ({ ...prev, timeRecords: prev.timeRecords.filter((r) => r.id !== id) }));
+  void mirrorOp("timeRecords", "delete", { id });
+}
+
+/**
+ * Pays someone: records the payment on Payroll and, with it, a salary expense in Transactions
+ * (category Labor — hidden from employees), so it counts in money paid and money earned.
+ */
+export function recordSalaryPayment(input: Omit<PayrollRecord, "id" | "createdAt" | "entryId">, staffName: string, label: string): PayrollRecord {
+  const [y, m, d] = input.paidOn.split("-").map(Number);
+  const now = new Date();
+  const entry = addEntry({
+    timestamp: new Date(y, m - 1, d, now.getHours(), now.getMinutes()).toISOString(),
+    type: "EXPENSE",
+    amount: input.net,
+    quantity: null,
+    unit: null,
+    sku: label,
+    counterparty: staffName,
+    location: null,
+    priceType: null,
+    category: "labor",
+    rawText: "Salaries tab",
+    confidence: 1,
+    notes: input.deductions > 0 ? `Less ${formatPeso(input.deductions)}${input.deductionNote ? ` (${input.deductionNote})` : ""}` : null,
+    paymentTerm: "spot",
+    paymentMethod: "cash",
+  });
+  const record: PayrollRecord = { ...input, id: genId("pay"), entryId: entry.id, createdAt: new Date().toISOString() };
+  setState((prev) => ({ ...prev, payroll: [...prev.payroll, record] }));
+  void saveSalaryRow("payroll", "append", record);
+  return record;
+}
+
+/** Takes a payment back — the payroll row and the salary expense it recorded. */
+export function undoSalaryPayment(id: string) {
+  const record = state.payroll.find((p) => p.id === id);
+  if (!record) return;
+  setState((prev) => ({ ...prev, payroll: prev.payroll.filter((p) => p.id !== id) }));
+  void mirrorOp("payroll", "delete", { id });
+  if (record.entryId && state.entries.some((e) => e.id === record.entryId)) deleteEntry(record.entryId);
 }

@@ -1,0 +1,28 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { salaryReminders } from "./reminders.ts";
+import type { StaffMember } from "@/lib/store/types";
+
+const s = (over: Partial<StaffMember>): StaffMember => ({ id: "a", name: "Shiela", payType: "daily", rate: 500, position: "", pwd: false, userId: "u1", startDate: null, active: true, createdAt: "", ...over });
+const day = (date: string) => ({ id: date, staffId: "a", date, timeIn: "08:00", timeOut: "17:00", status: "present" as const, otHours: 0, note: "", createdAt: "" });
+
+test("executives are reminded on payday, and about last payday's unpaid", () => {
+  const base = { role: "executive" as const, userId: null, staff: [s({})], payroll: [] };
+  const onPayday = salaryReminders({ ...base, timeRecords: [day("2026-10-01"), day("2026-10-02")], today: "2026-10-15" });
+  assert.match(onPayday.today[0].title, /Payday today: ₱1,000 for 1 person/);
+  const before = salaryReminders({ ...base, timeRecords: [day("2026-10-01")], today: "2026-10-14" });
+  assert.equal(before.upcoming[0]?.id, "salary:payday");
+  const after = salaryReminders({ ...base, timeRecords: [day("2026-10-01")], today: "2026-10-17" });
+  assert.match(after.today.find((r) => r.id === "salary:unpaid")?.title ?? "", /Not paid yet from Oct 1–15, 2026: Shiela/);
+  // Added to the app after that payday: paid outside it, so no reminder.
+  const added = salaryReminders({ ...base, staff: [s({ createdAt: "2026-10-16T09:00:00Z" })], timeRecords: [day("2026-10-01")], today: "2026-10-17" });
+  assert.equal(added.today.some((r) => r.id === "salary:unpaid"), false);
+});
+
+test("13th month is flagged in December until paid; employees are nudged to time in", () => {
+  const dec = salaryReminders({ role: "executive", userId: null, staff: [s({ payType: "monthly", rate: 2000 })], timeRecords: [], payroll: [], today: "2026-12-05" });
+  assert.ok(dec.today.some((r) => r.id === "salary:13th"));
+  const emp = salaryReminders({ role: "employee", userId: "u1", staff: [s({})], timeRecords: [], payroll: [], today: "2026-10-22" });
+  assert.equal(emp.today[0]?.title, "You haven't timed in today");
+  assert.equal(salaryReminders({ role: "employee", userId: "u1", staff: [s({})], timeRecords: [day("2026-10-22")], payroll: [], today: "2026-10-22" }).today.length, 0);
+});

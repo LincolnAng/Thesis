@@ -378,3 +378,67 @@ export interface ActivityEvent {
   /** Set once this change has been undone, so the log shows the reversal rather than hiding it. */
   undoneAt?: string;
 }
+
+// --- Salaries ---------------------------------------------------------------------------
+// Executives only: an employee's copy of Staff carries names (to time in) and nothing else,
+// and Payroll never reaches them (lib/auth/permissions).
+
+export type PayType = "monthly" | "daily";
+
+/** Someone the shop pays. Names and rates live in the sheet, never in the code. */
+export interface StaffMember {
+  id: string;
+  name: string;
+  payType: PayType;
+  /** Pesos a month, or a day, by payType. */
+  rate: number;
+  /** What they do — "Secretary (part-time for MKC)". */
+  position: string;
+  pwd: boolean;
+  /** The app profile that times in as this person, if any. */
+  userId: string | null;
+  /** First day of work, "YYYY-MM-DD"; pay before it isn't owed. */
+  startDate: string | null;
+  active: boolean;
+  createdAt: string;
+}
+
+/** Present = a full day; half = half a day; off = day off or rest day (unpaid for daily staff). */
+export type DayStatus = "present" | "half" | "absent" | "off" | "leave";
+
+/** One person's day on the daily time record (DTR). */
+export interface TimeRecord {
+  id: string;
+  staffId: string;
+  /** "YYYY-MM-DD" */
+  date: string;
+  /** "HH:MM", 24-hour. */
+  timeIn: string | null;
+  timeOut: string | null;
+  status: DayStatus;
+  /** Overtime hours an Executive approved. Only approved hours are paid. */
+  otHours: number;
+  note: string;
+  loggedById?: string | null;
+  loggedByName?: string | null;
+  createdAt: string;
+}
+
+/** A payment made to someone: a regular payday, or their 13th month pay. */
+export interface PayrollRecord {
+  id: string;
+  staffId: string;
+  kind: "regular" | "13th";
+  periodStart: string;
+  periodEnd: string;
+  basic: number;
+  overtime: number;
+  /** Cash advances (bale) or anything else taken off. */
+  deductions: number;
+  deductionNote: string;
+  net: number;
+  paidOn: string;
+  /** The salary expense this payment recorded in Transactions. */
+  entryId: string | null;
+  createdAt: string;
+}

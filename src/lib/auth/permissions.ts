@@ -1,4 +1,4 @@
-import type { ActivityEvent, Entry, EntryType, RawMaterialStock, Role } from "@/lib/store/types";
+import type { ActivityEvent, Entry, EntryType, PayrollRecord, RawMaterialStock, Role, StaffMember, TimeRecord } from "@/lib/store/types";
 import type { ProductRow, RecipeRow } from "@/lib/store/sheet-shapes";
 import { entryIntegrityProblem } from "@/lib/transactions/ledger";
 
@@ -10,7 +10,8 @@ import { entryIntegrityProblem } from "@/lib/transactions/ledger";
  * Executives see and change everything. Employees log sales, spoilage, batches and event
  * stock, and see stock levels and selling prices — but never a cost, a margin, R&D, an expense
  * (payroll lives there), a supplier price, a budget, or the change log (whose "before" copies
- * would leak all of the above).
+ * would leak all of the above). They time themselves in and out, and see staff names — never
+ * a rate or a payslip.
  *
  * The Google Sheet itself is outside these rules: anyone with access to it reads everything.
  */
@@ -29,7 +30,10 @@ export type CollectionName =
   | "supplierPrices"
   | "businessSettings"
   | "users"
-  | "activity";
+  | "activity"
+  | "staff"
+  | "timeRecords"
+  | "payroll";
 
 export type WriteOp = "append" | "update" | "delete" | "migrate";
 
@@ -93,6 +97,9 @@ export interface BusinessData {
   businessSettings: { key: string; value: string }[];
   users: unknown[];
   activity: ActivityEvent[];
+  staff: StaffMember[];
+  timeRecords: TimeRecord[];
+  payroll: PayrollRecord[];
 }
 
 /**
@@ -128,7 +135,22 @@ export function redactForEmployee(data: BusinessData, sellingPrice: (product: Pr
     supplierPrices: [],
     businessSettings: data.businessSettings.filter((s) => employeeCanSeeSetting(s.key)),
     activity: [],
+    // Names, so they can time in — never a rate, a pay type or anything else about pay.
+    staff: data.staff.filter((s) => s.active).map(staffNameOnly),
+    timeRecords: data.timeRecords,
+    payroll: [],
   };
+}
+
+function staffNameOnly(s: StaffMember): StaffMember {
+  return { id: s.id, name: s.name, payType: "daily", rate: 0, position: "", pwd: false, userId: s.userId, startDate: null, active: s.active, createdAt: s.createdAt };
+}
+
+/** The days an employee may time in or out on: today and yesterday (a shift past midnight), in Manila. */
+export function employeeTimeDays(now: Date): string[] {
+  const today = now.toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+  const yesterday = new Date(now.getTime() - 86_400_000).toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+  return [today, yesterday];
 }
 
 export interface WriteRequest {
@@ -140,6 +162,8 @@ export interface WriteRequest {
   item?: Record<string, unknown>;
   /** The row as the sheet holds it now, for update/delete. Undefined if it isn't there. */
   existing?: Record<string, unknown>;
+  /** For tests; the server's clock otherwise. */
+  now?: Date;
 }
 
 export type WriteDecision = { allow: true; item?: Record<string, unknown> } | { allow: false; reason: string };
@@ -148,12 +172,15 @@ const deny = (reason: string): WriteDecision => ({ allow: false, reason });
 
 /** Collections whose update/delete decision depends on the row already in the sheet. */
 export function needsExistingRow(role: Role, collection: CollectionName, op: WriteOp): boolean {
-  return role === "employee" && (op === "update" || op === "delete") && ["entries", "products", "rawMaterials"].includes(collection);
+  return role === "employee" && (op === "update" || op === "delete") && ["entries", "products", "rawMaterials", "timeRecords"].includes(collection);
 }
 
 function stamp(req: WriteRequest): Record<string, unknown> | undefined {
   if (!req.item) return req.item;
   if (req.collection === "entries" && req.op === "append") {
+    return { ...req.item, loggedById: req.user.id, loggedByName: req.user.name };
+  }
+  if (req.collection === "timeRecords" && (req.op === "append" || req.op === "update")) {
     return { ...req.item, loggedById: req.user.id, loggedByName: req.user.name };
   }
   if (req.collection === "activity" && req.op === "append") {
@@ -215,6 +242,34 @@ export function decideWrite(req: WriteRequest): WriteDecision {
         : deny("forbidden");
     case "activity":
       return op === "append" ? { allow: true, item: stamp(req) } : deny("forbidden");
+    case "timeRecords": {
+      // Staff time themselves in and out — today (or last night's shift), nothing earlier, and
+      // only the clock times. Whether a day counts, and overtime, are an Executive's to set.
+      if (op !== "append" && op !== "update") return deny("forbidden");
+      if (!item) return deny("forbidden");
+      const days = employeeTimeDays(req.now ?? new Date());
+      if (!days.includes(String(item.date))) return deny("time_record_too_old");
+      if (op === "update" && (!existing || !days.includes(String(existing.date)) || existing.staffId !== item.staffId)) return deny("forbidden");
+      const clock = (v: unknown) => (typeof v === "string" && /^\d{1,2}:\d{2}$/.test(v) ? v : null);
+      const stamped = stamp(req) ?? {};
+      return {
+        allow: true,
+        item: {
+          ...(existing ?? {}),
+          id: item.id,
+          staffId: item.staffId,
+          date: item.date,
+          timeIn: clock(item.timeIn),
+          timeOut: clock(item.timeOut),
+          status: existing?.status ?? "present",
+          otHours: existing?.otHours ?? 0,
+          note: typeof item.note === "string" ? item.note.slice(0, 200) : "",
+          loggedById: stamped.loggedById,
+          loggedByName: stamped.loggedByName,
+          createdAt: existing?.createdAt ?? item.createdAt ?? new Date().toISOString(),
+        },
+      };
+    }
     default:
       return deny("forbidden");
   }

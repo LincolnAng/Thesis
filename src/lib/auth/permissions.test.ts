@@ -36,6 +36,12 @@ function sample(): BusinessData {
     ],
     users: [],
     activity: [{ id: "a1" }] as never,
+    staff: [
+      { id: "st1", name: "Khent", payType: "monthly", rate: 25000, position: "Production", pwd: false, userId: null, startDate: "2026-01-01", active: true, createdAt: "" },
+      { id: "st2", name: "Old", payType: "daily", rate: 500, position: "", pwd: false, userId: null, startDate: null, active: false, createdAt: "" },
+    ],
+    timeRecords: [{ id: "t1", staffId: "st1", date: "2026-10-21", timeIn: "08:00", timeOut: "17:00", status: "present", otHours: 0, note: "", createdAt: "" }],
+    payroll: [{ id: "pay1", staffId: "st1", kind: "regular", periodStart: "2026-10-01", periodEnd: "2026-10-15", basic: 12500, overtime: 0, deductions: 0, deductionNote: "", net: 12500, paidOn: "2026-10-15", entryId: null, createdAt: "" }],
   };
 }
 
@@ -203,4 +209,32 @@ test("employees never receive payment history, defaults or deadline changes", ()
   ] as never;
   const [sale] = redactForEmployee(data, () => 100).entries as unknown as Record<string, unknown>[];
   for (const f of ["payments", "defaultedAt", "dueDateHistory", "paymentTerms"]) assert.ok(!(f in sale), f);
+});
+
+test("employees see staff names to time in, never rates or payslips", () => {
+  const out = redactForEmployee(sample(), (p) => p.standardPrice);
+  assert.deepEqual(out.staff.map((x) => [x.name, x.rate, x.position]), [["Khent", 0, ""]]);
+  assert.deepEqual(out.payroll, []);
+  assert.equal(out.timeRecords.length, 1);
+});
+
+test("employees time in and out for today only, and can't set pay-related fields", () => {
+  const now = new Date("2026-10-22T02:00:00Z"); // 10 AM in Manila
+  const base = { role: "employee" as const, user: me, collection: "timeRecords" as const, now };
+  const ok = decideWrite({ ...base, op: "append", item: { id: "t9", staffId: "st1", date: "2026-10-22", timeIn: "08:03", status: "absent", otHours: 9 } });
+  assert.ok(ok.allow);
+  assert.equal(ok.allow && ok.item?.status, "present");
+  assert.equal(ok.allow && ok.item?.otHours, 0);
+  assert.equal(ok.allow && ok.item?.loggedByName, "Kuya Jun");
+  assert.equal(decideWrite({ ...base, op: "append", item: { id: "t8", staffId: "st1", date: "2026-10-10", timeIn: "08:00" } }).allow, false);
+  const existing = { id: "t9", staffId: "st1", date: "2026-10-22", timeIn: "08:03", timeOut: null, status: "half", otHours: 1, createdAt: "x" };
+  const out = decideWrite({ ...base, op: "update", item: { ...existing, timeOut: "17:10", status: "present", otHours: 5 }, existing });
+  assert.ok(out.allow);
+  assert.equal(out.allow && out.item?.timeOut, "17:10");
+  assert.equal(out.allow && out.item?.status, "half");
+  assert.equal(out.allow && out.item?.otHours, 1);
+  assert.equal(decideWrite({ ...base, op: "delete", id: "t9", existing } as never).allow, false);
+  for (const collection of ["staff", "payroll"] as const) {
+    assert.equal(decideWrite({ role: "employee", user: me, collection, op: "append", item: { id: "x" } }).allow, false, collection);
+  }
 });
