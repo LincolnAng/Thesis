@@ -392,7 +392,7 @@ function TransactionsPageInner() {
         {notice && (
           <div
             role="status"
-            className={`flex items-start justify-between gap-3 rounded-xl px-4 py-3 text-[14px] ${
+            className={`enter flex items-start justify-between gap-3 rounded-xl px-4 py-3 text-[14px] ${
               notice.tone === "bad" ? "bg-danger/10 text-danger" : notice.tone === "good" ? "bg-success/10 text-success" : "bg-secondary"
             }`}
           >

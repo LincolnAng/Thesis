@@ -97,7 +97,7 @@ function PaymentForm({
   const line = problem ?? (valid && hint ? hint(typed) : "");
 
   return (
-    <li className="-mx-2 flex flex-col gap-1.5 rounded-lg bg-secondary/60 px-2 py-2" onClick={(e) => e.stopPropagation()}>
+    <li className="enter -mx-2 flex flex-col gap-1.5 rounded-lg bg-secondary/60 px-2 py-2" onClick={(e) => e.stopPropagation()}>
       <div className={PAYMENT_GRID}>
         <Input type="date" value={date} max={today} min={minDate} onChange={(e) => setDate(e.target.value)} aria-label="Day it was paid" className="h-8 w-full px-2 text-[12.5px]" />
         <div className="flex min-w-0 items-center gap-1.5">
@@ -303,7 +303,7 @@ export function PaymentLine({
         </div>
       )}
       {mode === "remove" && (
-        <div className="flex flex-wrap items-center justify-end gap-2 rounded-lg bg-danger/5 px-2 py-1.5">
+        <div className="enter flex flex-wrap items-center justify-end gap-2 rounded-lg bg-danger/5 px-2 py-1.5">
           <span className="text-[12.5px]">Remove this {formatPeso(payment.amount)} payment? The balance goes back up by that much.</span>
           <button type="button" onClick={() => setMode("view")} className="min-h-8 rounded-lg px-2.5 text-[12.5px] font-semibold text-muted-foreground hover:bg-secondary">
             Keep it

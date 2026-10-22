@@ -182,7 +182,7 @@ function Details({
   const button = "inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line/25 px-3 text-[13px] font-medium transition hover:border-cacao hover:text-cacao";
 
   return (
-    <div className="grid grid-cols-1 gap-x-12 gap-y-5 px-5 py-4 text-[13px] min-[900px]:grid-cols-2">
+    <div className="enter grid grid-cols-1 gap-x-12 gap-y-5 px-5 py-4 text-[13px] min-[900px]:grid-cols-2">
       <div className="flex flex-col gap-5">
         <Block title={items.length > 1 ? `Products · ${items.length}` : "Product"} aside={priceType && <span className="rounded-full bg-cacao/10 px-2 py-0.5 text-[11px] font-semibold text-cacao">{priceType} price</span>}>
           <ul className="flex flex-col">

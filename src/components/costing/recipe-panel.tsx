@@ -422,7 +422,7 @@ function SearchAdd({ placeholder, options, onPick }: { placeholder: string; opti
         />
       </label>
       {open && (
-        <ul className="absolute left-0 right-0 top-11 z-20 max-h-72 overflow-y-auto rounded-lg border border-line/20 bg-card py-1 shadow-lg">
+        <ul className="pop absolute left-0 right-0 top-11 z-20 max-h-72 overflow-y-auto rounded-lg border border-line/20 bg-card py-1 shadow-lg">
           {matches.length === 0 ? (
             <li className="px-3 py-2 text-[13px] text-muted-foreground">{options.length === 0 ? "Everything is already in the recipe." : "Nothing matches — add it on the Raw materials or Packaging tab first."}</li>
           ) : (

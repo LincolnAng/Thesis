@@ -592,7 +592,7 @@ export function TransactionDialog({
                     )}
                   </label>
                   {searchOpen && (
-                    <ul className="absolute left-0 right-0 top-12 z-30 max-h-72 overflow-y-auto rounded-xl border border-line/20 bg-card py-1 shadow-lg">
+                    <ul className="pop absolute left-0 right-0 top-12 z-30 max-h-72 overflow-y-auto rounded-xl border border-line/20 bg-card py-1 shadow-lg">
                       {shownFamilies.length === 0 ? (
                         <li className="px-3 py-2.5 text-[13px] text-muted-foreground">No product matches “{productSearch.trim()}”.</li>
                       ) : (

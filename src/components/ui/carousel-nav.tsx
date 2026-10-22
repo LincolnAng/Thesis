@@ -65,7 +65,7 @@ export function CarouselNav({
           <span className="mt-1 flex items-center gap-1" role="img" aria-label={`${position.index + 1} of ${position.count}`}>
             {position.count <= 12 ? (
               Array.from({ length: position.count }, (_, i) => (
-                <span key={i} className={`h-1.5 rounded-full transition-all ${i === position.index ? "w-3 bg-cacao" : "w-1.5 bg-line/30"}`} />
+                <span key={i} className={`h-1.5 rounded-full transition-[width,background-color] duration-200 ease-out ${i === position.index ? "w-3 bg-cacao" : "w-1.5 bg-line/30"}`} />
               ))
             ) : (
               <span className="text-[10.5px] font-semibold leading-none tabular-nums text-muted-foreground">
