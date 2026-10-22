@@ -527,11 +527,7 @@ export function ProcessPlan({ details, onPickProduct }: { details?: React.ReactN
       {/* ── How it's made — and, at every step, whether there's enough ── */}
       <Panel
         title="How it's made — is anything short?"
-        note={
-          pickedChip
-            ? `Just ${pickedChip.label}. Shared materials show the total for all products.`
-            : `Every product, raw materials to packed jar. Green is enough for ${month}, red is short. Click a box for the details.`
-        }
+        note={pickedChip ? `Just ${pickedChip.label}. Shared materials show the total for all products.` : undefined}
         aside={
           // How what's shown stands, then which product it is. The carousel is last and a fixed
           // width, so its arrows never move under the cursor as the pill beside it changes.
