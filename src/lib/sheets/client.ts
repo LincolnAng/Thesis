@@ -42,9 +42,50 @@ async function sheetsFetch(path: string, init?: RequestInit) {
   return res.json();
 }
 
-export async function getSheetValues(range: string): Promise<string[][]> {
-  const json = await sheetsFetch(`/values/${encodeURIComponent(range)}`);
-  return json.values ?? [];
+/**
+ * Reads one range — but every read asked for in the same moment goes out as one `batchGet`.
+ *
+ * Loading the app reads ~17 tabs at once, and polling does it again every 30 seconds per open
+ * tab. One request per tab put two people with the app open over Sheets' ~60 reads a minute,
+ * and every load then sat through the 1 s / 2 s / 4 s retries — Production took ~9 s to show.
+ * Batched, a whole load is a single read.
+ */
+export function getSheetValues(range: string): Promise<string[][]> {
+  return new Promise((resolve, reject) => {
+    pendingReads.push({ range, resolve, reject });
+    if (pendingReads.length === 1) setTimeout(flushReads, 0);
+  });
+}
+
+interface PendingRead {
+  range: string;
+  resolve: (rows: string[][]) => void;
+  reject: (err: unknown) => void;
+}
+let pendingReads: PendingRead[] = [];
+
+async function flushReads() {
+  const batch = pendingReads;
+  pendingReads = [];
+  if (batch.length === 1) return readOne(batch[0]);
+  try {
+    const query = batch.map((r) => `ranges=${encodeURIComponent(r.range)}`).join("&");
+    const json = await sheetsFetch(`/values:batchGet?${query}`);
+    const ranges: { values?: string[][] }[] = json.valueRanges ?? [];
+    batch.forEach((r, i) => r.resolve(ranges[i]?.values ?? []));
+  } catch {
+    // One bad range fails the whole batch; read them one by one so only that one fails.
+    await Promise.all(batch.map(readOne));
+  }
+}
+
+async function readOne(r: PendingRead) {
+  try {
+    const json = await sheetsFetch(`/values/${encodeURIComponent(r.range)}`);
+    r.resolve(json.values ?? []);
+  } catch (err) {
+    r.reject(err);
+  }
 }
 
 export async function updateSheetValues(range: string, values: string[][]): Promise<void> {
@@ -108,12 +149,15 @@ async function getSheetId(title: string): Promise<number> {
 // polling. Once a title's been confirmed to exist in this process, trust that and
 // skip the check — tabs aren't expected to disappear mid-session.
 const knownExistingSheets = new Set<string>();
+let listing: Promise<SheetMeta[]> | null = null;
 
 /** Creates the tab with a header row if it doesn't already exist, so a brand-new spreadsheet works with no manual setup. */
 export async function ensureSheetExists(title: string, headerRow: string[]): Promise<void> {
   if (knownExistingSheets.has(title)) return;
 
-  const sheets = await listSheets();
+  // Seventeen collections checking at once share one listing instead of making seventeen.
+  listing ??= listSheets().finally(() => setTimeout(() => (listing = null), 5000));
+  const sheets = await listing;
   if (sheets.some((s) => s.title === title)) {
     knownExistingSheets.add(title);
     return;
