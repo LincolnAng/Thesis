@@ -10,18 +10,14 @@ import { EventPlanDialog } from "@/components/inventory/event-plan-dialog";
 import { PlanSettingsDialog } from "@/components/inventory/plan-settings-dialog";
 import { useStore } from "@/lib/store/use-store";
 import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
-import { useProductionPlan } from "@/lib/summary/use-production-plan";
+import { useCalendarEntries } from "@/lib/calendar/use-calendar-entries";
 import { STRATEGY_HINTS, STRATEGY_LABELS, toIsoDate, type ScheduleStrategy } from "@/lib/summary/production-schedule";
-import { productExpiry } from "@/lib/summary/product-lots";
 import {
   eventPlan,
-  expiringWithinDays,
-  shelfLifeDays,
   toggleUnavailableDay,
   unavailableDays,
 } from "@/lib/summary/business-config";
 import {
-  buildCalendarEntries,
   CATEGORY_LABELS,
   coversDay,
   type CalendarCategory,
@@ -114,7 +110,7 @@ function EntryRow({ entry, onOpen }: { entry: CalendarEntry; onOpen: (e: Calenda
 
 export function CalendarScreen() {
   const store = useStore();
-  const { products, entries, events, eventStock, businessSettings, loadedFromServer } = store;
+  const { products, events, businessSettings, loadedFromServer } = store;
   const exec = isExecutive(useCurrentUser());
   const today = toIsoDate(new Date());
 
@@ -128,34 +124,12 @@ export function CalendarScreen() {
   const [eventDialog, setEventDialog] = useState<{ eventId?: string; date?: string } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
 
-  const plan = useProductionPlan(strategy);
+  const { all, plan } = useCalendarEntries(strategy);
   const eventPlans = useMemo(
     () => Object.fromEntries(events.map((e) => [e.id, eventPlan(businessSettings, e.id)])),
     [events, businessSettings],
   );
   const offDays = unavailableDays(businessSettings);
-
-  const all = useMemo(() => {
-    const within = expiringWithinDays(businessSettings);
-    const lotsByProduct = Object.fromEntries(
-      products.map((p) => [p.id, productExpiry(entries, p, shelfLifeDays(businessSettings, p.id), within).lots]),
-    );
-    return buildCalendarEntries({
-      today,
-      products,
-      planDays: plan.days,
-      events,
-      eventPlans,
-      eventStock,
-      unavailableDays: offDays,
-      entries,
-      lotsByProduct,
-      expiringWithinDays: within,
-      ingredientShortages: plan.ingredientNeeds.filter((n) => n.short > 0),
-      lateBatches: plan.needs.filter((n) => n.batchesLate > 0).map((n) => ({ productName: n.productName, batches: n.batchesLate })),
-      now: new Date(),
-    });
-  }, [today, products, plan, events, eventPlans, eventStock, offDays, entries, businessSettings]);
 
   const visible = all.filter((e) => categories.includes(e.category) && !hidden.has(e.category));
   const on = (date: string) => visible.filter((e) => coversDay(e, date));

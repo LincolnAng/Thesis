@@ -39,7 +39,26 @@ test("a multi-product sale is prepared as one order at catalogue prices, for con
 test("an unknown product makes it ask instead of guessing", () => {
   const out = runTool("prepare_transaction", { type: "sale", items: [{ product: "Chocolate cake", quantity: 1 }] }, view("executive"));
   assert.ok(out.isError);
-  assert.equal(out.proposal, undefined);
+  assert.equal(out.proposal?.kind, "incomplete");
+  assert.match(out.result, /doesn't match a product/);
+});
+
+test("loosely typed products are understood, and every gap is asked for at once", () => {
+  // "log 2 orders of table products" — misspelt, no size, no buyer.
+  const sizes = [product("t150", "Cacao Tablea", "150g", 325), { ...product("t250", "Cacao Tablea", "250g", 500), sizeOfId: "t150" } as Product, product("ice", "Tablea Ice Cream", "90g", 120)];
+  const v = { ...view("executive"), products: sizes };
+  const vague = runTool("prepare_transaction", { type: "sale", items: [{ product: "table products", quantity: 2 }] }, v);
+  assert.equal(vague.proposal?.kind, "incomplete");
+  const missing = vague.proposal?.kind === "incomplete" ? vague.proposal.missing : [];
+  assert.equal(missing.length, 2, missing.join(" | "));
+  assert.match(missing[0], /150g.*250g|250g.*150g/);
+  assert.match(missing[1], /Who bought/);
+
+  const clear = runTool("prepare_transaction", { type: "sale", counterparty: "Ana", items: [{ product: "tableya 250", quantity: 2 }, { product: "ice cream", quantity: 1 }] }, v);
+  assert.equal(clear.proposal?.kind, "transaction");
+  const draft = clear.proposal?.kind === "transaction" ? clear.proposal.draft : null;
+  assert.deepEqual(draft?.lineItems?.map((l) => [l.productId, l.quantity]), [["t250", 2], ["ice", 1]]);
+  assert.equal(draft?.amount, 2 * 500 + 120);
 });
 
 test("an employee can prepare an everyday expense, but not salaries, capital or assets", () => {

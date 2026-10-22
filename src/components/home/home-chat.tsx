@@ -32,24 +32,6 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-function blankDraft(rawText: string): EntryDraft {
-  return {
-    timestamp: new Date().toISOString(),
-    type: "NOTE",
-    amount: null,
-    quantity: null,
-    unit: null,
-    sku: null,
-    counterparty: null,
-    location: null,
-    priceType: null,
-    category: null,
-    rawText,
-    confidence: 0,
-    notes: null,
-  };
-}
-
 /**
  * The assistant, living on Home. Empty: a greeting, one message box and prompts to tap.
  * Once something is sent, the conversation continues right here. Nothing reaches the
@@ -70,9 +52,21 @@ export function HomeChat() {
   const saveCount = useRef(0);
   /** Multi-product orders, investments and payment details are edited in the full transaction
    *  form, which understands them; the small inline form is for single-line entries. */
-  const [fullEdit, setFullEdit] = useState<{ messageId: string; entryId: string | null; draft: EntryDraft } | null>(null);
-  const needsFullForm = (d: EntryDraft) =>
-    Boolean(d.lineItems?.length) || d.type === "CAPITAL" || d.type === "ASSET" || Boolean(d.payments?.length) || Boolean(d.paymentMethod);
+  const [fullEdit, setFullEdit] = useState<{ messageId: string; entryId: string | null; draft: EntryDraft | null; offer?: boolean } | null>(null);
+  // Every kind the full form knows goes there — it handles several products, payment and
+  // investments. Batches and notes keep the small inline form.
+  const needsFullForm = (d: EntryDraft) => ["SALE", "EXPENSE", "WASTE", "CAPITAL", "ASSET"].includes(d.type);
+
+  /** A card under BAi's reply offering the full form, filled with whatever was understood. */
+  function offerForm(draft: EntryDraft | null, missing: string[]) {
+    push({ id: genId(), role: "assistant", kind: "form-offer", draft, missing, createdAt: nowIso() });
+  }
+
+  function handleOpenForm(id: string) {
+    const message = messages.find((m) => m.id === id);
+    if (!message || message.kind !== "form-offer") return;
+    setFullEdit({ messageId: id, entryId: null, draft: message.draft, offer: true });
+  }
 
   const push = pushChatMessage;
   const replace = replaceChatMessage;
@@ -227,14 +221,7 @@ export function HomeChat() {
     push({ id: genId(), role: "user", kind: "text", text: rawText, createdAt: nowIso() });
 
     if (degraded) {
-      push({
-        id: genId(),
-        role: "assistant",
-        kind: "quick-edit",
-        entryId: null,
-        draft: blankDraft(rawText),
-        createdAt: nowIso(),
-      });
+      offerForm(null, []);
       return;
     }
 
@@ -251,10 +238,8 @@ export function HomeChat() {
 
     if (outcome.status !== "ok") {
       push({ id: genId(), role: "assistant", kind: "text", text: outcome.message, retryText: rawText, createdAt: nowIso() });
-      // Recording still works without the assistant: offer the form to fill in by hand.
-      if (outcome.status !== "signed_out") {
-        push({ id: genId(), role: "assistant", kind: "quick-edit", entryId: null, draft: blankDraft(rawText), createdAt: nowIso() });
-      }
+      // Recording still works without the assistant: offer the full form to fill in by hand.
+      if (outcome.status !== "signed_out") offerForm(null, []);
       return;
     }
 
@@ -270,6 +255,8 @@ export function HomeChat() {
     }
     if (outcome.proposal?.kind === "transaction") {
       proposeDraft({ ...outcome.proposal.draft, rawText }, outcome.proposal.stated, rawText);
+    } else if (outcome.proposal?.kind === "incomplete") {
+      offerForm({ ...outcome.proposal.draft, rawText }, outcome.proposal.missing);
     } else if (outcome.proposal?.kind === "payment") {
       push({
         id: genId(),
@@ -426,6 +413,7 @@ export function HomeChat() {
         onPaymentChoice={handlePaymentChoice}
         onEditReview={handleEditReview}
         onPatchReview={handlePatchReview}
+        onOpenForm={handleOpenForm}
         onRetry={handleRetry}
         onGatePick={(id, text) => void handleGateChoice(id, text)}
         onGateRefine={(id, extra) => void handleGateRefine(id, extra)}
@@ -438,11 +426,17 @@ export function HomeChat() {
         <TransactionDialog
           open
           onOpenChange={(open) => !open && setFullEdit(null)}
-          existing={{ ...fullEdit.draft, id: fullEdit.entryId ?? "draft" }}
+          existing={fullEdit.draft ? { ...fullEdit.draft, id: fullEdit.entryId ?? "draft" } : null}
+          title={fullEdit.entryId ? undefined : fullEdit.offer ? "Add transaction" : "Check and change"}
           exec={isExecutive(currentUser)}
           onSave={(draft) => {
             const message = messages.find((m) => m.id === fullEdit.messageId);
-            if (fullEdit.entryId) {
+            if (fullEdit.offer) {
+              // Saving the form is her confirmation — it's logged, with Undo on the card.
+              const entry = addEntry(draft);
+              if (message) replace(message.id, { id: message.id, role: "assistant", kind: "entry", entryId: entry.id, draft, createdAt: message.createdAt });
+              maybeAppendInsight();
+            } else if (fullEdit.entryId) {
               replaceEntry(fullEdit.entryId, draft);
               if (message) replace(message.id, { id: message.id, role: "assistant", kind: "entry", entryId: fullEdit.entryId, draft, createdAt: message.createdAt });
             } else if (message && message.kind === "review") {

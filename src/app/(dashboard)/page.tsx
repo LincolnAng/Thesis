@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { BarChart3, ChevronUp } from "lucide-react";
 import { Page } from "@/components/layout/page";
 import { HomeChat } from "@/components/home/home-chat";
+import { TodayReminders } from "@/components/reminders/reminders";
 import { TodayGlance } from "@/components/home/today-glance";
 import { Headliners } from "@/components/home/headliners";
 import { AdvancedAnalytics } from "@/components/home/advanced-analytics";
@@ -83,6 +84,9 @@ export default function HomePage() {
       }
     >
       <div className="space-y-12 pb-4">
+        <div className="mx-auto w-full max-w-[760px]">
+          <TodayReminders />
+        </div>
         <HomeChat />
         <TodayGlance glance={glance} />
         <Headliners items={headliners} />

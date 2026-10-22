@@ -13,6 +13,7 @@ import { QuickEditForm } from "@/components/home/quick-edit-form";
 import { ReviewCard } from "@/components/home/review-card";
 import { AdviceCard } from "@/components/home/advice-card";
 import { PromptGateCard } from "@/components/home/prompt-gate-card";
+import { FormOfferCard } from "@/components/home/form-offer-card";
 
 // A JSON-mode reply can't be streamed token by token, so there's no real progress to report —
 // this just makes the wait feel shorter than one motionless bubble does. Mounted only while a
@@ -66,6 +67,7 @@ export function ChatThread({
   onGatePick,
   onGateRefine,
   onGateAskAsIs,
+  onOpenForm,
   refiningGateId,
   isLookingUp,
   isTyping = false,
@@ -78,6 +80,8 @@ export function ChatThread({
   onCancelQuickEdit: (id: string) => void;
   /** Writes the proposed entry to the ledger — nothing else in this thread does. */
   onConfirmReview: (id: string) => void;
+  /** Opens the full transaction form for a form-offer card. */
+  onOpenForm?: (id: string) => void;
   /** Applies (or drops) a payment BAi prepared — only on her say-so. */
   onPaymentChoice: (id: string, confirmed: boolean) => void;
   onEditReview: (id: string) => void;
@@ -197,6 +201,8 @@ export function ChatThread({
           )}
 
           {m.kind === "advice" && <AdviceCard advice={m.advice} />}
+
+          {m.kind === "form-offer" && <FormOfferCard missing={m.missing} hasDraft={Boolean(m.draft)} onOpen={() => onOpenForm?.(m.id)} />}
 
           {m.kind === "prompt-gate" && (
             <PromptGateCard

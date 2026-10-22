@@ -147,6 +147,7 @@ export function TransactionDialog({
   exec,
   onSave,
   onDelete,
+  title,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -155,6 +156,8 @@ export function TransactionDialog({
   exec: boolean;
   onSave: (draft: EntryDraft) => void;
   onDelete?: () => void;
+  /** Overrides the heading, e.g. when a prefilled draft is really a new transaction. */
+  title?: string;
 }) {
   const { products, categoryBudgets } = useStore();
   const costCtx = useCostContext();
@@ -492,7 +495,7 @@ export function TransactionDialog({
     <Dialog open={open} onOpenChange={(v) => (v ? onOpenChange(true) : requestClose())}>
       <DialogContent className="flex max-h-[92svh] flex-col gap-0 overflow-hidden rounded-2xl border border-border p-0 ring-0 sm:max-w-lg">
         <DialogHeader className="border-b border-line/10 px-5 py-4">
-          <DialogTitle className="text-[18px]">{e ? "Change transaction" : "Add transaction"}</DialogTitle>
+          <DialogTitle className="text-[18px]">{title ?? (e ? "Change transaction" : "Add transaction")}</DialogTitle>
           <DialogDescription className="sr-only">Fill in the details, then press Save.</DialogDescription>
         </DialogHeader>
 

@@ -7,6 +7,7 @@ import { languageRule } from "@/lib/ai/language";
 import { ADVISOR_MODEL } from "@/lib/ai/client";
 import { runTool, toolsFor, type AgentView, type Proposal } from "@/lib/ai/agent-tools";
 import { NAV_ITEMS, SECONDARY_ITEMS } from "@/lib/nav-items";
+import { fullName } from "@/lib/summary/product-sizes";
 
 /**
  * BAi — the one assistant on Home. Answers anything: general questions, writing, explanations,
@@ -57,10 +58,12 @@ ABOUT THE SHOP'S OWN RECORDS
 - The app's screens are: ${SCREENS}. Point people to them by those names.
 
 RECORDING THINGS
-- When someone asks you to record a sale, expense, spoilage, batch, capital or an asset purchase, use prepare_transaction. For a payment on something owed, find it, then use prepare_payment.
-- Those tools only prepare it: the person sees a card and presses Confirm. Never say it was saved or recorded — say it's ready for them to check and confirm.
-- If something required is missing (which product, how many, how much), ask a short question instead of guessing.
-- A sale of several products is one order: put all the products in one prepare_transaction call.
+- People type quickly and informally — English, Tagalog, Bisaya or a mix, with typos and shorthand: "log 2 orders of table products", "benta 3 tablea kay aling nena", "nagastos 500 sa jars". Work out what they mean. "2 orders of X" means 2 of X. Match product words to the product list below even when misspelt ("table" or "tableya" is Tablea) — pass them to prepare_transaction as written and the tool matches them.
+- When someone wants to record a sale, expense, spoilage, batch, capital or an asset purchase, call prepare_transaction straight away with everything they said, even if something is missing. For a payment on something owed, find it, then use prepare_payment.
+- If the tool reports things missing or unclear (which size, how many, the buyer, the amount), ask for all of them in ONE short message — recap what you understood, then a numbered list of what you still need. A form with what you have is shown under your message so they can fill the gaps by hand instead. Never fill a required detail with a guess. When they answer, call prepare_transaction again with everything from the whole conversation.
+- When it's ready, give a short recap — each product with quantity and price, the total, who, and how it was paid — and ask them to check the card and press Log (or Change to edit it). Never say it was saved or recorded: nothing is saved until they press Log.
+- A sale of several products is one order: put all the products in one prepare_transaction call. If they mention separate buyers, those are separate sales — prepare one and say you'll do the next after.
+- Sensible defaults need no question: today's date, the product's selling price, paid now in cash. Mention them in the recap so they can change them.
 
 THE WEB
 - Use web search for current events, prices, regulations, trends, or anything you aren't sure of. Say clearly which parts come from the web and which come from the shop's records. Never claim you searched when you didn't.
@@ -134,7 +137,8 @@ export async function POST(req: NextRequest) {
     (view.role === "executive"
       ? "an Executive, who can see all the shop's records, including costs, recipes, payroll and debts."
       : "an Employee, who can see sales, everyday expenses, spoilage, stock and selling prices only — not costs, recipes, salaries, investments or debts. Don't speculate about those.") +
-    ` ${languageRule(settings.botLanguage)}`;
+    ` ${languageRule(settings.botLanguage)}` +
+    `\n\nThe shop's products: ${view.products.map((p) => fullName(p, view.products)).join("; ") || "none yet"}.`;
 
   // Alternate roles, merging any repeats, so the history is always valid.
   const messages: Anthropic.Beta.BetaMessageParam[] = [];

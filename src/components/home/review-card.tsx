@@ -44,16 +44,23 @@ export function ReviewCard({
   const needsBank = asksMethod && draft.paymentMethod === "bank_transfer" && !(draft.bankName ?? "").trim();
   const isStated = (field: string) => stated.includes(field);
 
-  const matchedProduct = findProduct(products, draft.sku);
-  const productUnknown = Boolean(draft.sku) && !matchedProduct;
-  const needsProduct = draft.type === "SALE" && !matchedProduct;
+  // An order of several products names each one by id; a single item is matched by name.
+  const lines = draft.lineItems ?? [];
+  const isOrder = lines.length > 0;
+  const matchedProduct = isOrder ? undefined : findProduct(products, draft.sku);
+  const productUnknown = !isOrder && Boolean(draft.sku) && !matchedProduct && (draft.type === "SALE" || draft.type === "WASTE");
+  const needsProduct = draft.type === "SALE" && !isOrder && !matchedProduct;
 
   const rows: Array<{ field: string; label: string; value: string | null }> = [
     { field: "type", label: "Transaction type", value: ENTRY_TYPE_LABELS[draft.type] ?? draft.type },
     { field: "amount", label: "Total amount", value: draft.amount == null ? null : formatPeso(draft.amount) },
-    { field: "quantity", label: "How many", value: draft.quantity == null ? null : String(draft.quantity) },
-    { field: "unit", label: "Unit", value: draft.unit },
-    { field: "sku", label: "Product", value: draft.sku },
+    ...(isOrder
+      ? []
+      : [
+          { field: "quantity", label: "How many", value: draft.quantity == null ? null : String(draft.quantity) },
+          { field: "unit", label: "Unit", value: draft.unit },
+          { field: "sku", label: draft.type === "SALE" || draft.type === "WASTE" ? "Product" : "For", value: draft.sku },
+        ]),
     { field: "counterparty", label: draft.type === "SALE" ? "Buyer" : "Paid to", value: draft.counterparty },
     { field: "notes", label: "Note", value: draft.notes ?? null },
     {
@@ -73,6 +80,28 @@ export function ReviewCard({
         </p>
         <p className="text-xs text-muted-foreground">Status: pending confirmation — nothing has been recorded yet.</p>
       </div>
+
+      {isOrder && (
+        <div className="rounded-xl bg-secondary/60 px-2.5 py-2">
+          <p className="mb-1 text-xs font-semibold text-muted-foreground">
+            {lines.length === 1 ? "Product" : `${lines.length} products in this order`}
+          </p>
+          <ul className="space-y-1">
+            {lines.map((l, i) => (
+              <li key={`${l.productId ?? l.name}-${i}`} className="flex items-baseline justify-between gap-2 text-sm">
+                <span className="min-w-0">
+                  <span className="font-medium text-foreground">{l.name}</span>
+                  <span className="text-muted-foreground">
+                    {" "}
+                    · {l.quantity} × {formatPeso(l.unitPrice)}
+                  </span>
+                </span>
+                <span className="shrink-0 font-medium tabular-nums">{formatPeso(l.quantity * l.unitPrice)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <ul className="space-y-1.5">
         {rows.map((row) => (
@@ -111,7 +140,8 @@ export function ReviewCard({
         </div>
       )}
       {owedLater && exec && (
-        <p className="text-xs text-muted-foreground">{draft.paymentTerm === "receivable" ? "The customer pays later" : "Paid later"} — how it&apos;s paid is asked when the payment comes in.</p>
+        <p className="text-xs text-muted-foreground">{draft.paymentTerm === "receivable" ? "The customer pays later" : "Paid later"}
+          {draft.dueDate ? `, due ${new Date(draft.dueDate).toLocaleDateString("en-PH", { month: "long", day: "numeric" })}` : ""} — how it&apos;s paid is asked when the payment comes in.</p>
       )}
 
       {productUnknown && (
@@ -126,7 +156,7 @@ export function ReviewCard({
 
       <div className="flex items-center gap-2">
         <Button size="sm" className="flex-1" disabled={needsProduct || needsBank} onClick={onConfirm}>
-          Log this {draft.type === "SALE" ? "sale" : "entry"}
+          Log this {draft.type === "SALE" ? "sale" : draft.type === "EXPENSE" ? "expense" : "entry"}
         </Button>
         <Button size="sm" variant="secondary" className={cn("gap-1", needsProduct && "flex-1")} onClick={onEdit}>
           <PencilLine className="h-3.5 w-3.5" />

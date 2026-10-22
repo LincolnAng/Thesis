@@ -5,6 +5,7 @@ import type { EntryDraft } from "@/lib/home/describe-entry";
 import type { CostContext } from "@/lib/summary/recipe-cost";
 import { effectiveProductPrice, productCostPerJar } from "@/lib/summary/recipe-cost";
 import { findProduct } from "@/lib/summary/product-match";
+import { resolveProduct } from "@/lib/ai/product-resolve";
 import { fullName } from "@/lib/summary/product-sizes";
 import { costPerUnit } from "@/lib/costing/price-calc";
 import { canBeOwed, dueInfo, isAnyInvestment, monthOf, outstanding, paidSoFar, statusOf, summarize, termOf, addPayment } from "@/lib/transactions/ledger";
@@ -35,6 +36,8 @@ export interface AgentView {
 /** What a prepare_* tool hands back to the screen for confirming. */
 export type Proposal =
   | { kind: "transaction"; draft: EntryDraft; stated: string[] }
+  /** Something to record with gaps BAi is asking about; shown as a form they can finish by hand. */
+  | { kind: "incomplete"; draft: EntryDraft; missing: string[] }
   | { kind: "payment"; entryId: string; summary: string; patch: Partial<Entry> };
 
 export interface ToolOutcome {
@@ -112,7 +115,7 @@ export const AGENT_TOOLS: Anthropic.Tool[] = [
   {
     name: "prepare_transaction",
     description:
-      "Prepare a new transaction for the person to check and confirm. Nothing is saved until they press Confirm. Use only when they ask to record something and you have what's required; if something required is missing, ask them instead of guessing. A sale needs at least one product and quantity (several products make one order) and the buyer's name; an expense needs what it was for, the amount and who was paid; an asset needs what was bought and the amount; capital needs who put it in and the amount; spoilage and batch_made need a product and quantity.",
+      "Prepare a new transaction for the person to check and confirm. Nothing is saved until they press Log on the card. Call it whenever someone wants something recorded — even if details are missing: it matches loosely typed product names (typos, no size, words like 'jars' or 'orders'), and reports back everything still missing or unclear so you can ask for it all at once. A sale needs each product with its quantity (several products make one order) and the buyer's name; an expense needs what it was for, the amount and who was paid; an asset needs what was bought and the amount; capital needs who put it in and the amount; spoilage and batch_made need a product and quantity. Pass products as the person wrote them; don't invent quantities, buyers or amounts.",
     input_schema: {
       type: "object",
       properties: {
@@ -379,12 +382,16 @@ function prepareTransaction(input: Record<string, unknown>, view: AgentView): To
   if (view.role !== "executive" && type === "expense" && PAYROLL_CATEGORIES.has(String(input.category ?? "").trim().toLowerCase())) {
     return { result: json({ error: "Salaries are recorded by an Executive." }), isError: true };
   }
+  if (!["sale", "expense", "spoilage", "batch_made", "capital", "asset"].includes(type)) {
+    return { result: json({ error: "Unknown transaction type." }), isError: true };
+  }
   const date = /^\d{4}-\d{2}-\d{2}$/.test(String(input.date ?? "")) ? String(input.date) : today(now);
   const [y, m, d] = date.split("-").map(Number);
   const timestamp = new Date(y, m - 1, d, now.getHours(), now.getMinutes()).toISOString();
   const items = Array.isArray(input.items) ? (input.items as { product?: string; quantity?: number; unit_price?: number }[]) : [];
   const stated: string[] = ["type"];
-  const fail = (msg: string): ToolOutcome => ({ result: json({ error: msg, instruction: "Ask the person for this; don't guess." }), isError: true });
+  // Everything still needed, asked for together — never one gap at a time, and never guessed.
+  const missing: string[] = [];
 
   const draft: EntryDraft = {
     timestamp,
@@ -404,63 +411,84 @@ function prepareTransaction(input: Record<string, unknown>, view: AgentView): To
   if (draft.counterparty) stated.push("counterparty");
   if (input.date) stated.push("timestamp");
 
-  const pick = (it: { product?: string }) => productNamed(view, String(it.product ?? ""));
+  /** The product they meant, or a question that pins it down. */
+  const resolve = (typed: string): Product | null => {
+    const r = resolveProduct(view.products, typed);
+    if (r.kind === "one") return r.product;
+    if (r.kind === "several") missing.push(`Which "${typed}" — ${r.options.map((p) => fullName(p, view.products)).join(", or ")}?`);
+    else missing.push(`"${typed}" doesn't match a product. The products are: ${r.suggestions.map((p) => fullName(p, view.products)).join("; ")}.`);
+    return null;
+  };
 
   if (type === "sale") {
-    if (items.length === 0) return fail("Which products, and how many of each?");
-    if (!draft.counterparty) return fail("Who bought it? A sale needs the buyer's name.");
     const lines: OrderLine[] = [];
+    if (items.length === 0) missing.push("Which products, and how many of each?");
     for (const it of items) {
-      const p = pick(it);
-      if (!p) return fail(`"${it.product}" isn't a product in Costing. Ask which product they meant.`);
-      if (!(Number(it.quantity) > 0)) return fail(`How many ${fullName(p, view.products)}?`);
-      const unitPrice = Number(it.unit_price) >= 0 && it.unit_price != null ? Number(it.unit_price) : priceOf(view, p);
-      lines.push({ productId: p.id, name: fullName(p, view.products), quantity: Number(it.quantity), unitPrice: r2(unitPrice) });
+      const p = resolve(String(it.product ?? ""));
+      if (!p) continue;
+      const name = fullName(p, view.products);
+      if (!(Number(it.quantity) > 0)) {
+        missing.push(`How many ${name}?`);
+        continue;
+      }
+      const unitPrice = it.unit_price != null && Number(it.unit_price) >= 0 ? Number(it.unit_price) : priceOf(view, p);
+      if (!(unitPrice > 0) && it.unit_price == null) missing.push(`${name} has no selling price yet — how much was it each?`);
+      const same = lines.find((l) => l.productId === p.id && l.unitPrice === r2(unitPrice));
+      if (same) same.quantity += Number(it.quantity);
+      else lines.push({ productId: p.id, name, quantity: Number(it.quantity), unitPrice: r2(unitPrice) });
     }
-    const listed = orderTotal(lines);
-    Object.assign(draft, {
-      type: "SALE",
-      priceType: "standard",
-      lineItems: lines,
-      quantity: orderQuantity(lines),
-      sku: lines.length === 1 ? lines[0].name : describeOrder(lines),
-      unit: lines.length === 1 ? (view.products.find((p) => p.id === lines[0].productId)?.unit ?? null) : null,
-      amount: Number(input.amount) > 0 ? r2(Number(input.amount)) : listed,
-    });
-    stated.push("sku", "quantity");
-    if (Number(input.amount) > 0 || items.some((i) => i.unit_price != null)) stated.push("amount");
+    if (!draft.counterparty) missing.push("Who bought it? (the buyer's name)");
+    if (lines.length) {
+      Object.assign(draft, {
+        type: "SALE",
+        priceType: "standard",
+        lineItems: lines,
+        quantity: orderQuantity(lines),
+        sku: lines.length === 1 ? lines[0].name : describeOrder(lines),
+        unit: lines.length === 1 ? (view.products.find((p) => p.id === lines[0].productId)?.unit ?? null) : null,
+        amount: Number(input.amount) > 0 ? r2(Number(input.amount)) : orderTotal(lines),
+      });
+      stated.push("sku", "quantity");
+      if (Number(input.amount) > 0 || items.some((i) => i.unit_price != null)) stated.push("amount");
+    }
   } else if (type === "spoilage" || type === "batch_made") {
+    draft.type = type === "spoilage" ? "WASTE" : "INVENTORY_IN";
     const it = items[0];
-    const p = it ? pick(it) : undefined;
-    if (!p) return fail("Which product?");
-    if (!(Number(it.quantity) > 0)) return fail("How many?");
-    Object.assign(draft, { type: type === "spoilage" ? "WASTE" : "INVENTORY_IN", sku: p.name, quantity: Number(it.quantity), unit: p.unit ?? null });
-    stated.push("sku", "quantity");
+    const p = it ? resolve(String(it.product ?? "")) : null;
+    if (!it) missing.push("Which product?");
+    if (p) Object.assign(draft, { sku: p.name, unit: p.unit ?? null });
+    if (it && Number(it.quantity) > 0) {
+      draft.quantity = Number(it.quantity);
+      stated.push("sku", "quantity");
+    } else if (p) missing.push(`How many ${fullName(p, view.products)}?`);
   } else if (type === "expense" || type === "asset") {
     const what = String(input.description ?? "").trim();
-    if (type === "expense" && !draft.counterparty) return fail("Who was it paid to? An expense needs the name of who was paid.");
-    if (!what) return fail(type === "asset" ? "What was bought?" : "What was the expense for?");
-    if (!(Number(input.amount) > 0)) return fail("How much was it?");
-    Object.assign(draft, { type: type === "asset" ? "ASSET" : "EXPENSE", sku: what, amount: r2(Number(input.amount)), category: type === "expense" ? String(input.category ?? "misc") : null });
+    draft.type = type === "asset" ? "ASSET" : "EXPENSE";
+    draft.category = type === "expense" ? String(input.category ?? "misc") : null;
+    if (what) draft.sku = what;
+    else missing.push(type === "asset" ? "What was bought?" : "What was the expense for?");
+    if (Number(input.amount) > 0) draft.amount = r2(Number(input.amount));
+    else missing.push("How much was it?");
+    if (type === "expense" && !draft.counterparty) missing.push("Who was it paid to?");
     stated.push("sku", "amount");
     if (input.category) stated.push("category");
   } else if (type === "capital") {
-    if (!draft.counterparty) return fail("Who put the money in?");
-    if (!(Number(input.amount) > 0)) return fail("How much was put in?");
-    Object.assign(draft, { type: "CAPITAL", sku: "Capital put in", amount: r2(Number(input.amount)) });
+    Object.assign(draft, { type: "CAPITAL", sku: "Capital put in" });
+    if (!draft.counterparty) missing.push("Who put the money in?");
+    if (Number(input.amount) > 0) draft.amount = r2(Number(input.amount));
+    else missing.push("How much was put in?");
     stated.push("amount");
-  } else {
-    return fail("Unknown transaction type.");
   }
 
   // Payment, for executives — employees never set payment terms.
   if (view.role === "executive" && ["SALE", "EXPENSE", "ASSET", "CAPITAL"].includes(draft.type)) {
     const method: PaymentMethod = input.method === "bank_transfer" ? "bank_transfer" : "cash";
-    if (method === "bank_transfer" && !String(input.bank ?? "").trim()) return fail("Which bank was it sent through?");
+    const bank = String(input.bank ?? "").trim();
+    if (method === "bank_transfer" && !bank) missing.push("Which bank was it sent through?");
     const later = input.paid_now === false && draft.type !== "CAPITAL";
     Object.assign(draft, {
       paymentMethod: input.method ? method : null,
-      bankName: method === "bank_transfer" ? String(input.bank).trim() : null,
+      bankName: method === "bank_transfer" && bank ? bank : null,
       paymentTerm: later ? (draft.type === "SALE" ? "receivable" : "payable") : "spot",
       dueDate: later && /^\d{4}-\d{2}-\d{2}$/.test(String(input.due_date ?? "")) ? String(input.due_date) : null,
       paymentStatus: later ? "pending" : null,
@@ -468,8 +496,34 @@ function prepareTransaction(input: Record<string, unknown>, view: AgentView): To
     if (input.paid_now !== undefined) stated.push("paymentTerm");
   }
 
+  const summary = {
+    type: draft.type,
+    products: draft.lineItems?.map((l) => ({ name: l.name, quantity: l.quantity, unit_price: l.unitPrice, subtotal: r2(l.quantity * l.unitPrice) })),
+    item: draft.sku,
+    quantity: draft.quantity,
+    amount: draft.amount,
+    counterparty: draft.counterparty,
+    date,
+    payment: draft.paymentTerm ?? "spot",
+    method: draft.paymentMethod ?? null,
+  };
+
+  if (missing.length) {
+    return {
+      result: json({
+        ok: false,
+        missing,
+        understood_so_far: summary,
+        instruction:
+          "Not ready to record. Ask the person for everything in `missing` in one short message (a numbered list if more than one), recapping what you understood so far. A form with what you have is shown so they can fill the gaps by hand instead. When they answer, call prepare_transaction again with everything.",
+      }),
+      isError: true,
+      proposal: { kind: "incomplete", draft, missing },
+    };
+  }
+
   return {
-    result: json({ ok: true, shown_for_confirmation: true, summary: { type: draft.type, item: draft.sku, quantity: draft.quantity, amount: draft.amount, counterparty: draft.counterparty, payment: draft.paymentTerm ?? "spot" } }),
+    result: json({ ok: true, shown_for_confirmation: true, summary, instruction: "Recap it briefly for the person (each product with quantity and price, the total, who, and how it was paid) and ask them to check the card and press Log, or Change to edit it." }),
     proposal: { kind: "transaction", draft, stated },
   };
 }

@@ -57,6 +57,18 @@ export type ChatMessage =
       sessionId: string;
     }
   | { id: string; role: "assistant"; kind: "insight"; text: string; createdAt: string; sessionId: string }
+  // Something to record that BAi couldn't finish (details missing, or the AI was unreachable):
+  // a button to the full transaction form, filled in with whatever was understood. Saving from
+  // the form is the person's own confirmation.
+  | {
+      id: string;
+      role: "assistant";
+      kind: "form-offer";
+      draft: EntryDraft | null;
+      missing: string[];
+      createdAt: string;
+      sessionId: string;
+    }
   // Parsed but NOT yet written to the ledger. Nothing is saved until the owner presses the
   // confirm button on this card — the assistant proposes, it never records on its own.
   | {

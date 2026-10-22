@@ -2,10 +2,11 @@
 
 import type { ReactNode } from "react";
 import { SpreadsheetButton } from "@/components/settings/spreadsheet-button";
+import { ReminderBell } from "@/components/reminders/reminders";
 
 /**
- * Every page's frame: a title bar (title on the left; the page's main actions and the way out
- * to the spreadsheet on the right) over a padded content area.
+ * Every page's frame: a title bar (title on the left; the page's main actions, the way out
+ * to the spreadsheet and the reminders bell on the right) over a padded content area.
  *
  * There is no Simple/Advanced switch here any more. Every page shows its one full view; only
  * Home has an Advanced button, for its charts.
@@ -32,6 +33,7 @@ export function Page({
         <div className="flex flex-wrap items-center gap-2.5">
           {right}
           <SpreadsheetButton />
+          <ReminderBell />
         </div>
       </header>
       <div className="flex-1 px-4 py-7 min-[1024px]:px-8">
