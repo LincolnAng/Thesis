@@ -7,6 +7,9 @@ import { seasonStrength } from "@/lib/summary/seasonality";
 import { ConfidenceDonut } from "@/components/inventory/confidence-donut";
 import { EMPTY, seasonColor } from "@/lib/summary/scale-colors";
 import { useStore } from "@/lib/store/use-store";
+import { CarouselNav } from "@/components/ui/carousel-nav";
+import { Segmented } from "@/components/ui/kit";
+import { fullName } from "@/lib/summary/product-sizes";
 import { productPattern, seasonNotes, shelfLifeDays } from "@/lib/summary/business-config";
 import { workOutPattern } from "@/lib/summary/work-out-pattern";
 
@@ -58,10 +61,12 @@ function MonthByProduct({
   forecasts,
   monthIdx,
   label,
+  nameOf,
 }: {
   forecasts: ProductForecast[];
   monthIdx: number;
   label: string;
+  nameOf: (f: ProductForecast) => string;
 }) {
   const rows = forecasts
     .map((f) => ({ forecast: f, month: f.monthly[monthIdx] as ProductForecast["monthly"][number] | undefined }))
@@ -85,7 +90,7 @@ function MonthByProduct({
               key={forecast.productId}
               className="grid grid-cols-[minmax(0,1fr)_56px_170px_90px] items-center gap-3 py-1 text-[12px]"
             >
-              <span className="truncate pl-4 text-muted-foreground">{forecast.productName}</span>
+              <span className="truncate pl-4 text-muted-foreground">{nameOf(forecast)}</span>
               <span className="text-right text-muted-foreground">—</span>
               <span className="text-[11px] text-muted-foreground">no sales yet to forecast from</span>
               <span />
@@ -99,7 +104,7 @@ function MonthByProduct({
             key={forecast.productId}
             className="grid grid-cols-[minmax(0,1fr)_56px_170px_90px] items-center gap-3 py-1 text-[12px]"
           >
-            <span className="truncate pl-4">{forecast.productName}</span>
+            <span className="truncate pl-4">{nameOf(forecast)}</span>
             <span className="text-right font-semibold tabular-nums">{Math.round(month.units)}</span>
             <span className="flex items-center gap-2" title={`${month.seasonIndex.toFixed(2)}x an ordinary month`}>
               <span
@@ -127,8 +132,8 @@ function MonthByProduct({
                   range: month.range,
                   note:
                     month.observed === 0
-                      ? `No ${label.replace(/\s+\d+$/, "")} on record for ${forecast.productName} yet.`
-                      : `${month.observed} ${month.observed === 1 ? "year" : "years"} of this month logged for ${forecast.productName}.`,
+                      ? `No ${label.replace(/\s+\d+$/, "")} on record for ${nameOf(forecast)} yet.`
+                      : `${month.observed} ${month.observed === 1 ? "year" : "years"} of this month logged for ${nameOf(forecast)}.`,
                 }}
               />
             </span>
@@ -136,7 +141,7 @@ function MonthByProduct({
         );
       })}
       <div className="mt-1 border-t border-line/10 pt-1 pl-4 text-[11px] text-muted-foreground">
-        {`Adds up to ${total} — the figure on the row above.`}
+        {`Adds up to ${total} — the figure above.`}
       </div>
     </div>
   );
@@ -153,10 +158,12 @@ function ProductFilter({
   all,
   excluded,
   onChange,
+  nameOf,
 }: {
   all: ProductForecast[];
   excluded: Set<string>;
   onChange: (next: Set<string>) => void;
+  nameOf: (f: ProductForecast) => string;
 }) {
   const [open, setOpen] = useState(false);
   const included = all.filter((f) => !excluded.has(f.productId));
@@ -164,7 +171,7 @@ function ProductFilter({
     excluded.size === 0
       ? "All products"
       : included.length === 1
-        ? included[0].productName
+        ? nameOf(included[0])
         : `${included.length} of ${all.length} products`;
 
   return (
@@ -217,7 +224,7 @@ function ProductFilter({
                     >
                       {on && <Check className="h-3 w-3" />}
                     </span>
-                    <span className="truncate">{f.productName}</span>
+                    <span className="truncate">{nameOf(f)}</span>
                   </button>
                 </div>
               );
@@ -225,6 +232,73 @@ function ProductFilter({
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+/** One month: how many to expect altogether, how strong its season is, and the split by product. */
+function MonthSummary({
+  months,
+  at,
+  onStep,
+  chosen,
+  shown,
+  nameOf,
+}: {
+  months: { m: ProductForecast["monthly"][number]; i: number }[];
+  at: number;
+  onStep: (n: number) => void;
+  chosen: ProductForecast;
+  shown: ProductForecast[];
+  nameOf: (f: ProductForecast) => string;
+}) {
+  if (months.length === 0) return null;
+  const index = Math.min(at, months.length - 1);
+  const { m, i } = months[index];
+  const { score, word } = seasonStrength(m.seasonIndex);
+  const colour = seasonColor(score);
+  return (
+    <div className="rounded-xl border border-line/15">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-3">
+        <CarouselNav
+          label={m.label}
+          onPrev={() => onStep(Math.max(0, index - 1))}
+          onNext={() => onStep(Math.min(months.length - 1, index + 1))}
+          atStart={index === 0}
+          atEnd={index === months.length - 1}
+          position={{ index, count: months.length }}
+          prevLabel="Earlier month"
+          nextLabel="Later month"
+        />
+        <div className="flex items-center gap-3">
+          <span className="text-[13px] text-muted-foreground">
+            <b className="font-display text-[22px] text-foreground tabular-nums">{Math.round(m.units)}</b> expected
+          </span>
+          <span
+            className="whitespace-nowrap rounded-md px-2 py-[3px] text-[10px] font-bold tracking-wide text-white"
+            style={{ background: colour }}
+            title={`${m.seasonIndex.toFixed(2)}x an ordinary month`}
+          >
+            {word}
+          </span>
+          <ConfidenceDonut
+            reliability={chosen.reliability}
+            override={{
+              bars: m.bars,
+              range: m.range,
+              note:
+                m.observed === 0
+                  ? `You have never logged a ${m.label.replace(/\s+\d+$/, "")} yet, so this month leans on the pattern rather than your own figures.`
+                  : `You have ${m.observed} ${m.observed === 1 ? "year" : "years"} of this calendar month logged.`,
+            }}
+          />
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <div className="min-w-[440px]">
+          <MonthByProduct forecasts={shown} monthIdx={i} label={m.label} nameOf={nameOf} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -245,6 +319,12 @@ export function SeasonalBreakdown({
   // filter quietly disagree with the Products page about how many products exist, and "this
   // one has no forecast" is itself worth seeing.
   const forecastable = forecasts;
+  // Names come from the product list as it is now, sizes included ("Classic · 250 g"), so a
+  // rename or a new size shows here at once instead of the name the forecast was built with.
+  const nameOf = (f: ProductForecast) => {
+    const p = products.find((x) => x.id === f.productId);
+    return p ? fullName(p, products) : f.productName;
+  };
 
   /**
    * Which products the table is about.
@@ -271,6 +351,10 @@ export function SeasonalBreakdown({
   const [learning, setLearning] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [openMonth, setOpenMonth] = useState<string | null>(null);
+  // One month at a time by default — twelve rows at once was a lot to take in — with every
+  // month in one table a tap away.
+  const [view, setView] = useState<"month" | "all">("month");
+  const [monthAt, setMonthAt] = useState(0);
   const running = useRef(false);
 
   const chosenId = chosen?.productId ?? "";
@@ -376,14 +460,25 @@ export function SeasonalBreakdown({
           </div>
           <p className="mt-0.5 text-xs text-muted-foreground">{chosen.reliability.reason}</p>
         </div>
-        {forecastable.length > 1 && <ProductFilter all={forecastable} excluded={excluded} onChange={setExcluded} />}
+        <div className="flex flex-wrap items-center gap-2">
+          <Segmented
+            label="Show one month or all"
+            value={view}
+            onChange={setView}
+            options={[
+              { value: "month", label: "By month" },
+              { value: "all", label: "All months" },
+            ]}
+          />
+          {forecastable.length > 1 && <ProductFilter all={forecastable} excluded={excluded} onChange={setExcluded} nameOf={nameOf} />}
+        </div>
       </div>
 
       {/* What the app worked out about this product's year, in her words, not a settings link. */}
       {learning === chosen.productId ? (
         <p className="mb-3 flex items-center gap-2 rounded-xl border border-cacao/25 bg-cacao/[0.04] px-4 py-2.5 text-[12px]">
           <Sparkles className="h-3.5 w-3.5 animate-pulse text-cacao" />
-          {`Working out when ${chosen.productName} sells best…`}
+          {`Working out when ${nameOf(chosen)} sells best…`}
         </p>
       ) : pattern ? (
         <p className="mb-3 rounded-xl border border-cacao/25 bg-cacao/[0.04] px-4 py-2.5 text-[12px] leading-relaxed">
@@ -400,6 +495,18 @@ export function SeasonalBreakdown({
         <p className="mb-3 rounded-xl bg-danger/[0.06] px-4 py-2.5 text-[12px] text-danger">{failed}</p>
       ) : null}
 
+      {view === "month" ? (
+        <MonthSummary
+          months={chosen.monthly.map((m, i) => ({ m, i })).filter(({ m }) => m.month !== skipMonth)}
+          at={monthAt}
+          onStep={setMonthAt}
+          chosen={chosen}
+          shown={shown}
+          nameOf={nameOf}
+        />
+      ) : (
+      <div className="overflow-x-auto">
+      <div className="min-w-[560px]">
       <div
         className={`${COLS} border-b border-line/10 pb-2 text-[10px] font-bold uppercase leading-tight tracking-wide text-muted-foreground`}
       >
@@ -473,10 +580,13 @@ export function SeasonalBreakdown({
               </span>
             </button>
 
-            {open && <MonthByProduct forecasts={shown} monthIdx={monthIdx} label={m.label} />}
+            {open && <MonthByProduct forecasts={shown} monthIdx={monthIdx} label={m.label} nameOf={nameOf} />}
           </div>
         );
       })}
+      </div>
+      </div>
+      )}
 
       <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
         <span className="font-semibold">Season</span> runs from VERY LEAN to VERY STRONG — red means you sell less than
