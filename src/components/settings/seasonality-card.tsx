@@ -24,7 +24,8 @@ import type { Product } from "@/lib/store/types";
 import { fullName } from "@/lib/summary/product-sizes";
 
 /**
- * Which months are busy, per product — worked out rather than asked for.
+ * Which months are busy and quiet, per product — worked out rather than asked for, and said in
+ * words (month names) rather than as bars and multipliers.
  *
  * This used to be a dropdown: the owner picked a named pattern for each product. That was
  * backwards. "When is this product busy?" is the question she wants the app to answer, not a
@@ -37,7 +38,7 @@ import { fullName } from "@/lib/summary/product-sizes";
 
 const SOURCE_LABEL: Record<ProductPattern["source"], string> = {
   measured: "From your sales",
-  suggested: "Worked out by BAi",
+  suggested: "Best guess",
   manual: "You set this",
   legacy: "Old setting",
   none: "Not set",
@@ -51,19 +52,36 @@ const SOURCE_TONE: Record<ProductPattern["source"], string> = {
   none: "bg-secondary text-muted-foreground",
 };
 
-function MiniBars({ months }: { months: number[] }) {
-  const max = Math.max(...months, 1);
+/**
+ * The pattern in words — "Busiest: Dec, Feb · Quietest: Jun" — rather than twelve unlabelled
+ * bars and multipliers she had to decode. A month counts as busy at 15% above an ordinary one.
+ */
+function BusyQuiet({ months }: { months: number[] }) {
+  const pick = (keep: (m: number) => boolean, order: (a: number, b: number) => number) =>
+    months
+      .map((m, i) => ({ m, i }))
+      .filter((x) => keep(x.m))
+      .sort((a, b) => order(a.m, b.m))
+      .slice(0, 3)
+      .map((x) => MONTH_LABELS[x.i]);
+  const busiest = pick((m) => m >= 1.15, (a, b) => b - a);
+  const quietest = pick((m) => m <= 0.85, (a, b) => a - b);
+  if (busiest.length === 0 && quietest.length === 0) {
+    return <p className="text-[13px]">About the same all year</p>;
+  }
   return (
-    <div className="flex items-end gap-[3px]" aria-hidden>
-      {months.map((m, i) => (
-        <span
-          key={i}
-          title={`${MONTH_LABELS[i]} ${m.toFixed(2)}×`}
-          className={`w-[7px] rounded-sm ${m >= 1.15 ? "bg-cacao" : m <= 0.85 ? "bg-line/30" : "bg-cacao/40"}`}
-          style={{ height: `${Math.max(4, (m / max) * 26)}px` }}
-        />
-      ))}
-    </div>
+    <p className="flex flex-wrap gap-x-4 gap-y-0.5 text-[13px]">
+      {busiest.length > 0 && (
+        <span>
+          <span className="font-semibold text-success">Busiest:</span> {busiest.join(", ")}
+        </span>
+      )}
+      {quietest.length > 0 && (
+        <span>
+          <span className="font-semibold text-danger">Quietest:</span> {quietest.join(", ")}
+        </span>
+      )}
+    </p>
   );
 }
 
@@ -96,24 +114,19 @@ function ProductRow({
   }
 
   return (
-    <li className="space-y-2 py-3">
+    <li className="space-y-1 py-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <span className="min-w-0 flex-1 truncate text-sm font-medium">{fullName(product, products)}</span>
 
-        {pattern ? (
-          <>
-            <MiniBars months={pattern.months} />
-            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${SOURCE_TONE[pattern.source]}`}>
-              {SOURCE_LABEL[pattern.source]}
-            </span>
-          </>
-        ) : (
-          <span className="text-[12px] text-muted-foreground">Not worked out yet</span>
+        {pattern && (
+          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${SOURCE_TONE[pattern.source]}`}>
+            {SOURCE_LABEL[pattern.source]}
+          </span>
         )}
 
         <Button size="sm" variant="ghost" className="h-8 gap-1 px-2 text-xs" onClick={onWorkOut} disabled={busy}>
           <RefreshCw className={`h-3.5 w-3.5 ${busy ? "animate-spin" : ""}`} />
-          {busy ? "Working…" : pattern ? "Redo" : "Work it out"}
+          {busy ? "Checking…" : pattern ? "Check again" : "Check"}
         </Button>
         {pattern && (
           <Button
@@ -130,6 +143,8 @@ function ProductRow({
         )}
       </div>
 
+      {!editing && (pattern ? <BusyQuiet months={pattern.months} /> : <p className="text-[13px] text-muted-foreground">Not checked yet</p>)}
+
       {pattern?.reason && !editing && (
         <p className="text-[12px] leading-relaxed text-muted-foreground">{pattern.reason}</p>
       )}
@@ -137,13 +152,16 @@ function ProductRow({
       {drifted && !editing && (
         <p className="flex items-start gap-1.5 text-[11px] text-[#9A6B12]">
           <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0" />
-          These average {(1 + drift).toFixed(2)} rather than 1.00, so they describe growth as well as season. The
-          forecast would count that twice.
+          The numbers you typed average {(1 + drift).toFixed(2)} instead of 1.0, so the forecast will run high. Lower
+          the busy months a little.
         </p>
       )}
 
       {editing && (
         <div className="space-y-2 rounded-xl border border-line/15 p-3">
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            1.0 is an ordinary month, 1.5 means half as much again, 0.8 means a fifth less.
+          </p>
           <div className="grid grid-cols-6 gap-1.5 min-[900px]:grid-cols-12">
             {draft.map((v, i) => (
               <div key={i} className="space-y-0.5">
@@ -228,19 +246,18 @@ export function SeasonalityCard({ embedded = false }: { embedded?: boolean } = {
   const body = (
     <>
         <p className="text-xs leading-relaxed text-muted-foreground">
-          You don&apos;t have to know this — the app works it out. Once a product has a year of sales, the pattern comes
-          straight from your own figures. Before that, BAi works out a likely one and tells you why. Change anything
-          you disagree with.
+          Which months each product sells more or less than usual. It comes from your sales once a product has a
+          year of them; before that it&apos;s a best guess. The monthly forecast above uses this.
         </p>
 
         <div className="flex flex-wrap items-center gap-3">
           <Button size="sm" className="gap-1.5" onClick={runAll} disabled={allBusy || products.length === 0}>
             <Sparkles className="h-4 w-4" />
-            {allBusy ? "Working through them…" : unset > 0 ? `Work out all ${products.length}` : "Redo all"}
+            {allBusy ? "Checking…" : unset > 0 ? `Check all ${products.length}` : "Check all again"}
           </Button>
           {unset > 0 && !allBusy && (
             <span className="text-[12px] text-muted-foreground">
-              {`${unset} of ${products.length} not worked out yet — until then they're treated as the same all year.`}
+              {`${unset} of ${products.length} not checked yet — until then they're treated as the same all year.`}
             </span>
           )}
         </div>
@@ -259,10 +276,6 @@ export function SeasonalityCard({ embedded = false }: { embedded?: boolean } = {
           </ul>
         )}
 
-        <p className="text-[11px] leading-relaxed text-muted-foreground">
-          1.0 is an ordinary month, 1.5 means you sell half as much again, 0.8 a fifth less. The forecast uses these, so
-          December stops being predicted from September.
-        </p>
     </>
   );
 
