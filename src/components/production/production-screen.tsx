@@ -131,12 +131,12 @@ function Calendar({
             ))}
             {d.runs.map((r) => (
               <span
-                key={r.productId}
+                key={r.itemId}
                 className="truncate rounded px-1.5 py-0.5 text-[10px] font-semibold text-white"
-                style={{ background: colorOf(r.productId) }}
-                title={`${nameOf(r.productId)}: ${pluralize(r.batches, "batch", "batches")}${r.jars ? ` (${r.jars} jars)` : ""}`}
+                style={{ background: colorOf(r.itemId) }}
+                title={`${r.kind === "product" ? nameOf(r.itemId) : r.name}: ${r.qty} ${r.unit}`}
               >
-                {nameOf(r.productId)} ×{r.batches}
+                {r.kind === "product" ? nameOf(r.itemId) : r.name} ×{r.qty}
               </span>
             ))}
           </button>
@@ -153,7 +153,7 @@ function Calendar({
  * to sit behind Advanced; as its own tab it shows for everyone.
  */
 export function ProductionScreen({ section }: { section: "production" | "calendar" }) {
-  const { products, machines, events, businessSettings, loadedFromServer } = useStore();
+  const { products, events, businessSettings, loadedFromServer } = useStore();
   const [strategy, setStrategy] = useState<ScheduleStrategy>("fastest");
   const tab = section === "calendar" ? "plan" : "stock";
   const [addStockOpen, setAddStockOpen] = useState(false);
@@ -187,19 +187,19 @@ export function ProductionScreen({ section }: { section: "production" | "calenda
     () =>
       planContingencies({
         totalJarsToMake: plan.totalJarsToMake,
-        batchesNeeded: plan.totalBatchesNeeded,
-        batchesScheduled: plan.totalBatchesScheduled,
-        batchesLate: plan.batchesLate,
-        batchesExpiring: plan.batchesExpiring,
+        unplaced: plan.unplaced,
+        late: plan.late,
+        expiring: plan.expiring,
+        noMachine: plan.noMachine,
         hasEquipment: plan.hasEquipment,
         days: plan.days,
         unavailable: unavailableDays(businessSettings),
+        // What a machine here makes is scheduled, not bought.
         shortMaterials: plan.ingredientNeeds
-          .filter((n) => n.short > 0)
+          .filter((n) => n.short > 0 && !n.madeInHouse)
           .map((n) => ({ name: n.name, short: n.short, unit: n.unit })),
-        batchesPerDay: machines.reduce((sum, m) => sum + m.batchesPerDay, 0),
       }),
-    [plan, businessSettings, machines],
+    [plan, businessSettings],
   );
 
   const forecastOf = (id: string) => plan.forecasts.find((f) => f.productId === id)?.forecastQty ?? 0;
@@ -228,7 +228,8 @@ export function ProductionScreen({ section }: { section: "production" | "calenda
     })
     .filter((e) => e.planned > 0);
   const nextDay = plan.days.find((d) => d.status === "open" && d.runs.length > 0);
-  const problem = plan.totalJarsToMake > 0 && (!plan.hasEquipment || plan.batchesLate > 0 || plan.batchesUnscheduled > 0);
+  const notInTime = [...plan.late, ...plan.unplaced, ...plan.noMachine];
+  const problem = plan.totalJarsToMake > 0 && (!plan.hasEquipment || notInTime.length > 0);
   const editingEvent = eventDialog?.eventId ? events.find((e) => e.id === eventDialog.eventId) : undefined;
 
   return (
@@ -254,10 +255,10 @@ export function ProductionScreen({ section }: { section: "production" | "calenda
         {loadedFromServer && !plan.hasEquipment && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-danger/35 bg-danger/[0.04] px-5 py-4">
             <div className="min-w-0">
-              <div className="font-display text-[17px] font-semibold">No equipment set up yet</div>
+              <div className="font-display text-[17px] font-semibold">No machines set up yet</div>
               <div className="text-[13px] text-muted-foreground">
-                Nothing can land on the calendar until you say what you make with and how many batches a day it
-                can do. Everything else on this page still works.
+                Nothing can land on the calendar until you add your machines, what each one makes and how many an
+                hour or a day. Everything else on this page still works.
               </div>
             </div>
             <button
@@ -265,7 +266,7 @@ export function ProductionScreen({ section }: { section: "production" | "calenda
               onClick={() => setShowSettings(true)}
               className="shrink-0 rounded-[10px] bg-cacao px-4 py-2.5 text-[13px] font-semibold text-ivory"
             >
-              Set up equipment
+              Add machines
             </button>
           </div>
         )}
@@ -331,7 +332,7 @@ export function ProductionScreen({ section }: { section: "production" | "calenda
                       <span className="font-semibold">{pluralize(n.jarsToMake, "jar")}</span>
                       <span className="text-xs text-muted-foreground">
                         {" "}
-                        · {n.missingYield ? "set jars per batch" : pluralize(n.batchesNeeded, "batch", "batches")}
+                        · {n.noMachine ? "no machine makes it" : "on the calendar"}
                       </span>
                     </span>
                   </div>
@@ -339,12 +340,12 @@ export function ProductionScreen({ section }: { section: "production" | "calenda
                 {toMake.length > 4 && <div className="text-xs text-muted-foreground">+{toMake.length - 4} more</div>}
                 {problem && plan.hasEquipment && (
                   <div className="mt-0.5 text-[11px] font-semibold text-danger">
-                    {`${pluralize(plan.batchesLate + plan.batchesUnscheduled, "batch", "batches")} won't be ready in time — see what to change above`}
+                    {`${notInTime.map((x) => x.name).slice(0, 2).join(", ")}${notInTime.length > 2 ? ` and ${notInTime.length - 2} more` : ""} won't be ready in time — see what to change above`}
                   </div>
                 )}
-                {plan.batchesExpiring > 0 && (
+                {plan.expiring.length > 0 && (
                   <div className="mt-0.5 text-[11px] font-semibold text-[#9A6B12]">
-                    {pluralize(plan.batchesExpiring, "batch", "batches")} would be made too early to still be good —
+                    {plan.expiring.map((x) => x.name).join(", ")} would be made too early to still be good —
                     try Latest Start
                   </div>
                 )}
@@ -365,7 +366,7 @@ export function ProductionScreen({ section }: { section: "production" | "calenda
             </div>
             <div className="mt-0.5 truncate text-xs text-muted-foreground">
               {nextDay
-                ? nextDay.runs.map((r) => `${nameOf(r.productId)} ×${r.batches}`).join(", ")
+                ? nextDay.runs.map((r) => `${r.kind === "product" ? nameOf(r.itemId) : r.name} ×${r.qty}`).join(", ")
                 : plan.hasEquipment
                   ? "Nothing scheduled"
                   : "No equipment set up — see below"}

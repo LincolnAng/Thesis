@@ -3,7 +3,6 @@
 import { Flag } from "lucide-react";
 import type { PlanDay } from "@/lib/summary/production-schedule";
 import { cn } from "@/lib/utils";
-import { pluralize } from "@/lib/format";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -97,14 +96,14 @@ function MonthGrid({
               ))}
               {day.runs.map((run) => (
                 <span
-                  key={run.productId}
+                  key={run.itemId}
                   className="flex items-center gap-1 truncate rounded-[4px] px-1 py-0.5 text-[10px] font-medium text-foreground"
-                  style={{ backgroundColor: `color-mix(in oklch, ${colorOf(run.productId)} 22%, transparent)` }}
-                  title={`${run.productName}: ${run.batches} batch${run.batches === 1 ? "" : "es"}${run.jars ? ` (${pluralize(run.jars, "jar")})` : ""}`}
+                  style={{ backgroundColor: `color-mix(in oklch, ${colorOf(run.itemId)} 22%, transparent)` }}
+                  title={`${run.name}: ${run.qty} ${run.unit}`}
                 >
-                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: colorOf(run.productId) }} />
+                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: colorOf(run.itemId) }} />
                   <span className="truncate">
-                    {run.productName} ×{run.batches}
+                    {run.name} ×{run.qty}
                   </span>
                 </span>
               ))}

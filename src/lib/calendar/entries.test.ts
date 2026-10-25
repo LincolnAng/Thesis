@@ -23,7 +23,7 @@ function input(over: Partial<CalendarInput> = {}): CalendarInput {
     lotsByProduct: {},
     expiringWithinDays: 7,
     ingredientShortages: [],
-    lateBatches: [],
+    late: [],
     now: new Date(2026, 9, 15),
     ...over,
   };
@@ -38,7 +38,7 @@ test("an empty shop has an empty calendar — nothing is made up", () => {
 
 test("suggested production shows per product per day, labelled as suggested", () => {
   const out = buildCalendarEntries(
-    input({ planDays: [{ date: "2026-10-20", status: "open", capacity: 2, runs: [{ productId: "p1", productName: "Cacao Tablea", batches: 2, jars: 20 }], eventNames: [] }] }),
+    input({ planDays: [{ date: "2026-10-20", status: "open", capacity: 2, runs: [{ itemId: "p1", kind: "product", name: "Cacao Tablea", qty: 20, unit: "packs" }], eventNames: [] }] }),
   );
   const prod = out.filter((e) => e.category === "production");
   assert.equal(prod.length, 1);

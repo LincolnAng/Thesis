@@ -12,6 +12,7 @@
  * recipe, it says so instead of inventing their margins.
  */
 
+import { hasEquipment } from "@/lib/production/machines";
 import { formatPeso, pluralize } from "@/lib/format";
 import { buildDataSummary } from "@/lib/ai/data-summary";
 import { deriveCustomers } from "@/lib/summary/customers";
@@ -47,14 +48,14 @@ function monthsOfSalesHistory(state: StoreState): number {
 function stageLines(state: StoreState): string[] {
   const sales = state.entries.filter((e) => e.type === "SALE");
   const customers = deriveCustomers(state.entries);
-  const equipmentHours = state.machines.reduce((sum, m) => sum + (m.batchesPerDay > 0 ? 1 : 0), 0);
+  const equipmentHours = state.machines.filter((m) => hasEquipment([m])).length;
 
   return [
     `Sales ever logged: ${sales.length}`,
     `Distinct customers ever: ${customers.length}`,
     `Months with any sales: ${monthsOfSalesHistory(state)}`,
     `Products: ${state.products.length}`,
-    `Equipment configured: ${state.machines.length === 0 ? "NONE — nothing can be scheduled on the production calendar" : `${state.machines.length} (${equipmentHours} usable)`}`,
+    `Equipment configured: ${equipmentHours === 0 ? "NONE — nothing can be scheduled on the production calendar" : `${state.machines.length} (${equipmentHours} usable)`}`,
     `Events on the books: ${state.events.filter((e) => e.status === "open").length} open, ${state.events.filter((e) => e.status === "closed").length} closed`,
   ];
 }
@@ -178,7 +179,7 @@ function gapLines(state: StoreState): string[] {
     );
   }
 
-  if (state.machines.length === 0) {
+  if (!hasEquipment(state.machines)) {
     gaps.push("No equipment is configured, so the production calendar cannot schedule anything.");
   }
 

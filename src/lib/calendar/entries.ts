@@ -61,7 +61,8 @@ export interface CalendarInput {
   lotsByProduct: Record<string, StockLot[]>;
   expiringWithinDays: number;
   ingredientShortages: { name: string; short: number; unit: string }[];
-  lateBatches: { productName: string; batches: number }[];
+  /** What won't be ready by the day it's needed. */
+  late: { name: string; qty: number; unit: string }[];
   now: Date;
 }
 
@@ -85,16 +86,16 @@ export function buildCalendarEntries(input: CalendarInput): CalendarEntry[] {
   // Production — the suggested plan, never presented as a commitment.
   for (const day of input.planDays) {
     for (const run of day.runs) {
-      const unit = unitOf(products, run.productId);
+      const name = run.kind === "product" ? nameOf(products, run.itemId) : run.name;
+      const amount = run.kind === "product" ? plural(run.qty, unitOf(products, run.itemId)) : `${run.qty} ${run.unit}`;
       out.push({
-        id: `production:${day.date}:${run.productId}`,
+        id: `production:${day.date}:${run.itemId}`,
         category: "production",
         date: day.date,
-        title: `Make ${nameOf(products, run.productId)}`,
-        subtitle: `${plural(run.batches, "batch", "batches")} · about ${plural(run.jars, unit)} · suggested`,
+        title: `Make ${name}`,
+        subtitle: `${amount} · suggested`,
         details: [
-          { label: "Batches", value: String(run.batches) },
-          { label: "Makes about", value: plural(run.jars, unit) },
+          { label: "Makes", value: amount },
           { label: "Status", value: "Suggested by the production plan — not yet scheduled" },
         ],
         tone: "neutral",
@@ -248,15 +249,15 @@ export function buildCalendarEntries(input: CalendarInput): CalendarEntry[] {
       hrefLabel: "See what to buy in Production",
     });
   }
-  for (const late of input.lateBatches) {
-    if (late.batches <= 0) continue;
+  for (const late of input.late) {
+    if (late.qty <= 0) continue;
     out.push({
-      id: `alert:late:${late.productName}`,
+      id: `alert:late:${late.name}`,
       category: "alerts",
       date: today,
-      title: `Won't be ready in time: ${late.productName}`,
-      subtitle: `${plural(late.batches, "batch", "batches")} late`,
-      details: [{ label: "Why", value: "Not enough production days before it's needed. Free up days or add equipment." }],
+      title: `Won't be ready in time: ${late.name}`,
+      subtitle: `${late.qty} ${late.unit} late`,
+      details: [{ label: "Why", value: "Not enough production days before it's needed. Free up days or add a machine." }],
       tone: "bad",
       href: "/production#what-to-make",
       hrefLabel: "See what to make in Production",

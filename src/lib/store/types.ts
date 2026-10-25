@@ -314,14 +314,26 @@ export interface EventStockMovement {
   createdAt: string;
 }
 
-/** A piece of equipment production has to run through. Capacity is expressed in batches
- * rather than jars because a batch is the unit the recipes and yields are already written in
- * — the same grinder makes one batch whether that batch yields 20 jars or 40. */
+/** One thing a machine turns out, and how fast. */
+export interface MachineOutput {
+  /** A product's id, or a raw material's when `kind` is "material". */
+  itemId: string;
+  kind: "product" | "material";
+  /** How many it makes in one hour or one day, in the item's own unit (jars, kg…). */
+  qty: number;
+  per: "hour" | "day";
+}
+
+/** A piece of equipment the owner bought, what it makes and how fast. Capacity is in the
+ * item's own unit per hour or per day — the owner knows "the grinder does 5 kg an hour",
+ * not how many batches that is. A machine that makes several things splits its day between
+ * them. */
 export interface Machine {
   id: string;
   name: string;
-  /** Batches this machine can finish in a single working day. */
-  batchesPerDay: number;
+  outputs: MachineOutput[];
+  /** Hours it runs on a working day, for outputs given per hour. */
+  hoursPerDay: number;
   /** How many days a week it runs, counted from Monday — 6 means Mon-Sat. */
   workingDaysPerWeek: number;
   notes: string;
