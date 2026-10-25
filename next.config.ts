@@ -18,7 +18,7 @@ const nextConfig: NextConfig = {
       // (with its production calendar) became Production and Calendar.
       { source: "/products", destination: "/costing", permanent: false },
       { source: "/pricing", destination: "/costing", permanent: false },
-      { source: "/inventory", destination: "/production", permanent: false },
+      // /inventory is a page again: stock at each branch.
       // People (customers, suppliers, events, team) was removed; its old addresses land on the
       // nearest page that still holds that kind of thing.
       { source: "/people", destination: "/", permanent: false },
