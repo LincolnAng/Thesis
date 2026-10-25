@@ -8,6 +8,7 @@ import { isMaterialWaste } from "@/lib/transactions/waste";
 import { fullName } from "@/lib/summary/product-sizes";
 import { findProduct } from "@/lib/summary/product-match";
 import { useStore } from "@/lib/store/use-store";
+import { branchesOf } from "@/lib/inventory/branches";
 import { lineSubtotal, orderTotal } from "@/lib/transactions/order-lines";
 import { PaymentLine, QuickPay } from "@/components/transactions/obligation-dialogs";
 import type { Entry, Product } from "@/lib/store/types";
@@ -359,7 +360,8 @@ export function TransactionTable({
   carriedFrom?: Map<string, string>;
   owed?: OwedActions;
 }) {
-  const { products } = useStore();
+  const { products, businessSettings } = useStore();
+  const branchName = (id: string) => branchesOf(businessSettings).find((b) => b.id === id)?.name ?? id;
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 } | null>(null);
   const [open, setOpen] = useState<Set<string>>(new Set());
   // The order whose payment form is showing under its rows.
@@ -461,6 +463,7 @@ export function TransactionTable({
                   <td className={td} title={e.counterparty ?? undefined}>
                     <span className="block truncate font-medium">{e.counterparty}</span>
                     {carried && <div className="text-[11px] font-semibold text-[var(--status-warning)]">Carried from {carried}</div>}
+                    {e.branch && <div className="text-[11px] text-muted-foreground">at {branchName(e.branch)}</div>}
                   </td>
                   <td className={`${td} truncate`}>{typeLabel(e)}</td>
                   {/* Every product in the order, one per line, each with its own quantity on the same line next door. */}

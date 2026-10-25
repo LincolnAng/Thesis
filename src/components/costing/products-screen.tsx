@@ -34,8 +34,8 @@ export function ProductPhoto({ product, gradient, photo }: { product: Product; g
   async function handleFile(file: File | undefined) {
     if (!file) return;
     try {
-      if (!setProductPhoto(product.id, await shrinkImage(file))) {
-        alert("Couldn't save the photo — browser storage is full. Remove another photo and try again.");
+      if (!(await setProductPhoto(product.id, await shrinkImage(file)))) {
+        alert("The photo shows here but didn't save for everyone — check the internet and try again.");
       }
     } catch {
       alert("That file couldn't be read as a photo — try a JPG or PNG.");
@@ -57,7 +57,7 @@ export function ProductPhoto({ product, gradient, photo }: { product: Product; g
         {photo && (
           <button
             type="button"
-            onClick={() => setProductPhoto(product.id, null)}
+            onClick={() => void setProductPhoto(product.id, null)}
             className="rounded-md bg-card/90 px-2.5 py-1 text-[11px] font-semibold text-danger shadow-sm"
           >
             Remove

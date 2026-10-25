@@ -1,4 +1,4 @@
-import type { ActivityEvent, CalendarItem, Entry, EntryType, PayrollRecord, RawMaterialStock, Role, StaffMember, TimeRecord } from "@/lib/store/types";
+import type { ActivityEvent, CalendarItem, Entry, EntryType, PayrollRecord, RawMaterialStock, Role, StaffMember, StockTransfer, TimeRecord } from "@/lib/store/types";
 import type { ProductRow, RecipeRow } from "@/lib/store/sheet-shapes";
 import { entryIntegrityProblem } from "@/lib/transactions/ledger";
 import { daysIn, periodFor } from "@/lib/payroll/pay";
@@ -36,7 +36,8 @@ export type CollectionName =
   | "staff"
   | "timeRecords"
   | "payroll"
-  | "calendarItems";
+  | "calendarItems"
+  | "stockTransfers";
 
 export type WriteOp = "append" | "update" | "delete" | "migrate";
 
@@ -72,8 +73,12 @@ const EMPLOYEE_SETTING_KEYS = new Set([
   "unavailableDays",
   // Which profiles keep time — so a timekeeper's screens know to show Time in.
   TIMEKEEPERS_KEY,
+  // The branches, for Inventory.
+  "branches",
 ]);
-const EMPLOYEE_SETTING_PREFIXES = ["shelfLifeDays:", "eventPlan:", "seasonality:"];
+// Selling prices at a branch (Manila's include freight) are prices, so employees see them; the
+// freight cost behind them is not.
+const EMPLOYEE_SETTING_PREFIXES = ["shelfLifeDays:", "eventPlan:", "seasonality:", "branchPrice:"];
 
 /** Settings an employee may change: marking a day off on the production calendar. */
 const EMPLOYEE_WRITABLE_SETTING_KEYS = new Set(["unavailableDays"]);
@@ -107,6 +112,7 @@ export interface BusinessData {
   payroll: PayrollRecord[];
   /** Already narrowed to what the signed-in person may see (see visibleCalendarItems). */
   calendarItems: CalendarItem[];
+  stockTransfers: StockTransfer[];
 }
 
 /**
@@ -279,6 +285,9 @@ export function decideWrite(req: WriteRequest): WriteDecision {
     case "events":
     case "eventStock":
       return { allow: true };
+    case "stockTransfers":
+      // Moving stock between branches is everyday work; taking a move back is an Executive's.
+      return op === "append" && item ? { allow: true, item: { ...item, loggedByName: req.user.name } } : deny("forbidden");
     case "businessSettings":
       return op === "update" && item && EMPLOYEE_WRITABLE_SETTING_KEYS.has(String(item.key))
         ? { allow: true }

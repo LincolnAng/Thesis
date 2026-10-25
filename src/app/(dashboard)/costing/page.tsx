@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PageTabs } from "@/components/layout/page";
 import { ProductsScreen, type CostingList } from "@/components/costing/products-screen";
 import { ProductDetail } from "@/components/costing/product-detail";
-import { ProductGallery } from "@/components/costing/product-gallery";
+import { InventoryScreen } from "@/components/stock/inventory-screen";
 import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 
 /**
@@ -30,7 +30,8 @@ function CostingPageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  if (!isExecutive(me)) return <ProductGallery />;
+  // Costing is Executives'; anyone else who lands here (an old link) gets Inventory.
+  if (!isExecutive(me)) return <InventoryScreen />;
 
   const raw = searchParams.get("view");
   const view: View = raw === "materials" || raw === "packaging" ? raw : "products";

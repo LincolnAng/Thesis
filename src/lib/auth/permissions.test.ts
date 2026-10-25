@@ -42,6 +42,7 @@ function sample(): BusinessData {
     ],
     timeRecords: [{ id: "t1", staffId: "st1", date: "2026-10-21", timeIn: "08:00", timeOut: "17:00", status: "present", otHours: 0, note: "", createdAt: "" }],
     calendarItems: [],
+    stockTransfers: [],
     payroll: [{ id: "pay1", staffId: "st1", kind: "regular", periodStart: "2026-10-01", periodEnd: "2026-10-15", basic: 12500, overtime: 0, deductions: 0, deductionNote: "", net: 12500, paidOn: "2026-10-15", entryId: null, createdAt: "", sss: 0, philhealth: 0, pagibig: 0 }],
   };
 }

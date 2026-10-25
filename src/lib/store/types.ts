@@ -513,3 +513,17 @@ export interface CalendarItem {
   done: boolean;
   createdAt: string;
 }
+
+/** Stock moved from one branch to another — shipped to Manila, brought back to CDO. */
+export interface StockTransfer {
+  id: string;
+  productId: string;
+  fromBranch: string;
+  toBranch: string;
+  quantity: number;
+  /** "YYYY-MM-DD" */
+  date: string;
+  note: string;
+  loggedByName?: string | null;
+  createdAt: string;
+}

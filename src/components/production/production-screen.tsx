@@ -14,7 +14,6 @@ import { PlanFixes } from "@/components/inventory/plan-fixes";
 import { CarouselNav } from "@/components/ui/carousel-nav";
 import { useProductionPlan } from "@/lib/summary/use-production-plan";
 import { planContingencies } from "@/lib/summary/plan-contingency";
-import { AddStockDialog } from "@/components/stock/add-stock-dialog";
 import { AddProductDialog, EditProductDialog } from "@/components/stock/edit-product-dialog";
 import { useStore } from "@/lib/store/use-store";
 import { chipColor } from "@/lib/chart-colors";
@@ -156,7 +155,6 @@ export function ProductionScreen({ section }: { section: "production" | "calenda
   const { products, events, businessSettings, loadedFromServer } = useStore();
   const [strategy, setStrategy] = useState<ScheduleStrategy>("fastest");
   const tab = section === "calendar" ? "plan" : "stock";
-  const [addStockOpen, setAddStockOpen] = useState(false);
   const [addProductOpen, setAddProductOpen] = useState(false);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [eventDialog, setEventDialog] = useState<{ eventId?: string } | null>(null);
@@ -239,9 +237,6 @@ export function ProductionScreen({ section }: { section: "production" | "calenda
         <>
           <button type="button" onClick={() => setShowSettings(true)} className={BUTTON.secondary}>
             Settings
-          </button>
-          <button type="button" onClick={() => setAddStockOpen(true)} className={BUTTON.secondary}>
-            Add stock
           </button>
           <button type="button" onClick={() => setAddProductOpen(true)} className={BUTTON.primary}>
             + Add product
@@ -436,16 +431,6 @@ export function ProductionScreen({ section }: { section: "production" | "calenda
         ) : null}
       </div>
 
-      {addStockOpen && (
-        <AddStockDialog
-          products={products}
-          onClose={() => setAddStockOpen(false)}
-          onAddProduct={() => {
-            setAddStockOpen(false);
-            setAddProductOpen(true);
-          }}
-        />
-      )}
       {addProductOpen && <AddProductDialog products={products} onClose={() => setAddProductOpen(false)} />}
       {editingProduct && (
         <EditProductDialog key={editingProduct.id} product={editingProduct} products={products} onClose={() => setEditingProductId(null)} />

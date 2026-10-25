@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Trash2, Banknote, Check, CircleCheck, Clock, FileText, CalendarRange, CalendarCheck, HandCoins, Heart, Boxes, Landmark, Minus, PackageX, Plus, Receipt, Search, ShoppingBag, Tag, Wrench, X, type LucideIcon } from "lucide-react";
+import { MapPin, Trash2, Banknote, Check, CircleCheck, Clock, FileText, CalendarRange, CalendarCheck, HandCoins, Heart, Boxes, Landmark, Minus, PackageX, Plus, Receipt, Search, ShoppingBag, Tag, Wrench, X, type LucideIcon } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Segmented, type Choice } from "@/components/ui/segmented";
 import { CustomerNameInput } from "@/components/customers/customer-name-input";
@@ -21,6 +21,8 @@ import { PAYROLL_CATEGORIES } from "@/lib/auth/permissions";
 import { isMaterialWaste, MATERIAL_WASTE } from "@/lib/transactions/waste";
 import { groupOf, materialStanding } from "@/lib/summary/material-stock";
 import { cacaoUtilizationPct } from "@/lib/summary/business-config";
+import { branchesOf, mainBranch } from "@/lib/inventory/branches";
+import { priceAtBranch } from "@/lib/inventory/branch-prices";
 import { currentUser } from "@/lib/auth/current-user";
 import type { Entry, InstallmentFrequency, OrderLine, PaymentMethod, PriceType, Product } from "@/lib/store/types";
 import type { EntryDraft } from "@/lib/home/describe-entry";
@@ -174,6 +176,9 @@ export function TransactionDialog({
   const [invKind, setInvKind] = useState<InvestmentKind>(e?.type === "CAPITAL" ? "capital" : "asset");
   const [date, setDate] = useState(e ? dayOf(e.timestamp) : today());
   const [notes, setNotes] = useState(e?.notes ?? "");
+  // Which branch it happened at (CDO, Manila…). Prices and stock follow the branch.
+  const branches = branchesOf(businessSettings);
+  const [branch, setBranch] = useState(e?.branch && branches.some((b) => b.id === e.branch) ? e.branch : mainBranch(branches).id);
   // Sale
   const [priceType, setPriceType] = useState<Exclude<PriceType, null>>(e?.priceType ?? "standard");
   const [lines, setLines] = useState<Line[]>(() => linesOf(e, products));
@@ -220,11 +225,21 @@ export function TransactionDialog({
   const showPayment = exec && (owedKind || (kind === "investment" && invKind === "capital"));
 
   // --- products --------------------------------------------------------------------------
-  const priceOf = (p: Product, type: Exclude<PriceType, null>) => {
+  const priceOf = (p: Product, type: Exclude<PriceType, null>, at: string = branch) => {
     if (type === "friend" && p.friendPrice > 0) return p.friendPrice;
     if (type === "wholesale" && p.wholesalePrice > 0) return p.wholesalePrice;
-    return effectiveProductPrice(p, productCostPerJar(p, costCtx));
+    // At another branch, its own price (Manila's includes freight) when one is set.
+    return priceAtBranch(businessSettings, branches, p.id, at, effectiveProductPrice(p, productCostPerJar(p, costCtx)));
   };
+  function changeBranch(next: string) {
+    setBranch(next);
+    setLines((prev) =>
+      prev.map((l) => {
+        const p = l.productId ? products.find((x) => x.id === l.productId) : undefined;
+        return p ? { ...l, price: String(priceOf(p, priceType, next)) } : l;
+      }),
+    );
+  }
   const catalog = useMemo(
     () => [...products].map((p) => ({ product: p, name: fullName(p, products) })).sort((a, b) => a.name.localeCompare(b.name)),
     [products],
@@ -338,7 +353,7 @@ export function TransactionDialog({
   const leftAfter = Math.max(0, Math.round((leftBefore - payNum) * 100) / 100);
 
   // --- saving ----------------------------------------------------------------------------
-  const snapshot = JSON.stringify([kind, invKind, date, notes, priceType, lines, customer, what, category, amount, party, lostProduct, lostMaterial, lostQty, when, method, bank, dueDate, schedule, frequency, instCount, firstDue, defaulted, payAmount, payDate, payMethodPicked, payMethod, payBank]);
+  const snapshot = JSON.stringify([kind, invKind, branch, date, notes, priceType, lines, customer, what, category, amount, party, lostProduct, lostMaterial, lostQty, when, method, bank, dueDate, schedule, frequency, instCount, firstDue, defaulted, payAmount, payDate, payMethodPicked, payMethod, payBank]);
   const plan = schedule === "installments" && Number(instCount) >= 1 && firstDue ? { frequency, count: Math.floor(Number(instCount)), firstDue } : null;
   const planPreview = plan ? installmentSchedule({ amount: total, amountPaid: null, paymentStatus: null, installments: plan, payments: [] }) : [];
   const [initialSnapshot] = useState(snapshot);
@@ -403,7 +418,13 @@ export function TransactionDialog({
           confidence: 1,
           notes: null,
         };
-    const d: EntryDraft = { ...base, timestamp: stamp(date, e?.timestamp), notes: notes.trim() || null };
+    const d: EntryDraft = {
+      ...base,
+      timestamp: stamp(date, e?.timestamp),
+      notes: notes.trim() || null,
+      // Stock moves at the branch it happened at; blank means the main branch.
+      branch: (kind === "sale" || kind === "spoilage") && branch !== mainBranch(branches).id ? branch : null,
+    };
 
     if (kind === "sale") {
       Object.assign(d, {
@@ -597,6 +618,18 @@ export function TransactionDialog({
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {(kind === "sale" || kind === "spoilage") && branches.length > 1 && (
+            <div className="flex flex-col gap-1.5">
+              <span className={label}>{kind === "sale" ? "Sold at" : "At"}</span>
+              <Segmented
+                ariaLabel="Branch"
+                value={branch}
+                onChange={changeBranch}
+                choices={branches.map((b) => ({ value: b.id, label: b.name, icon: MapPin }))}
+              />
             </div>
           )}
 

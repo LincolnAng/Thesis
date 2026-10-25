@@ -14,6 +14,7 @@ import { payrollCollection, staffCollection, timeRecordsCollection } from "@/lib
 import type { StaffMember } from "@/lib/store/types";
 import { isTimekeeper } from "@/lib/payroll/timekeepers";
 import { calendarItemsCollection } from "@/lib/sheets/calendar-items";
+import { stockTransfersCollection } from "@/lib/sheets/stock-transfers";
 import type { SheetCollection } from "@/lib/sheets/collection";
 import { requireSession } from "@/lib/auth/session";
 import { decideWrite, needsExistingRow } from "@/lib/auth/permissions";
@@ -38,6 +39,7 @@ const COLLECTIONS = {
   timeRecords: timeRecordsCollection,
   payroll: payrollCollection,
   calendarItems: calendarItemsCollection,
+  stockTransfers: stockTransfersCollection,
 } as const;
 
 type CollectionName = keyof typeof COLLECTIONS;

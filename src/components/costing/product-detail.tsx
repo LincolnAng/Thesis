@@ -5,6 +5,7 @@ import { ArrowLeft, Check, Info } from "lucide-react";
 import { Page } from "@/components/layout/page";
 import { ProductPhoto, GRADIENTS } from "@/components/costing/products-screen";
 import { PriceCalculator } from "@/components/costing/price-calculator";
+import { BranchPrices } from "@/components/costing/branch-prices";
 import { RecipePanel } from "@/components/costing/recipe-panel";
 import { StockPanel } from "@/components/costing/stock-panel";
 import { EditProductDialog } from "@/components/stock/edit-product-dialog";
@@ -186,13 +187,16 @@ export function ProductDetail({
           )}
 
           {tab === "price" && (
-            <PriceCalculator
-              key={`${product.id}-${product.pricingMode}-${product.standardPrice}-${product.marginPercent}`}
-              product={product}
-              unitCost={perUnit}
-              currentPrice={price}
-              unit={unit}
-            />
+            <div className="flex flex-col gap-4">
+              <PriceCalculator
+                key={`${product.id}-${product.pricingMode}-${product.standardPrice}-${product.marginPercent}`}
+                product={product}
+                unitCost={perUnit}
+                currentPrice={price}
+                unit={unit}
+              />
+              <BranchPrices product={product} unitCost={perUnit} mainPrice={price} unit={unit} />
+            </div>
           )}
 
           {tab === "stock" && <StockPanel product={product} family={family} onOpenProduct={onOpenProduct} />}

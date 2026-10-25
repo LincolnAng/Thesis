@@ -43,6 +43,7 @@ import type {
   TimeRecord,
   PayrollRecord,
   CalendarItem,
+  StockTransfer,
 } from "./types";
 
 export interface StoreState {
@@ -64,6 +65,8 @@ export interface StoreState {
   payroll: PayrollRecord[];
   /** What the signed-in person has on their calendar, and what was shared with them. */
   calendarItems: CalendarItem[];
+  /** Stock moved between branches. */
+  stockTransfers: StockTransfer[];
   /** Business-level numbers the owner sets once — hourly labor rate today. */
   businessSettings: Record<string, string>;
   tokenUsage: TokenUsage;
@@ -117,6 +120,7 @@ function defaultState(): StoreState {
     timeRecords: [],
     payroll: [],
     calendarItems: [],
+    stockTransfers: [],
     businessSettings: {},
     tokenUsage: {
       totalInputTokens: 0,
@@ -298,6 +302,7 @@ const COLLECTION_NOUNS: Record<string, string> = {
   timeRecords: "time record",
   payroll: "salary payment",
   calendarItems: "calendar item",
+  stockTransfers: "stock transfer",
 };
 
 const OP_VERBS: Record<string, string> = { append: "added", update: "changed", delete: "deleted" };
@@ -663,6 +668,7 @@ async function loadAllFromServer() {
         timeRecords: Array.isArray(json.timeRecords) ? mergePending(json.timeRecords as TimeRecord[], prev.timeRecords) : prev.timeRecords,
         payroll: Array.isArray(json.payroll) ? mergePending(json.payroll as PayrollRecord[], prev.payroll) : prev.payroll,
         calendarItems: Array.isArray(json.calendarItems) ? mergePending(json.calendarItems as CalendarItem[], prev.calendarItems) : prev.calendarItems,
+        stockTransfers: Array.isArray(json.stockTransfers) ? mergePending(json.stockTransfers as StockTransfer[], prev.stockTransfers) : prev.stockTransfers,
         businessSettings: businessSettingRowsToRecord(businessSettingsMigration.items),
         loadedFromServer: true,
       };
@@ -1381,7 +1387,7 @@ function mergePending<T extends { id: string }>(server: T[], local: T[]): T[] {
   return [...server.filter((r) => !pendingIds.has(r.id)), ...pending];
 }
 
-async function saveSalaryRow(collection: "staff" | "timeRecords" | "payroll" | "calendarItems", op: "append" | "update", item: { id: string }): Promise<boolean> {
+async function saveSalaryRow(collection: "staff" | "timeRecords" | "payroll" | "calendarItems" | "stockTransfers", op: "append" | "update", item: { id: string }): Promise<boolean> {
   pendingSalaryIds.add(item.id);
   const ok = await mirrorOp(collection, op, { id: op === "update" ? item.id : undefined, item });
   // Once the server has it, the next poll will return it; until then keep showing ours.
@@ -1550,4 +1556,19 @@ export function updateCalendarItem(id: string, patch: Partial<CalendarItem>) {
 export function deleteCalendarItem(id: string) {
   setState((prev) => ({ ...prev, calendarItems: prev.calendarItems.filter((c) => c.id !== id) }));
   void mirrorOp("calendarItems", "delete", { id });
+}
+
+// --- Branches ------------------------------------------------------------------------------
+
+/** Moves stock from one branch to another. The total doesn't change; where it is does. */
+export function addStockTransfer(input: Omit<StockTransfer, "id" | "createdAt" | "loggedByName">): StockTransfer {
+  const t: StockTransfer = { ...input, id: genId("mov"), loggedByName: currentUser()?.name ?? null, createdAt: new Date().toISOString() };
+  setState((prev) => ({ ...prev, stockTransfers: [...prev.stockTransfers, t] }));
+  void saveSalaryRow("stockTransfers", "append", t);
+  return t;
+}
+
+export function deleteStockTransfer(id: string) {
+  setState((prev) => ({ ...prev, stockTransfers: prev.stockTransfers.filter((t) => t.id !== id) }));
+  void mirrorOp("stockTransfers", "delete", { id });
 }
