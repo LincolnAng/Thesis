@@ -251,3 +251,15 @@ test("employees put in and fix only their own times, this pay period only, and c
     assert.equal(decideWrite({ role: "employee", user: me, collection, op: "append", item: { id: "x" } }).allow, false, collection);
   }
 });
+
+test("a timekeeper sees and records everyone's times (names only); others still see only their own", () => {
+  const data = sample();
+  data.staff.push({ id: "st4", name: "Dadoy", payType: "daily", rate: 525, position: "", pwd: true, userId: null, startDate: null, active: true, allowanceOnly: false, createdAt: "" });
+  data.businessSettings.push({ key: "timekeepers", value: "u-ruchel" });
+  const keeper = redactForEmployee(data, (p) => p.standardPrice, "u-ruchel");
+  assert.deepEqual(keeper.staff.map((s) => [s.name, s.rate, s.pwd]).sort(), [["Dadoy", 0, false], ["Khent", 0, false]]);
+  assert.equal(keeper.timeRecords.length, 1);
+  assert.ok(keeper.businessSettings.some((s) => s.key === "timekeepers"));
+  const other = redactForEmployee(data, (p) => p.standardPrice, "u-emp");
+  assert.equal(other.staff.length, 0);
+});

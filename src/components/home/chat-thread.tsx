@@ -14,6 +14,7 @@ import { ReviewCard } from "@/components/home/review-card";
 import { AdviceCard } from "@/components/home/advice-card";
 import { PromptGateCard } from "@/components/home/prompt-gate-card";
 import { FormOfferCard } from "@/components/home/form-offer-card";
+import { RichText } from "@/components/home/rich-text";
 
 // A JSON-mode reply can't be streamed token by token, so there's no real progress to report —
 // this just makes the wait feel shorter than one motionless bubble does. Mounted only while a
@@ -124,7 +125,7 @@ export function ChatThread({
                 m.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground",
               )}
             >
-              <p className="whitespace-pre-wrap">{m.text}</p>
+              {m.role === "assistant" ? <RichText text={m.text} /> : <p className="whitespace-pre-wrap">{m.text}</p>}
               {/* Where an online answer came from — kept visibly apart from the shop's own records. */}
               {m.role === "assistant" && m.sources && m.sources.length > 0 && (
                 <div className="border-t border-line/15 pt-2">

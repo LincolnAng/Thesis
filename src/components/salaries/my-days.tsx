@@ -14,11 +14,14 @@ import type { TimeRecord } from "@/lib/store/types";
  * They put in or fix their own times here — this period only (the server holds them to that).
  * Whether a day counts and overtime stay with Executives.
  */
-export function MyDays() {
+export function MyDays({ keeper = false }: { keeper?: boolean }) {
   const { staff, timeRecords } = useStore();
   const me = useCurrentUser();
   const [fixing, setFixing] = useState<{ date: string; record: TimeRecord | null } | null>(null);
-  const mine = staff.find((s) => s.userId && s.userId === me?.id);
+  // A timekeeper looks after everyone's days; anyone else, their own.
+  const people = keeper ? [...staff].filter((s) => s.active).sort((a, b) => a.name.localeCompare(b.name)) : staff.filter((s) => s.userId && s.userId === me?.id);
+  const [pickedId, setPickedId] = useState<string | null>(null);
+  const mine = people.find((s) => s.id === pickedId) ?? people[0];
   if (!mine) return null;
   const today = manilaToday();
   const period = periodFor(today);
@@ -26,8 +29,24 @@ export function MyDays() {
 
   return (
     <section className="flex flex-col gap-2">
-      <h2 className="font-display text-[20px] font-semibold">Your days, {period.label}</h2>
-      <p className="text-[13px] text-muted-foreground">Forgot to time in or out? Tap the pencil on that day to put your times in.</p>
+      <h2 className="font-display text-[20px] font-semibold">{keeper ? `Days this pay period, ${period.label}` : `Your days, ${period.label}`}</h2>
+      {keeper && people.length > 1 && (
+        <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Whose days">
+          {people.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              role="radio"
+              aria-checked={s.id === mine.id}
+              onClick={() => setPickedId(s.id)}
+              className={`min-h-10 rounded-full border px-4 text-[14px] font-semibold ${s.id === mine.id ? "border-cacao bg-cacao text-ivory" : "border-line/20 bg-card"}`}
+            >
+              {s.name}
+            </button>
+          ))}
+        </div>
+      )}
+      <p className="text-[13px] text-muted-foreground">Forgot to time in or out? Tap the pencil on that day to put the times in.</p>
       <ul className="flex flex-col divide-y divide-line/10 overflow-hidden rounded-2xl border border-line/15 bg-card">
         {days.map((d) => {
           const r = timeRecords.find((x) => x.staffId === mine.id && x.date === d) ?? null;

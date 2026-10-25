@@ -3,9 +3,10 @@ import Anthropic from "@anthropic-ai/sdk";
 import { requireSession } from "@/lib/auth/session";
 import { costContextOf, loadBusinessDataFor } from "@/lib/auth/load-business-data";
 import { getAiSettings } from "@/lib/sheets/settings";
-import { languageRule } from "@/lib/ai/language";
-import { ADVISOR_MODEL } from "@/lib/ai/client";
-import { runTool, toolsFor, type AgentView, type Proposal } from "@/lib/ai/agent-tools";
+import { matchLanguageRule } from "@/lib/ai/language";
+import { modelFor, tierFor } from "@/lib/ai/route-model";
+import { habitsOf, runTool, toolsFor, type AgentView, type Proposal } from "@/lib/ai/agent-tools";
+import { aiMemoryCollection, MAX_NOTES, type AiMemoryNote } from "@/lib/sheets/ai-memory";
 import { NAV_ITEMS, SECONDARY_ITEMS } from "@/lib/nav-items";
 import { fullName } from "@/lib/summary/product-sizes";
 
@@ -18,6 +19,11 @@ import { fullName } from "@/lib/summary/product-sizes";
  * What it can see is exactly what the signed-in profile can see: the records are loaded and
  * filtered by role here on the server, and executive-only tools aren't offered to an employee.
  * Web pages and tool results are treated as information, never as instructions.
+ *
+ * Each message goes to the smallest model that can handle it (lib/ai/route-model): Haiku for
+ * small talk, Sonnet for records and lookups, Opus only for advice and analysis. BAi replies in
+ * the language the person wrote in, and keeps short notes on how each person works (AI Memory)
+ * along with their habits from their own records, so it fits itself to them over time.
  */
 
 export const maxDuration = 60;
@@ -48,6 +54,15 @@ const SCREENS = [...NAV_ITEMS, ...SECONDARY_ITEMS].map((i) => i.label).join(", "
 
 // Stable, so it caches: everything that doesn't change between requests.
 const SYSTEM = `You are BAi, the assistant inside the Mang Kiko's Cacao business app — a small Filipino cacao business (tablea, tablea ice cream, ube mango biko, brandy). The people using you run the business; many are older and not technical. Write plainly and warmly, in short paragraphs, with peso amounts like ₱1,250. Avoid accounting jargon unless asked; when you must use a term, explain it in a few words.
+
+FORMAT
+- Lead with the answer. Keep it short: most replies are 1–4 short sentences; go longer only when asked or when the question needs it.
+- Use simple formatting the app displays: a bulleted list ("- item") for three or more things, a numbered list ("1. step") for steps, and **bold** only for the key figure or word. A short bold line can head a section in a longer answer.
+- No tables, no "#" headings, no emoji walls, no long preambles or sign-offs.
+
+LEARNING EACH PERSON
+- Notes saved about this person and their habits from their own records are below. Follow their preferences (length, tone, language) and use their habits to fill obvious gaps — but say what you assumed in the recap, and never treat a habit as a fact about a new record.
+- When they tell you a preference, correct you, or a clear habit shows, save it with the remember tool (one short sentence). If they say a note is wrong, use forget.
 
 You are a general-purpose assistant. Answer anything you can help with — general knowledge, explanations, writing (letters, messages, posts), brainstorming, planning, reasoning, health of the business, marketing — whether or not it is about the shop. Only decline what is genuinely harmful.
 
@@ -129,7 +144,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, reason: "records_unavailable" }, { status: 502 });
   }
 
-  const model = settings.model || ADVISOR_MODEL;
+  // The smallest model that can do the job, by what was just asked.
+  const lastUser = turns[turns.length - 1].text;
+  const { model, effort } = modelFor(tierFor(lastUser), settings.model);
+
+  // What BAi has learned about this person.
+  const userId = auth.session.userId;
+  let notes: AiMemoryNote[] = [];
+  try {
+    notes = (await aiMemoryCollection.getAll()).filter((n) => n.userId === userId).slice(-MAX_NOTES);
+  } catch {
+    // The notes are a nicety; answer without them rather than not at all.
+  }
+  const habits = habitsOf(view.data.entries, userId, view.role);
   const client = new Anthropic({ apiKey, timeout: DEADLINE_MS, maxRetries: 1 });
   const today = new Date().toLocaleDateString("en-PH", { timeZone: "Asia/Manila", weekday: "long", year: "numeric", month: "long", day: "numeric" });
   const context =
@@ -137,8 +164,10 @@ export async function POST(req: NextRequest) {
     (view.role === "executive"
       ? "an Executive, who can see all the shop's records, including costs, recipes, payroll and debts."
       : "an Employee, who can see sales, everyday expenses, spoilage, stock and selling prices only — not costs, recipes, salaries, investments or debts. Don't speculate about those.") +
-    ` ${languageRule(settings.botLanguage)}` +
-    `\n\nThe shop's products: ${view.products.map((p) => fullName(p, view.products)).join("; ") || "none yet"}.`;
+    `\n\n${matchLanguageRule(settings.botLanguage)}` +
+    `\n\nThe shop's products: ${view.products.map((p) => fullName(p, view.products)).join("; ") || "none yet"}.` +
+    (notes.length ? `\n\nNotes saved about ${auth.session.name}:\n${notes.map((n) => `- ${n.note}`).join("\n")}` : "") +
+    (habits ? `\n\n${auth.session.name}'s habits, from what they've recorded: ${habits}` : "");
 
   // Alternate roles, merging any repeats, so the history is always valid.
   const messages: Anthropic.Beta.BetaMessageParam[] = [];
@@ -166,7 +195,7 @@ export async function POST(req: NextRequest) {
           { type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } },
           { type: "text", text: context },
         ],
-        output_config: { effort: "medium" },
+        output_config: { effort },
         tools,
         messages,
         ...(FALLBACK_MODELS.test(model) ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" } : {}),
@@ -195,7 +224,9 @@ export async function POST(req: NextRequest) {
       const results: Anthropic.Beta.BetaToolResultBlockParam[] = [];
       for (const block of response.content) {
         if (block.type !== "tool_use") continue;
-        const outcome = runTool(block.name, (block.input ?? {}) as Record<string, unknown>, view);
+        const input = (block.input ?? {}) as Record<string, unknown>;
+        const outcome =
+          block.name === "remember" || block.name === "forget" ? await memoryTool(block.name, input, userId, notes) : runTool(block.name, input, view);
         if (outcome.proposal) proposal = outcome.proposal;
         results.push({ type: "tool_result", tool_use_id: block.id, content: outcome.result, ...(outcome.isError ? { is_error: true } : {}) });
       }
@@ -210,10 +241,32 @@ export async function POST(req: NextRequest) {
 
   if (!finalText) {
     finalText = proposal
-      ? "Here it is — check the details and press Confirm to save it."
+      ? "Here it is — check the details and press Log to save it."
       : "Sorry, I couldn't finish that just now. Please try again.";
   }
 
   const reply: AgentReply = { success: true, reply: finalText, sources: usedWeb ? [...sources.values()].slice(0, 6) : [], usedWeb, proposal };
   return NextResponse.json(reply);
+}
+
+/** Saving or dropping a note about this person. Their notes only — never anyone else's. */
+async function memoryTool(name: string, input: Record<string, unknown>, userId: string, notes: AiMemoryNote[]): Promise<{ result: string; isError?: boolean; proposal?: undefined }> {
+  try {
+    if (name === "remember") {
+      const note = String(input.note ?? "").trim().slice(0, 240);
+      if (!note) return { result: JSON.stringify({ error: "Nothing to remember." }), isError: true };
+      if (/\b(pin|password|passcode|account number|card number)\b/i.test(note)) return { result: JSON.stringify({ error: "Don't save sensitive details." }), isError: true };
+      if (notes.some((n) => n.note.toLowerCase() === note.toLowerCase())) return { result: JSON.stringify({ ok: true, already_saved: true }) };
+      const row: AiMemoryNote = { id: `mem-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, userId, note, createdAt: new Date().toISOString() };
+      await aiMemoryCollection.append(row);
+      notes.push(row);
+      return { result: JSON.stringify({ ok: true, saved: note }) };
+    }
+    const text = String(input.text ?? "").trim().toLowerCase();
+    const gone = notes.filter((n) => text && n.note.toLowerCase().includes(text));
+    for (const n of gone) await aiMemoryCollection.softDelete(n.id);
+    return { result: JSON.stringify({ ok: true, removed: gone.map((n) => n.note) }) };
+  } catch {
+    return { result: JSON.stringify({ error: "Couldn't update the notes just now." }), isError: true };
+  }
 }

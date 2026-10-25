@@ -148,6 +148,17 @@ export const AGENT_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "remember",
+    description:
+      "Save something worth remembering about this person for future conversations: how they like answers (short, in Bisaya, with bullet points), what they call things or people, a regular customer's or supplier's habits, a standing preference (\"Aling Nena always pays by GCash\"). Use it when they tell you a preference or correct you, or you notice a clear habit. Don't save one-off facts, figures that live in the records, or anything sensitive (PINs, passwords, account numbers). Keep each note to one short sentence.",
+    input_schema: { type: "object", properties: { note: { type: "string" } }, required: ["note"] },
+  },
+  {
+    name: "forget",
+    description: "Remove saved notes about this person that contain these words — when they say a note is wrong or ask you to forget something.",
+    input_schema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+  },
+  {
     name: "prepare_payment",
     description:
       "Prepare a payment against a receivable or payable (found with money_owed or find_transactions) for the person to confirm. Nothing is saved until they confirm.",
@@ -545,3 +556,40 @@ function preparePayment(input: Record<string, unknown>, view: AgentView): ToolOu
   const summary = `${e.type === "SALE" ? `₱${Math.min(amount, owed).toLocaleString()} received from ${who}` : `₱${Math.min(amount, owed).toLocaleString()} paid to ${who}`} on ${date} for ${e.sku ?? "this transaction"} — ₱${r2(owed - Math.min(amount, owed)).toLocaleString()} still owed after this.`;
   return { result: json({ ok: true, shown_for_confirmation: true, summary }), proposal: { kind: "payment", entryId: e.id, summary, patch } };
 }
+
+/**
+ * How this person usually works, from what they themselves have recorded — the products they
+ * sell most, their regular buyers and payees, how they're usually paid — so BAi can fill the
+ * obvious gaps the way they would ("the usual for Aling Nena") and ask fewer questions.
+ */
+export function habitsOf(entries: Entry[], userId: string, role: Role): string | null {
+  const mine = entries.filter((e) => e.loggedById === userId);
+  if (mine.length < 3) return null;
+  const top = (list: (string | null | undefined)[], n = 5) => {
+    const counts = new Map<string, number>();
+    for (const x of list) if (x && x.trim()) counts.set(x.trim(), (counts.get(x.trim()) ?? 0) + 1);
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).filter(([, c]) => c >= 2);
+  };
+  const sales = mine.filter((e) => e.type === "SALE");
+  const products = top(sales.flatMap((e) => (e.lineItems?.length ? e.lineItems.map((l) => l.name) : [e.sku])));
+  const buyers = top(sales.map((e) => e.counterparty));
+  const expenses = mine.filter((e) => e.type === "EXPENSE");
+  const payees = top(expenses.map((e) => (e.counterparty ? `${e.counterparty} (${EXPENSE_CATEGORY_LABELS[e.category ?? ""] ?? e.category ?? "expense"})` : null)));
+  const methods = role === "executive" ? top(mine.map((e) => (e.paymentMethod === "bank_transfer" ? (e.bankName ? `bank transfer via ${e.bankName}` : "bank transfer") : e.paymentMethod)), 2) : [];
+  const usual = (q: number[]) => {
+    const sorted = [...q].sort((a, b) => a - b);
+    return sorted.length ? sorted[Math.floor(sorted.length / 2)] : null;
+  };
+  const qty = usual(sales.map((e) => e.quantity ?? 0).filter((n) => n > 0));
+  const lines = [
+    products.length && `Sells most often: ${products.map(([n]) => n).join(", ")}.`,
+    buyers.length && `Regular buyers: ${buyers.map(([n, c]) => `${n} (${c} orders)`).join(", ")}.`,
+    qty && `A typical order is about ${qty} units.`,
+    payees.length && `Often pays: ${payees.map(([n]) => n).join(", ")}.`,
+    methods.length && `Usually paid by ${methods.map(([n]) => n).join(", then ")}.`,
+    `Has recorded ${pluralCount(sales.length, "sale")} and ${pluralCount(expenses.length, "expense")}.`,
+  ].filter(Boolean);
+  return lines.join(" ");
+}
+
+const pluralCount = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;

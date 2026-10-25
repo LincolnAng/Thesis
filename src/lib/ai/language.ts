@@ -24,3 +24,18 @@ const RULES: Record<BotLanguage, string> = {
 export function languageRule(language: BotLanguage): string {
   return `${RULES[language] ?? RULES.english} Keep numbers, ₱ amounts, dates and product names exactly as given.`;
 }
+
+const NAMES: Record<BotLanguage, string> = { english: "English", filipino: "Filipino (Tagalog)", cebuano: "Cebuano (Bisaya)" };
+
+/**
+ * For the chat: answer in whatever language the person just wrote in — English, Tagalog, Bisaya
+ * or a mix like Taglish — the way they wrote it. The Settings language is only the fallback,
+ * for a message with no language to go on (a number, a name).
+ */
+export function matchLanguageRule(fallback: BotLanguage): string {
+  return (
+    "LANGUAGE: Reply in the same language the person used in their latest message, matching how they write — English, everyday Tagalog, everyday Bisaya, or the same mix (Taglish, Bislish) if they mixed. " +
+    "If they switch language, switch with them. Use conversational wording, not formal or textbook, and keep business words people normally say in English in English (stock, order, batch, supplier, sales, cost). " +
+    `If the message gives nothing to go on (just a number or a name), reply in ${NAMES[fallback] ?? "English"}. Keep numbers, ₱ amounts, dates and product names exactly as given.`
+  );
+}

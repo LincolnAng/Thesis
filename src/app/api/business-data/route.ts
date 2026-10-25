@@ -12,6 +12,7 @@ import { usersCollection } from "@/lib/sheets/users";
 import { activityCollection } from "@/lib/sheets/activity";
 import { payrollCollection, staffCollection, timeRecordsCollection } from "@/lib/sheets/payroll";
 import type { StaffMember } from "@/lib/store/types";
+import { isTimekeeper } from "@/lib/payroll/timekeepers";
 import type { SheetCollection } from "@/lib/sheets/collection";
 import { requireSession } from "@/lib/auth/session";
 import { decideWrite, needsExistingRow } from "@/lib/auth/permissions";
@@ -99,8 +100,10 @@ export async function POST(req: NextRequest) {
     // from the sheet, never taken from the browser.
     let ownStaffIds: string[] | undefined;
     if (session.role === "employee" && body.collection === "timeRecords") {
-      const staff = (await staffCollection.getAll()) as StaffMember[];
-      ownStaffIds = staff.filter((s) => s.active && s.userId === session.userId).map((s) => s.id);
+      const [staff, settings] = await Promise.all([staffCollection.getAll() as Promise<StaffMember[]>, businessSettingsCollection.getAll()]);
+      // A timekeeper (Ruchel, Aunty Sandy) records anyone's time; anyone else, only their own.
+      const keeper = isTimekeeper(settings as { key: string; value: string }[], session.userId);
+      ownStaffIds = staff.filter((s) => s.active && (keeper || s.userId === session.userId)).map((s) => s.id);
     }
     const decision = decideWrite({
       ownStaffIds,

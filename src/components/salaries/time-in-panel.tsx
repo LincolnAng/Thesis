@@ -78,7 +78,7 @@ export function TimeInPanel() {
             ? "Loading…"
             : isExecutive(me)
               ? "No staff yet. Add them under Staff."
-              : "Your profile isn't linked to your name yet. Ask an Executive to pick your profile for you under Salaries → Staff."}
+              : "No staff yet. An Executive adds them under Salaries → Staff."}
         </p>
       ) : (
         <ul className="flex flex-col divide-y divide-line/10 overflow-hidden rounded-2xl border border-line/15 bg-card">

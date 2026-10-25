@@ -2,6 +2,7 @@ import type { ActivityEvent, Entry, EntryType, PayrollRecord, RawMaterialStock, 
 import type { ProductRow, RecipeRow } from "@/lib/store/sheet-shapes";
 import { entryIntegrityProblem } from "@/lib/transactions/ledger";
 import { daysIn, periodFor } from "@/lib/payroll/pay";
+import { isTimekeeper, TIMEKEEPERS_KEY } from "@/lib/payroll/timekeepers";
 
 /**
  * What each role may read and write — the one place that decides it, run on the server by
@@ -68,6 +69,8 @@ const EMPLOYEE_SETTING_KEYS = new Set([
   "wholesaleCaseSize",
   "wholesaleCaseWord",
   "unavailableDays",
+  // Which profiles keep time — so a timekeeper's screens know to show Time in.
+  TIMEKEEPERS_KEY,
 ]);
 const EMPLOYEE_SETTING_PREFIXES = ["shelfLifeDays:", "eventPlan:", "seasonality:"];
 
@@ -109,8 +112,9 @@ export interface BusinessData {
  * employee copy carries the answer as a fixed price instead of the recipe for it.
  */
 export function redactForEmployee(data: BusinessData, sellingPrice: (product: ProductRow) => number, userId?: string): BusinessData {
-  // The staff member this profile times in as — an employee sees only their own time record.
-  const own = data.staff.filter((s) => s.active && userId && s.userId === userId);
+  // An employee sees only their own time record — unless they keep time for everyone.
+  const keeper = isTimekeeper(data.businessSettings, userId);
+  const own = data.staff.filter((s) => s.active && (keeper || (userId && s.userId === userId)));
   const ownIds = new Set(own.map((s) => s.id));
   return {
     ...data,

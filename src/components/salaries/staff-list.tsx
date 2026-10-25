@@ -5,7 +5,8 @@ import { Pencil, Plus, UserRound } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { BUTTON, Pill } from "@/components/ui/kit";
 import { useStore } from "@/lib/store/use-store";
-import { addStaff, updateStaff } from "@/lib/store/store";
+import { addStaff, setBusinessSetting, updateStaff } from "@/lib/store/store";
+import { TIMEKEEPERS_KEY, timekeeperIds } from "@/lib/payroll/timekeepers";
 import { formatPeso } from "@/lib/format";
 import type { PayType, StaffMember } from "@/lib/store/types";
 
@@ -16,6 +17,36 @@ import type { PayType, StaffMember } from "@/lib/store/types";
 
 export const rateLabel = (s: Pick<StaffMember, "payType" | "rate">) => `${formatPeso(s.rate)} / ${s.payType === "monthly" ? "month" : "day"}`;
 
+/** Which profiles keep time for everyone — Ruchel and Aunty Sandy. */
+function Timekeepers() {
+  const { users, businessSettings } = useStore();
+  const ids = timekeeperIds(businessSettings);
+  const toggle = (id: string) => setBusinessSetting(TIMEKEEPERS_KEY, (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]).join(","));
+  return (
+    <section className="rounded-2xl border border-line/15 bg-card px-4 py-3">
+      <p className="text-[15px] font-semibold">Who keeps time</p>
+      <p className="mb-2 text-[13px] text-muted-foreground">
+        These profiles get the Time in tab and record everyone&apos;s time in and out — including staff with no profile, like a PWD worker someone times in for. No one else sees anyone&apos;s times.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {users.map((u) => (
+          <button
+            key={u.id}
+            type="button"
+            role="checkbox"
+            aria-checked={ids.includes(u.id)}
+            onClick={() => toggle(u.id)}
+            className={`min-h-10 rounded-full border px-4 text-[14px] font-semibold ${ids.includes(u.id) ? "border-cacao bg-cacao text-ivory" : "border-line/20 bg-card"}`}
+          >
+            {ids.includes(u.id) ? "✓ " : ""}
+            {u.name}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function StaffList() {
   const { staff } = useStore();
   const [editing, setEditing] = useState<StaffMember | "new" | null>(null);
@@ -23,6 +54,7 @@ export function StaffList() {
 
   return (
     <div className="flex max-w-[760px] flex-col gap-3">
+      <Timekeepers />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[14px] text-muted-foreground">Rates are seen by Executives only. Staff see their names, to time in.</p>
         <button type="button" onClick={() => setEditing("new")} className={BUTTON.primary}>
@@ -131,7 +163,7 @@ function StaffDialog({ member, onClose }: { member: StaffMember | null; onClose:
           <label className={`${label} col-span-2`}>
             Times in with the profile
             <select value={userId} onChange={(e) => setUserId(e.target.value)} className={field}>
-              <option value="">No profile — anyone can time them in</option>
+              <option value="">No profile — the timekeepers time them in</option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name}

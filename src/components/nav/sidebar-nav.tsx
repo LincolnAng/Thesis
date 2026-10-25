@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChocolateBarLogo } from "@/components/ui/chocolate-bar-logo";
 import { cn } from "@/lib/utils";
+import { isTimekeeper } from "@/lib/payroll/timekeepers";
 import { navItemsFor, SECONDARY_ITEMS, type NavItem } from "@/lib/nav-items";
 import { profileColor } from "@/lib/auth/profile-colors";
 import { useStore } from "@/lib/store/use-store";
@@ -39,7 +40,7 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
 export function SidebarNav() {
   const pathname = usePathname();
   const me = useCurrentUser();
-  const { users } = useStore();
+  const { users, businessSettings } = useStore();
   const myIndex = Math.max(0, users.findIndex((u) => u.id === me?.id));
 
   return (
@@ -59,7 +60,7 @@ export function SidebarNav() {
       </div>
 
       <nav className="flex w-full flex-col gap-1">
-        {navItemsFor(me?.role).map((item) => (
+        {navItemsFor(me?.role, { timekeeper: isTimekeeper(businessSettings, me?.id) }).map((item) => (
           <NavLink key={item.href} item={item} active={isActive(pathname, item.href)} />
         ))}
       </nav>
