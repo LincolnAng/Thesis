@@ -1,5 +1,5 @@
 import { createSheetCollection } from "./collection";
-import type { DueDateChange, Entry, PaymentRecord } from "@/lib/store/types";
+import type { DueDateChange, Entry, InstallmentPlan, PaymentRecord } from "@/lib/store/types";
 
 const HEADER = [
   "id",
@@ -41,6 +41,9 @@ const HEADER = [
   "paymentTerms",
   "dueDateHistory",
   "defaultedAt",
+  // Instalment plans, and the branch it happened at.
+  "installments",
+  "branch",
 ];
 
 function json<T>(raw: string | undefined): T | null {
@@ -99,12 +102,14 @@ function toRow(e: Entry): string[] {
     e.paymentTerms ?? "",
     e.dueDateHistory?.length ? JSON.stringify(e.dueDateHistory) : "",
     e.defaultedAt ?? "",
+    e.installments ? JSON.stringify(e.installments) : "",
+    e.branch ?? "",
   ];
 }
 
 function fromRow(row: string[]): Entry | null {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [id, timestamp, type, amount, quantity, unit, sku, counterparty, location, priceType, category, rawText, confidence, notes, _deletedAt, eventId, loggedById, loggedByName, paymentTerm, dueDate, amountPaid, paymentStatus, settledAt, lineItems, paymentMethod, bankName, payments, paymentTerms, dueDateHistory, defaultedAt] =
+  const [id, timestamp, type, amount, quantity, unit, sku, counterparty, location, priceType, category, rawText, confidence, notes, _deletedAt, eventId, loggedById, loggedByName, paymentTerm, dueDate, amountPaid, paymentStatus, settledAt, lineItems, paymentMethod, bankName, payments, paymentTerms, dueDateHistory, defaultedAt, installments, branch] =
     row;
   if (!id) return null;
   return {
@@ -131,12 +136,14 @@ function fromRow(row: string[]): Entry | null {
     paymentStatus: (["pending", "partial", "settled", "defaulted"].includes(paymentStatus) ? paymentStatus : null) as Entry["paymentStatus"],
     settledAt: settledAt || null,
     lineItems: json<Entry["lineItems"]>(lineItems),
-    paymentMethod: (["cash", "bank_transfer"].includes(paymentMethod) ? paymentMethod : null) as Entry["paymentMethod"],
+    paymentMethod: (["cash", "bank_transfer", "check"].includes(paymentMethod) ? paymentMethod : null) as Entry["paymentMethod"],
     bankName: bankName || null,
     payments: normalizePayments(id, json<Partial<PaymentRecord>[]>(payments)),
     paymentTerms: paymentTerms || null,
     dueDateHistory: json<DueDateChange[]>(dueDateHistory),
     defaultedAt: defaultedAt || null,
+    installments: json<InstallmentPlan>(installments),
+    branch: branch || null,
   };
 }
 

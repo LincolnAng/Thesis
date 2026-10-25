@@ -42,8 +42,22 @@ export interface OrderLine {
   unitPrice: number;
 }
 
-/** How money changed hands. The bank is named, never an account number or balance. */
-export type PaymentMethod = "cash" | "bank_transfer";
+/** How money changed hands. The bank is named, never an account number or balance. A check
+ *  (often post-dated, one per instalment) names the bank it's drawn on. */
+export type PaymentMethod = "cash" | "bank_transfer" | "check";
+
+export type InstallmentFrequency = "weekly" | "monthly" | "quarterly" | "yearly";
+
+/**
+ * Paying (or being paid) in instalments: `count` equal payments, one each `frequency`, the first
+ * due on `firstDue`. Each instalment's due date is worked out from these (lib/transactions/
+ * ledger installmentSchedule), and payments made are applied to the earliest first.
+ */
+export interface InstallmentPlan {
+  frequency: InstallmentFrequency;
+  count: number;
+  firstDue: string;
+}
 
 /**
  * One actual receipt or payment against a receivable or payable. The obligation keeps its
@@ -135,6 +149,10 @@ export interface Entry {
   dueDateHistory?: DueDateChange[] | null;
   /** When the owner confirmed it defaulted. Kept after it is paid, as part of its history. */
   defaultedAt?: string | null;
+  /** A payable or receivable paid in instalments. `dueDate` is then the last instalment's. */
+  installments?: InstallmentPlan | null;
+  /** The branch it happened at (lib/inventory/locations). Empty means the main branch. */
+  branch?: string | null;
 }
 
 export interface RecipeIngredientRow {

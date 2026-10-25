@@ -110,12 +110,14 @@ function taskFor(e: CalendarEntry, today: string): Pick<Reminder, "title" | "det
   switch (e.category) {
     case "payments": {
       // "To collect: ₱800" / "from Ana · 3 days overdue"
-      const [whoPart, latePart] = sub.split(" · ");
+      // "from Ana · 3 days overdue · instalment 2 of 6"
+      const [whoPart, ...rest] = sub.split(" · ");
       const who = whoPart.replace(/^(from|to) /, "");
-      const late = e.date < today;
+      const notes = rest.map((r) => r.replace("overdue", "late"));
+      if (e.date === today) notes.unshift("Due today");
       return {
         title: kind === "To collect" ? `Collect ${what} from ${who}` : `Pay ${who} ${what}`,
-        detail: late ? latePart?.replace("overdue", "late") : e.date === today ? "Due today" : undefined,
+        detail: notes.join(" · ") || undefined,
       };
     }
     case "production":

@@ -1,12 +1,16 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, HandCoins, History as HistoryIcon, Pencil } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, HandCoins, History as HistoryIcon, Pencil, Trash2 } from "lucide-react";
 import { ENTRY_TYPE_LABELS, EXPENSE_CATEGORY_LABELS, PRICE_TYPE_LABELS, formatDate, formatPeso } from "@/lib/format";
-import { dueInfo, methodOf, obligationInfo, obligationKind, outstanding, paymentsOf } from "@/lib/transactions/ledger";
+import { currentDueDate, dueInfo, FREQUENCY_LABELS, installmentSchedule, methodOf, obligationInfo, obligationKind, outstanding, paymentsOf } from "@/lib/transactions/ledger";
+import { isMaterialWaste } from "@/lib/transactions/waste";
+import { fullName } from "@/lib/summary/product-sizes";
+import { findProduct } from "@/lib/summary/product-match";
+import { useStore } from "@/lib/store/use-store";
 import { lineSubtotal, orderTotal } from "@/lib/transactions/order-lines";
 import { PaymentLine, QuickPay } from "@/components/transactions/obligation-dialogs";
-import type { Entry } from "@/lib/store/types";
+import type { Entry, Product } from "@/lib/store/types";
 
 /**
  * Every recorded transaction, one row each, in one fixed set of columns — the same for sales,
@@ -44,30 +48,40 @@ interface ProductLine {
   amount: number | null;
 }
 
-/** An order's products, line by line. A single product is a list of one. */
-function productLines(e: Entry): ProductLine[] {
+/**
+ * An order's products, line by line. A single product is a list of one. Products are named the
+ * way Inventory names them now — a renamed product shows its new name on old sales too.
+ */
+function productLines(e: Entry, products: Product[] = []): ProductLine[] {
+  const current = (id: string | null, name: string | null) => {
+    const p = (id && products.find((x) => x.id === id)) || (e.type === "SALE" || (e.type === "WASTE" && !isMaterialWaste(e)) ? findProduct(products, name) : undefined);
+    return p ? fullName(p, products) : (name ?? "");
+  };
   if (e.lineItems?.length) {
     const listed = orderTotal(e.lineItems);
     const actual = e.amount ?? listed;
     return e.lineItems.map((l) => ({
-      name: l.name,
+      name: current(l.productId, l.name),
       qty: l.quantity,
       amount: listed > 0 ? Math.round((lineSubtotal(l) / listed) * actual * 100) / 100 : 0,
     }));
   }
-  return [{ name: e.sku ?? "", qty: e.type === "SALE" || e.type === "WASTE" ? e.quantity : null, amount: e.amount }];
+  return [{ name: current(null, e.sku), qty: e.type === "SALE" || e.type === "WASTE" ? e.quantity : null, amount: e.amount }];
 }
 
-/** Where a receivable or payable stands against its due date, in words. */
+/** Where a receivable or payable stands against its due date, in words. With instalments, the next one. */
 function dueLine(e: Entry): string {
   const due = dueInfo(e, new Date());
-  if (!e.dueDate || due.daysLeft === null) return "No due date set";
+  const next = currentDueDate(e);
+  if (!next || due.daysLeft === null) return "No due date set";
   const when = due.overdue
     ? `${Math.abs(due.daysLeft)} day${Math.abs(due.daysLeft) === 1 ? "" : "s"} overdue`
     : due.daysLeft === 0
       ? "due today"
       : `in ${due.daysLeft} day${due.daysLeft === 1 ? "" : "s"}`;
-  return `Due ${formatDate(e.dueDate)} · ${when}`;
+  const plan = e.installments ? installmentSchedule(e) : [];
+  const n = plan.find((i) => !i.paid)?.n;
+  return `${n ? `Instalment ${n} of ${plan.length} due` : "Due"} ${formatDate(next)} · ${when}`;
 }
 
 /**
@@ -96,7 +110,7 @@ function typeLabel(e: Entry): string {
     case "RND":
       return "Investment";
     case "WASTE":
-      return "Spoilage";
+      return isMaterialWaste(e) ? "Waste" : "Spoilage";
     default:
       return ENTRY_TYPE_LABELS[e.type] ?? e.type;
   }
@@ -136,7 +150,7 @@ const priceTypeOf = (e: Entry) => (e.type === "SALE" && e.priceType && e.priceTy
 
 /** Whether there is anything under an order that its rows don't already show. */
 const hasDetails = (e: Entry, showPayment: boolean) =>
-  productLines(e).length > 1 || priceTypeOf(e) !== null || Boolean(e.notes) || (showPayment && hasPayment(e) && (obligationKind(e) !== null || methodOf(e).method !== null));
+  (e.lineItems?.length ?? 0) > 1 || priceTypeOf(e) !== null || Boolean(e.notes) || (showPayment && hasPayment(e) && (obligationKind(e) !== null || methodOf(e).method !== null));
 
 /** A titled block in an opened row. */
 function Block({ title, aside, children }: { title: string; aside?: React.ReactNode; children: React.ReactNode }) {
@@ -177,7 +191,9 @@ function Details({
   const payments = kind ? paymentsOf(e) : [];
   const priceType = priceTypeOf(e);
   const faint = "text-muted-foreground";
-  const items = productLines(e);
+  const { products } = useStore();
+  const items = productLines(e, products);
+  const plan = kind && e.installments ? installmentSchedule(e) : [];
   const spot = showPayment && !kind && hasPayment(e) ? methodOf(e) : null;
   const button = "inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line/25 px-3 text-[13px] font-medium transition hover:border-cacao hover:text-cacao";
 
@@ -217,6 +233,24 @@ function Details({
           ) : (
             <p className={`py-1 ${faint}`}>No payments yet.</p>
           )}
+          {plan.length > 0 && (
+            <div className="flex flex-col gap-0.5 py-1">
+              <span className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                {plan.length} {FREQUENCY_LABELS[e.installments!.frequency].toLowerCase()} instalments{e.paymentMethod === "check" ? " · post-dated checks" : ""}
+              </span>
+              {plan.map((i) => (
+                <span key={i.n} className={`flex justify-between gap-3 tabular-nums ${i.paid ? "text-muted-foreground line-through" : ""}`}>
+                  <span>
+                    {i.n}. {formatDate(i.date)}
+                  </span>
+                  <span>
+                    {formatPeso(i.amount)}
+                    {!i.paid && i.covered > 0 ? ` (${formatPeso(i.covered)} paid)` : ""}
+                  </span>
+                </span>
+              ))}
+            </div>
+          )}
           {e.dueDateHistory?.map((c, i) => (
             <p key={`due-${i}`} className={faint}>
               Due date moved {c.from ? `from ${formatDate(c.from)} ` : ""}to {c.to ? formatDate(c.to) : "none"}
@@ -249,7 +283,7 @@ function Details({
       ) : spot?.method ? (
         <Block title="Payment">
           <p className="py-1">
-            Paid on the spot · {spot.method === "bank_transfer" ? `Bank transfer${spot.bank ? ` · ${spot.bank}` : ""}` : "Cash"}
+            Paid on the spot · {spot.method === "bank_transfer" ? `Bank transfer${spot.bank ? ` · ${spot.bank}` : ""}` : spot.method === "check" ? `Check${spot.bank ? ` · ${spot.bank}` : ""}` : "Cash"}
           </p>
         </Block>
       ) : null}
@@ -311,6 +345,7 @@ export function TransactionTable({
   rows,
   showPayment,
   onEdit,
+  onDelete,
   carriedFrom,
   owed,
 }: {
@@ -318,10 +353,13 @@ export function TransactionTable({
   /** Executives only — employees never see who owes what, or how anything was paid. */
   showPayment: boolean;
   onEdit: (entry: Entry) => void;
+  /** Deletes a transaction, after asking. */
+  onDelete?: (entry: Entry) => void;
   /** For rows carried over from an earlier month: the month they come from, by id. */
   carriedFrom?: Map<string, string>;
   owed?: OwedActions;
 }) {
+  const { products } = useStore();
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 } | null>(null);
   const [open, setOpen] = useState<Set<string>>(new Set());
   // The order whose payment form is showing under its rows.
@@ -346,7 +384,9 @@ export function TransactionTable({
   const td = `px-3 py-3 text-center align-middle ${rule}`;
   const colCount = showPayment ? 10 : 8;
 
-  const widths = [100, 130, 96, null, 48, 92, ...(showPayment ? [96, 152] : []), 84, showPayment ? 164 : 80];
+  // Product is kept narrow (long names are cut off, with the full name on hover); the columns
+  // people read across — who, how much, how paid, who recorded it — get the room.
+  const widths = [108, 170, 96, 170, 56, 110, ...(showPayment ? [140, 168] : []), 150, showPayment ? 216 : 132];
 
   const head = (label: string, key?: SortKey) => (
     <th scope="col" className={th}>
@@ -372,7 +412,7 @@ export function TransactionTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className={`w-full table-fixed border-collapse text-[13px] ${showPayment ? "min-w-[1150px]" : "min-w-[820px]"}`}>
+      <table className={`w-full table-fixed border-collapse text-[13px] ${showPayment ? "min-w-[1384px]" : "min-w-[1010px]"}`}>
         <colgroup>
           {widths.map((w, i) => (
             <col key={i} style={w ? { width: w } : undefined} />
@@ -399,7 +439,7 @@ export function TransactionTable({
             const { method, bank } = methodOf(e);
             const isOpen = open.has(e.id);
             const expandable = hasDetails(e, showPayment);
-            const items = productLines(e);
+            const items = productLines(e, products);
             const status = statusOf(e, showPayment);
             const canPay = !!owed && !!kind && !!status && status.left > 0;
             const payTip = method === "bank_transfer" ? `Bank transfer${bank ? ` · ${bank}` : ""}` : method ? "Cash" : undefined;
@@ -448,7 +488,7 @@ export function TransactionTable({
                     <td className={td}>
                       {paidBy(e, showPayment).map((m) => (
                         <span key={`${m.method}${m.bank}`} className="block truncate leading-6" title={m.method === "bank_transfer" ? `Bank transfer${m.bank ? ` · ${m.bank}` : ""}` : undefined}>
-                          {m.method === "bank_transfer" ? (m.bank ?? "Bank transfer") : "Cash"}
+                          {m.method === "bank_transfer" ? (m.bank ?? "Bank transfer") : m.method === "check" ? `Check${m.bank ? ` · ${m.bank}` : ""}` : "Cash"}
                         </span>
                       ))}
                     </td>
@@ -485,8 +525,8 @@ export function TransactionTable({
                       )}
                     </td>
                   )}
-                  <td className={`${td} truncate`} title={e.loggedByName ?? undefined}>
-                    {e.loggedByName}
+                  <td className={td} title={e.loggedByName ?? undefined}>
+                    <span className="block break-words font-medium">{e.loggedByName}</span>
                   </td>
                   {/* The same three actions in the same places on every row; one that doesn't apply is shaded out. */}
                   <td className="px-2 py-1.5 text-center align-middle">
@@ -516,6 +556,17 @@ export function TransactionTable({
                         />
                       )}
                       <ActionIcon icon={Pencil} label="Edit" title="Change this transaction" enabled onClick={() => onEdit(e)} />
+                      {onDelete && (
+                        <ActionIcon
+                          icon={Trash2}
+                          label="Delete"
+                          title="Delete this transaction"
+                          enabled
+                          onClick={() => {
+                            if (window.confirm(`Delete this ${typeLabel(e).toLowerCase()}${e.counterparty ? ` (${e.counterparty})` : ""}? Stock it moved is put back.`)) onDelete(e);
+                          }}
+                        />
+                      )}
                     </div>
                   </td>
                 </tr>

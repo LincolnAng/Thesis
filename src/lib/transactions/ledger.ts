@@ -1,4 +1,4 @@
-import type { DueDateChange, Entry, PaymentRecord, PaymentStatus } from "@/lib/store/types";
+import type { DueDateChange, Entry, InstallmentFrequency, InstallmentPlan, PaymentRecord, PaymentStatus } from "@/lib/store/types";
 
 /**
  * The money on the Transactions page, kept apart by what kind of number it is:
@@ -221,10 +221,66 @@ export interface DueInfo {
   overdue: boolean;
 }
 
-/** How far off the due date is, counted in whole calendar days. */
-export function dueInfo(e: Owed & Pick<Entry, "dueDate">, now: Date): DueInfo {
-  if (!e.dueDate || outstanding(e) <= 0) return { daysLeft: null, overdue: false };
-  const [y, m, d] = e.dueDate.split("-").map(Number);
+// ── Instalments ────────────────────────────────────────────────────────────
+
+export interface Installment {
+  /** 1-based. */
+  n: number;
+  date: string;
+  amount: number;
+  /** How much of this instalment the payments so far cover. */
+  covered: number;
+  paid: boolean;
+}
+
+/** "2026-01-31" + 1 month → "2026-02-28": a month-end due date stays a month-end. */
+function addMonths(day: string, months: number): string {
+  const [y, m, d] = day.split("-").map(Number);
+  const first = new Date(y, m - 1 + months, 1);
+  const last = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  const t = new Date(first.getFullYear(), first.getMonth(), Math.min(d, last));
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+}
+
+const STEP: Record<InstallmentFrequency, (day: string, i: number) => string> = {
+  weekly: (day, i) => addDays(day, 7 * i),
+  monthly: (day, i) => addMonths(day, i),
+  quarterly: (day, i) => addMonths(day, 3 * i),
+  yearly: (day, i) => addMonths(day, 12 * i),
+};
+
+export const FREQUENCY_LABELS: Record<InstallmentFrequency, string> = { weekly: "Weekly", monthly: "Monthly", quarterly: "Every 3 months", yearly: "Yearly" };
+
+/**
+ * An instalment plan's payments, each with its date and amount — equal parts, the last one
+ * taking any rounding — and how much of each the payments so far cover, earliest first.
+ */
+export function installmentSchedule(e: Pick<Entry, "amount" | "amountPaid" | "paymentStatus" | "installments"> & { payments?: PaymentRecord[] | null }): Installment[] {
+  const plan = e.installments;
+  if (!plan || !(plan.count > 0) || !DAY_RE.test(plan.firstDue)) return [];
+  const total = e.amount ?? 0;
+  const count = Math.min(240, Math.floor(plan.count));
+  const each = Math.floor((total / count) * 100) / 100;
+  let paid = paidSoFar(e);
+  return Array.from({ length: count }, (_, i) => {
+    const amount = i === count - 1 ? cents(total - each * (count - 1)) : each;
+    const covered = Math.min(amount, Math.max(0, paid));
+    paid = cents(paid - covered);
+    return { n: i + 1, date: STEP[plan.frequency](plan.firstDue, i), amount, covered: cents(covered), paid: covered >= amount - 0.005 };
+  });
+}
+
+/** The date the next payment is due: the first instalment not fully paid, or the one due date. */
+export function currentDueDate(e: Pick<Entry, "dueDate" | "amount" | "amountPaid" | "paymentStatus" | "installments"> & { payments?: PaymentRecord[] | null }): string | null {
+  if (e.installments) return installmentSchedule(e).find((i) => !i.paid)?.date ?? e.dueDate ?? null;
+  return e.dueDate ?? null;
+}
+
+/** How far off the due date is, counted in whole calendar days. With instalments, the next one. */
+export function dueInfo(e: Owed & Pick<Entry, "dueDate"> & { installments?: InstallmentPlan | null }, now: Date): DueInfo {
+  const dueDate = currentDueDate(e);
+  if (!dueDate || outstanding(e) <= 0) return { daysLeft: null, overdue: false };
+  const [y, m, d] = dueDate.split("-").map(Number);
   const due = new Date(y, m - 1, d);
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const daysLeft = Math.round((due.getTime() - today.getTime()) / 86_400_000);
@@ -408,6 +464,8 @@ export interface LedgerSummary {
   sales: number;
   expenses: number;
   spoiled: number;
+  /** Raw materials and packaging thrown away, at cost — already in expenses, so not in earned. */
+  wasted: number;
   /** Still owed TO the business at the end of the period, from this and every earlier month. */
   receivables: number;
   /** Still owed BY the business at the end of the period. */
@@ -456,7 +514,10 @@ export function summarize(entries: Entry[], period: Period, now: Date): LedgerSu
   const inPeriod = period === "all" ? entries : entries.filter((e) => monthOf(e) === period);
   const sales = inPeriod.filter((e) => e.type === "SALE");
   const expenses = inPeriod.filter((e) => e.type === "EXPENSE");
-  const spoiled = sum(inPeriod.filter((e) => e.type === "WASTE"), (e) => e.amount ?? 0);
+  // Products lost, at cost. Raw materials and packaging lost (waste) were already expensed when
+  // bought, so they're reported apart and not taken off earnings again.
+  const spoiled = sum(inPeriod.filter((e) => e.type === "WASTE" && e.category !== "material_waste"), (e) => e.amount ?? 0);
+  const wasted = sum(inPeriod.filter((e) => e.type === "WASTE" && e.category === "material_waste"), (e) => e.amount ?? 0);
 
   // Cash is looked for across every entry: a payment this month can settle last month's sale.
   const moving = entries.filter((e) => e.type === "SALE" || e.type === "EXPENSE" || e.type === "ASSET" || e.type === "CAPITAL");
@@ -477,6 +538,7 @@ export function summarize(entries: Entry[], period: Period, now: Date): LedgerSu
     sales: salesTotal,
     expenses: expensesTotal,
     spoiled,
+    wasted,
     receivables: sum(receivable, (e) => outstandingAt(e, period)),
     payables: sum(payable, (e) => outstandingAt(e, period)),
     overdueReceivables: receivable.filter(statusIs("overdue")).length,
@@ -664,7 +726,12 @@ export function entryIntegrityProblem(e: Partial<Entry>): string | null {
   if (e.paymentTerm === "payable" && e.type !== "EXPENSE" && e.type !== "ASSET") return "payable_must_be_an_expense";
 
   if (e.dueDate && !DAY_RE.test(e.dueDate)) return "invalid_due_date";
-  if (e.paymentMethod && e.paymentMethod !== "cash" && e.paymentMethod !== "bank_transfer") return "invalid_payment_method";
+  if (e.paymentMethod && e.paymentMethod !== "cash" && e.paymentMethod !== "bank_transfer" && e.paymentMethod !== "check") return "invalid_payment_method";
+  if (e.installments) {
+    const p = e.installments;
+    if (!["weekly", "monthly", "quarterly", "yearly"].includes(p.frequency) || !(p.count >= 1 && p.count <= 240) || !DAY_RE.test(p.firstDue)) return "invalid_installments";
+    if (e.paymentTerm !== "receivable" && e.paymentTerm !== "payable") return "installments_need_a_receivable_or_payable";
+  }
   if (e.paymentMethod === "bank_transfer" && !e.bankName?.trim()) return "bank_name_required";
 
   if (e.payments && e.payments.length > 0) {

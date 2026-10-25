@@ -19,6 +19,7 @@ import {
 import { findProduct } from "@/lib/summary/product-match";
 import { rawQuantityNeeded } from "@/lib/summary/cacao";
 import { ENTRY_TYPE_LABELS, formatPeso } from "@/lib/format";
+import { isMaterialWaste } from "@/lib/transactions/waste";
 import { currentUser, signOut } from "@/lib/auth/current-user";
 import type { BusinessSettingRow } from "@/lib/sheets/business-settings";
 import type {
@@ -788,6 +789,16 @@ function applyEntrySideEffects(
       const lineDelta = line.quantity * direction;
       products = products.map((p) => (p.id === product.id ? { ...p, stockQty: Math.max(0, p.stockQty - lineDelta) } : p));
       touchedProductIds.push(product.id);
+    }
+    return { products, rawMaterials, touchedProductIds, touchedMaterialIds };
+  }
+
+  // Raw materials or packaging thrown away come off their own stock, never a product's.
+  if (isMaterialWaste(entry)) {
+    const material = findRawMaterialByName(rawMaterials, entry.sku);
+    if (material) {
+      rawMaterials = rawMaterials.map((m) => (m.id === material.id ? { ...m, qty: Math.max(0, m.qty - delta) } : m));
+      touchedMaterialIds.push(material.id);
     }
     return { products, rawMaterials, touchedProductIds, touchedMaterialIds };
   }

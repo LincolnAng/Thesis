@@ -378,3 +378,18 @@ test("overpaying never counts more cash than was owed", () => {
   const sale = e({ paymentTerm: "receivable", payments: [{ id: "p4", date: "2026-10-01", amount: 900, method: "cash", bankName: null, note: null }, { id: "p5", date: "2026-10-02", amount: 900, method: "cash", bankName: null, note: null }] });
   assert.equal(cashInPeriod(sale, "2026-10"), 1000);
 });
+
+test("instalments: equal parts on a schedule, paid earliest first, the next unpaid one is what's due", async () => {
+  const { installmentSchedule, currentDueDate, dueInfo, entryIntegrityProblem } = await import("./ledger.ts");
+  const e = { amount: 1000, amountPaid: null, paymentStatus: null, paymentTerm: "receivable" as const, dueDate: "2026-04-30", installments: { frequency: "monthly" as const, count: 3, firstDue: "2026-01-31" }, payments: [] as { id: string; date: string; amount: number; method: string | null; bankName: string | null; note: string | null }[] };
+  const s = installmentSchedule(e);
+  assert.deepEqual(s.map((i) => [i.date, i.amount]), [["2026-01-31", 333.33], ["2026-02-28", 333.33], ["2026-03-31", 333.34]]);
+  assert.equal(currentDueDate(e), "2026-01-31");
+  const paidOne = { ...e, payments: [{ id: "p", date: "2026-01-30", amount: 400, method: "check", bankName: "BDO", note: null }] };
+  assert.equal(currentDueDate(paidOne), "2026-02-28");
+  assert.equal(installmentSchedule(paidOne)[1].covered, 66.67);
+  assert.equal(dueInfo(paidOne, new Date(2026, 2, 3)).overdue, true);
+  assert.equal(installmentSchedule({ ...e, installments: { frequency: "yearly", count: 2, firstDue: "2026-06-15" } })[1].date, "2027-06-15");
+  assert.equal(entryIntegrityProblem({ type: "SALE", paymentTerm: "spot", installments: e.installments }), "installments_need_a_receivable_or_payable");
+  assert.equal(entryIntegrityProblem({ type: "SALE", paymentTerm: "receivable", paymentMethod: "check", installments: e.installments }), null);
+});

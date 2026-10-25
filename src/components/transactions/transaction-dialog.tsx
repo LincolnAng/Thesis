@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Banknote, Check, CircleCheck, Clock, HandCoins, Heart, Boxes, Landmark, Minus, PackageX, Plus, Receipt, Search, ShoppingBag, Tag, Wrench, X, type LucideIcon } from "lucide-react";
+import { Trash2, Banknote, Check, CircleCheck, Clock, FileText, CalendarRange, CalendarCheck, HandCoins, Heart, Boxes, Landmark, Minus, PackageX, Plus, Receipt, Search, ShoppingBag, Tag, Wrench, X, type LucideIcon } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Segmented, type Choice } from "@/components/ui/segmented";
 import { CustomerNameInput } from "@/components/customers/customer-name-input";
@@ -14,12 +14,15 @@ import { spoiledValue } from "@/lib/summary/spoilage";
 import { allExpenseCategories } from "@/lib/summary/expenses-summary";
 import { familiesOf, fullName, sizeName } from "@/lib/summary/product-sizes";
 import { findProduct } from "@/lib/summary/product-match";
-import { addPayment, outstanding, paidSoFar } from "@/lib/transactions/ledger";
+import { addPayment, FREQUENCY_LABELS, installmentSchedule, outstanding, paidSoFar } from "@/lib/transactions/ledger";
 import { describeOrder, lineSubtotal, orderQuantity, orderTotal } from "@/lib/transactions/order-lines";
 import { COMMON_BANKS, EXPENSE_CATEGORY_LABELS, describePaymentMethod, formatDate, formatPeso } from "@/lib/format";
 import { PAYROLL_CATEGORIES } from "@/lib/auth/permissions";
+import { isMaterialWaste, MATERIAL_WASTE } from "@/lib/transactions/waste";
+import { groupOf, materialStanding } from "@/lib/summary/material-stock";
+import { cacaoUtilizationPct } from "@/lib/summary/business-config";
 import { currentUser } from "@/lib/auth/current-user";
-import type { Entry, OrderLine, PaymentMethod, PriceType, Product } from "@/lib/store/types";
+import type { Entry, InstallmentFrequency, OrderLine, PaymentMethod, PriceType, Product } from "@/lib/store/types";
 import type { EntryDraft } from "@/lib/home/describe-entry";
 
 /** The big decisions: equal tiles, icon over label, one row. */
@@ -48,7 +51,7 @@ function Tiles<T extends string>({ choices, value, onChange, ariaLabel }: { choi
   );
 }
 
-const KIND_ICON: Record<Kind, LucideIcon> = { sale: ShoppingBag, expense: Receipt, investment: Landmark, spoilage: PackageX };
+const KIND_ICON: Record<Kind, LucideIcon> = { sale: ShoppingBag, expense: Receipt, investment: Landmark, spoilage: PackageX, waste: Trash2 };
 const PRICE_CHOICES: Choice<Exclude<PriceType, null>>[] = [
   { value: "standard", label: "Regular", icon: Tag },
   { value: "friend", label: "Friend", icon: Heart },
@@ -57,7 +60,10 @@ const PRICE_CHOICES: Choice<Exclude<PriceType, null>>[] = [
 const METHOD_CHOICES: Choice<PaymentMethod>[] = [
   { value: "cash", label: "Cash", icon: Banknote },
   { value: "bank_transfer", label: "Bank transfer", icon: Landmark },
+  { value: "check", label: "Check", icon: FileText },
 ];
+const FREQUENCIES: InstallmentFrequency[] = ["weekly", "monthly", "quarterly", "yearly"];
+const PERIOD_WORD: Record<InstallmentFrequency, [string, string]> = { weekly: ["week", "weeks"], monthly: ["month", "months"], quarterly: ["quarter", "quarters"], yearly: ["year", "years"] };
 
 /** A payment the ledger refused (more than is owed, a future date…), shown to the person as is. */
 class PaymentRefused extends Error {}
@@ -79,11 +85,11 @@ class PaymentRefused extends Error {}
  * anything was typed.
  */
 
-type Kind = "sale" | "expense" | "investment" | "spoilage";
+type Kind = "sale" | "expense" | "investment" | "spoilage" | "waste";
 type InvestmentKind = "capital" | "asset";
 type When = "now" | "later";
 
-const KIND_LABEL: Record<Kind, string> = { sale: "Sale", expense: "Expense", investment: "Investment", spoilage: "Spoilage" };
+const KIND_LABEL: Record<Kind, string> = { sale: "Sale", expense: "Expense", investment: "Investment", spoilage: "Spoilage", waste: "Waste" };
 
 function today(): string {
   const d = new Date();
@@ -108,7 +114,7 @@ function kindOf(e: Entry | null): Kind {
   if (!e) return "sale";
   if (e.type === "EXPENSE") return "expense";
   if (e.type === "CAPITAL" || e.type === "ASSET") return "investment";
-  if (e.type === "WASTE") return "spoilage";
+  if (e.type === "WASTE") return isMaterialWaste(e) ? "waste" : "spoilage";
   return "sale";
 }
 
@@ -159,7 +165,7 @@ export function TransactionDialog({
   /** Overrides the heading, e.g. when a prefilled draft is really a new transaction. */
   title?: string;
 }) {
-  const { products, categoryBudgets } = useStore();
+  const { products, categoryBudgets, rawMaterials, entries, businessSettings } = useStore();
   const costCtx = useCostContext();
   const e = existing;
 
@@ -178,13 +184,22 @@ export function TransactionDialog({
   const [amount, setAmount] = useState(e && e.type !== "SALE" && e.type !== "WASTE" && e.amount != null ? String(e.amount) : "");
   const [party, setParty] = useState<string | null>(e && e.type !== "SALE" ? e.counterparty : null);
   // Spoilage
-  const [lostProduct, setLostProduct] = useState(e?.type === "WASTE" ? (findProduct(products, e.sku)?.id ?? "") : "");
+  const [lostProduct, setLostProduct] = useState(e?.type === "WASTE" && !isMaterialWaste(e) ? (findProduct(products, e.sku)?.id ?? "") : "");
+  // Waste: which raw material or packaging was lost.
+  const [lostMaterial, setLostMaterial] = useState(
+    e && isMaterialWaste(e) ? (rawMaterials.find((m) => m.name.trim().toLowerCase() === (e.sku ?? "").trim().toLowerCase())?.id ?? "") : "",
+  );
   const [lostQty, setLostQty] = useState(e?.type === "WASTE" && e.quantity ? String(e.quantity) : "");
   // Payment
   const [when, setWhen] = useState<When>(e && (e.paymentTerm === "receivable" || e.paymentTerm === "payable") ? "later" : "now");
   const [method, setMethod] = useState<PaymentMethod>(e?.paymentMethod ?? "cash");
   const [bank, setBank] = useState(e?.bankName ?? "");
-  const [dueDate, setDueDate] = useState(e?.dueDate ?? "");
+  const [dueDate, setDueDate] = useState(e?.installments ? "" : (e?.dueDate ?? ""));
+  // Paid in one go by a due date, or in instalments (monthly, yearly…), each with its own date.
+  const [schedule, setSchedule] = useState<"once" | "installments">(e?.installments ? "installments" : "once");
+  const [frequency, setFrequency] = useState<InstallmentFrequency>(e?.installments?.frequency ?? "monthly");
+  const [instCount, setInstCount] = useState(e?.installments ? String(e.installments.count) : "3");
+  const [firstDue, setFirstDue] = useState(e?.installments?.firstDue ?? "");
   const [defaulted, setDefaulted] = useState(e?.paymentStatus === "defaulted");
   // A payment made now, against something owed
   const [payAmount, setPayAmount] = useState("");
@@ -200,7 +215,7 @@ export function TransactionDialog({
   const [saving, setSaving] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
 
-  const kinds: Kind[] = exec ? ["sale", "expense", "investment", "spoilage"] : ["sale", "expense", "spoilage"];
+  const kinds: Kind[] = exec ? ["sale", "expense", "investment", "spoilage", "waste"] : ["sale", "expense", "spoilage", "waste"];
   const owedKind = kind === "sale" || kind === "expense" || (kind === "investment" && invKind === "asset");
   const showPayment = exec && (owedKind || (kind === "investment" && invKind === "capital"));
 
@@ -297,6 +312,18 @@ export function TransactionDialog({
   const orderLines: OrderLine[] = lines.map((l) => ({ productId: l.productId, name: l.name, quantity: num(l.qty), unitPrice: num(l.price) }));
   const saleTotal = orderTotal(orderLines);
 
+  const material = rawMaterials.find((m) => m.id === lostMaterial);
+  const wasteValue = (() => {
+    if (!material || !(num(lostQty) > 0)) return null;
+    const standing = materialStanding(entries, products, material, cacaoUtilizationPct(businessSettings) / 100);
+    const cost = standing.avgCost ?? (material.unitCost > 0 ? material.unitCost : null);
+    return cost == null ? null : Math.round(cost * num(lostQty) * 100) / 100;
+  })();
+  const materialGroups = {
+    ingredient: rawMaterials.filter((m) => groupOf(m) === "ingredient").sort((a, b) => a.name.localeCompare(b.name)),
+    supply: rawMaterials.filter((m) => groupOf(m) === "supply").sort((a, b) => a.name.localeCompare(b.name)),
+  };
+
   const lostValue = (() => {
     const p = products.find((x) => x.id === lostProduct);
     return p ? spoiledValue(p.name, num(lostQty), products, costCtx) : null;
@@ -311,7 +338,9 @@ export function TransactionDialog({
   const leftAfter = Math.max(0, Math.round((leftBefore - payNum) * 100) / 100);
 
   // --- saving ----------------------------------------------------------------------------
-  const snapshot = JSON.stringify([kind, invKind, date, notes, priceType, lines, customer, what, category, amount, party, lostProduct, lostQty, when, method, bank, dueDate, defaulted, payAmount, payDate, payMethodPicked, payMethod, payBank]);
+  const snapshot = JSON.stringify([kind, invKind, date, notes, priceType, lines, customer, what, category, amount, party, lostProduct, lostMaterial, lostQty, when, method, bank, dueDate, schedule, frequency, instCount, firstDue, defaulted, payAmount, payDate, payMethodPicked, payMethod, payBank]);
+  const plan = schedule === "installments" && Number(instCount) >= 1 && firstDue ? { frequency, count: Math.floor(Number(instCount)), firstDue } : null;
+  const planPreview = plan ? installmentSchedule({ amount: total, amountPaid: null, paymentStatus: null, installments: plan, payments: [] }) : [];
   const [initialSnapshot] = useState(snapshot);
   const dirty = snapshot !== initialSnapshot;
 
@@ -332,7 +361,15 @@ export function TransactionDialog({
       if (!lostProduct) return "Pick what was lost.";
       if (!(num(lostQty) > 0)) return "How many were lost?";
     }
+    if (kind === "waste") {
+      if (!lostMaterial) return "Pick the raw material or packaging that was lost.";
+      if (!(num(lostQty) > 0)) return "How much was lost?";
+    }
     if (showPayment && method === "bank_transfer" && !bank.trim()) return "Which bank? Pick or type the bank name.";
+    if (showPayment && when === "later" && owedKind && schedule === "installments") {
+      if (!(Number(instCount) >= 1 && Number(instCount) <= 240)) return "How many payments? Between 1 and 240.";
+      if (!firstDue) return "When is the first payment due?";
+    }
     if (showPayment && when === "later" && owedKind && payNum > 0) {
       if (!(total > 0)) return "Enter the amount first, so we know how much is left after this payment.";
       if (payNum > leftBefore + 0.005) return `That payment is more than the ${formatPeso(leftBefore)} still owed.`;
@@ -386,6 +423,18 @@ export function TransactionDialog({
       Object.assign(d, { type: "CAPITAL", sku: "Capital put in", category: null, amount: num(amount), quantity: null, unit: null, counterparty: party?.trim() || null, priceType: null, lineItems: null });
     } else if (kind === "investment") {
       Object.assign(d, { type: "ASSET", sku: what.trim(), category: null, amount: num(amount), quantity: null, unit: null, counterparty: party?.trim() || null, priceType: null, lineItems: null });
+    } else if (kind === "waste") {
+      Object.assign(d, {
+        type: "WASTE",
+        sku: material?.name ?? null,
+        quantity: num(lostQty),
+        unit: material?.unit ?? null,
+        amount: exec ? wasteValue : (e?.amount ?? null),
+        category: MATERIAL_WASTE,
+        priceType: null,
+        counterparty: null,
+        lineItems: null,
+      });
     } else {
       const p = products.find((x) => x.id === lostProduct);
       Object.assign(d, {
@@ -408,20 +457,22 @@ export function TransactionDialog({
       return d;
     }
 
-    const bankName = method === "bank_transfer" ? bank.trim() || null : null;
+    const bankName = method === "bank_transfer" || method === "check" ? bank.trim() || null : null;
     if (kind === "investment" && invKind === "capital") {
       // Capital is recorded when the money arrives, so it is always received in full.
       Object.assign(d, { paymentTerm: null, dueDate: null, amountPaid: null, paymentStatus: null, settledAt: null, paymentMethod: method, bankName, payments: null });
       return d;
     }
     if (when === "now") {
-      Object.assign(d, { paymentTerm: "spot", dueDate: null, amountPaid: null, paymentStatus: null, settledAt: null, paymentMethod: method, bankName, payments: null });
+      Object.assign(d, { paymentTerm: "spot", dueDate: null, installments: null, amountPaid: null, paymentStatus: null, settledAt: null, paymentMethod: method, bankName, payments: null });
     } else {
       const term = kind === "sale" ? "receivable" : "payable";
       const wasOwed = e?.paymentTerm === term;
       Object.assign(d, {
         paymentTerm: term,
-        dueDate: dueDate || null,
+        // With instalments, the due date is the last one's; each instalment has its own date.
+        dueDate: plan ? (planPreview.at(-1)?.date ?? null) : dueDate || null,
+        installments: plan,
         paymentMethod: method,
         bankName,
         payments: wasOwed ? (e?.payments ?? null) : null,
@@ -765,13 +816,43 @@ export function TransactionDialog({
             <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-[1fr_120px]">
               <label className="flex flex-col gap-1">
                 <span className={label}>What was lost?</span>
-                <select value={lostProduct} onChange={(ev) => setLostProduct(ev.target.value)} className={field}>
+                <select
+                  value={lostProduct}
+                  onChange={(ev) => {
+                    // A raw material or packaging picked here is waste, recorded under Waste.
+                    if (ev.target.value.startsWith("m:")) {
+                      setLostMaterial(ev.target.value.slice(2));
+                      setKind("waste");
+                    } else setLostProduct(ev.target.value);
+                  }}
+                  className={field}
+                >
                   <option value="">Pick a product</option>
-                  {catalog.map(({ product: p, name }) => (
-                    <option key={p.id} value={p.id}>
-                      {name}
-                    </option>
-                  ))}
+                  <optgroup label="Products">
+                    {catalog.map(({ product: p, name }) => (
+                      <option key={p.id} value={p.id}>
+                        {name}
+                      </option>
+                    ))}
+                  </optgroup>
+                  {materialGroups.ingredient.length > 0 && (
+                    <optgroup label="Raw materials (recorded as waste)">
+                      {materialGroups.ingredient.map((m) => (
+                        <option key={m.id} value={`m:${m.id}`}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {materialGroups.supply.length > 0 && (
+                    <optgroup label="Packaging (recorded as waste)">
+                      {materialGroups.supply.map((m) => (
+                        <option key={m.id} value={`m:${m.id}`}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
               </label>
               <label className="flex flex-col gap-1">
@@ -781,6 +862,46 @@ export function TransactionDialog({
               {exec && (
                 <p className="text-[13px] text-muted-foreground min-[420px]:col-span-2">
                   {lostValue != null ? `Worth ${formatPeso(lostValue)} at cost.` : "Its value can't be worked out until the recipe is fully priced."}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Waste: raw materials and packaging */}
+          {kind === "waste" && (
+            <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-[1fr_140px]">
+              <label className="flex flex-col gap-1">
+                <span className={label}>What was lost?</span>
+                <select value={lostMaterial} onChange={(ev) => setLostMaterial(ev.target.value)} className={field}>
+                  <option value="">Pick a raw material or packaging</option>
+                  {materialGroups.ingredient.length > 0 && (
+                    <optgroup label="Raw materials">
+                      {materialGroups.ingredient.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {materialGroups.supply.length > 0 && (
+                    <optgroup label="Packaging">
+                      {materialGroups.supply.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className={label}>How much?{material ? ` (${material.unit})` : ""}</span>
+                <input inputMode="decimal" value={lostQty} onChange={(ev) => setLostQty(ev.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" className={field} />
+              </label>
+              {rawMaterials.length === 0 && <p className="text-[13px] text-muted-foreground min-[420px]:col-span-2">No raw materials or packaging yet — add them in Costing.</p>}
+              {exec && material && (
+                <p className="text-[13px] text-muted-foreground min-[420px]:col-span-2">
+                  {wasteValue != null ? `Worth ${formatPeso(wasteValue)} at cost — already counted as an expense when bought, so it isn't taken off earnings again.` : "Its value isn't known yet — no purchase of it has been recorded."}
                 </p>
               )}
             </div>
@@ -806,13 +927,79 @@ export function TransactionDialog({
                 {methodPicker(method, setMethod)}
               </div>
               {method === "bank_transfer" && bankPicker(bank, setBank)}
+              {method === "check" && (
+                <>
+                  {bankPicker(bank, setBank)}
+                  <p className="-mt-1 text-[12.5px] text-muted-foreground">
+                    {when === "later" ? "Post-dated checks: one per payment below, each dated for its due date." : "The bank the check is drawn on."}
+                  </p>
+                </>
+              )}
 
               {when === "later" && owedKind && (
                 <>
-                  <label className="flex flex-col gap-1">
-                    <span className={label}>Due on</span>
-                    <input type="date" value={dueDate} onChange={(ev) => setDueDate(ev.target.value)} className={field} />
-                  </label>
+                  <div className="flex flex-col gap-1">
+                    <span className={label}>{kind === "sale" ? "How will they pay?" : "How will we pay?"}</span>
+                    <Segmented
+                      ariaLabel="One payment or instalments"
+                      value={schedule}
+                      onChange={setSchedule}
+                      choices={[
+                        { value: "once", label: "One payment", icon: CalendarCheck },
+                        { value: "installments", label: "Instalments", icon: CalendarRange },
+                      ]}
+                    />
+                  </div>
+                  {schedule === "once" ? (
+                    <label className="flex flex-col gap-1">
+                      <span className={label}>Due on</span>
+                      <input type="date" value={dueDate} onChange={(ev) => setDueDate(ev.target.value)} className={field} />
+                    </label>
+                  ) : (
+                    <div className="flex flex-col gap-2.5 rounded-lg bg-secondary/60 p-3">
+                      <div className="grid grid-cols-2 gap-2">
+                        <label className="flex flex-col gap-1">
+                          <span className={label}>How often</span>
+                          <select value={frequency} onChange={(ev) => setFrequency(ev.target.value as InstallmentFrequency)} className={field}>
+                            {FREQUENCIES.map((f) => (
+                              <option key={f} value={f}>
+                                {FREQUENCY_LABELS[f]}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="flex flex-col gap-1">
+                          <span className={label}>Number of payments</span>
+                          <input inputMode="numeric" value={instCount} onChange={(ev) => setInstCount(ev.target.value.replace(/[^0-9]/g, ""))} className={field} />
+                        </label>
+                        <label className="col-span-2 flex flex-col gap-1">
+                          <span className={label}>First payment due</span>
+                          <input type="date" value={firstDue} onChange={(ev) => setFirstDue(ev.target.value)} className={field} />
+                        </label>
+                      </div>
+                      {Number(instCount) >= 1 && (
+                        <p className="text-[13px] font-semibold">
+                          {instCount} {FREQUENCY_LABELS[frequency].toLowerCase()} payments
+                          {Number(instCount) > 1 && ` over ${instCount} ${PERIOD_WORD[frequency][Number(instCount) === 1 ? 0 : 1]}`}
+                          {total > 0 && ` · about ${formatPeso(Math.round((total / Number(instCount)) * 100) / 100)} each`}
+                        </p>
+                      )}
+                      {planPreview.length > 0 && (
+                        <ul className="flex flex-col gap-0.5 text-[13px] tabular-nums text-muted-foreground">
+                          {planPreview.slice(0, 6).map((i) => (
+                            <li key={i.n} className="flex justify-between gap-3">
+                              <span>
+                                {i.n}. {formatDate(i.date)}
+                              </span>
+                              <span>{formatPeso(i.amount)}</span>
+                            </li>
+                          ))}
+                          {planPreview.length > 6 && <li>…and {planPreview.length - 6} more, to {formatDate(planPreview.at(-1)!.date)}</li>}
+                        </ul>
+                      )}
+                      <p className="text-[12px] text-muted-foreground">Each payment shows on the Calendar and on Home on its due date.</p>
+                    </div>
+                  )}
                   {e && (e.paymentTerm === "receivable" || e.paymentTerm === "payable") && (
                     <p className="text-[13px]">
                       Paid so far <span className="font-semibold">{formatPeso(paidSoFar(e))}</span> · still owed{" "}

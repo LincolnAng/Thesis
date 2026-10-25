@@ -1,4 +1,4 @@
-import { dueInfo, outstanding, termOf } from "@/lib/transactions/ledger";
+import { installmentSchedule, outstanding, termOf } from "@/lib/transactions/ledger";
 import type { AgendaKind, BusinessEvent, CalendarItem, Entry, EventStockMovement, Product, TimeRecord } from "@/lib/store/types";
 import type { Holiday } from "@/lib/calendar/holidays";
 import type { PlanDay } from "@/lib/summary/production-schedule";
@@ -127,6 +127,7 @@ export function leaveRuns(records: TimeRecord[]): { staffId: string; start: stri
 }
 
 const plural = (n: number, word: string, many = `${word}s`) => `${n} ${n === 1 ? word : many}`;
+const cents2 = (n: number) => Math.round(n * 100) / 100;
 const peso = (n: number) => `₱${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 
 export function nameOf(products: Product[], productId: string): string {
@@ -228,33 +229,45 @@ export function buildCalendarEntries(input: CalendarInput): CalendarEntry[] {
     });
   }
 
-  // Payments still owed, on their due date. Read-only: they live in Transactions.
+  // Payments still owed, on their due date — or, for instalments, each unpaid instalment on its
+  // own date. Read-only: they live in Transactions.
   for (const e of input.entries) {
     const term = termOf(e);
-    if (term === "spot" || !e.dueDate) continue;
+    if (term === "spot") continue;
     const owed = outstanding(e);
     if (owed <= 0) continue;
-    const due = dueInfo(e, input.now);
     const receivable = term === "receivable";
     const who = e.counterparty || (receivable ? "a customer" : "a supplier");
-    out.push({
-      id: `payment:${e.id}`,
-      category: "payments",
-      date: e.dueDate,
-      title: `${receivable ? "To collect" : "To pay"}: ${peso(owed)}`,
-      subtitle: `${receivable ? "from" : "to"} ${who}${due.overdue ? ` · ${plural(-(due.daysLeft ?? 0), "day")} overdue` : ""}`,
-      details: [
-        { label: receivable ? "Owed to you by" : "You owe", value: who },
-        { label: "Still owed", value: peso(owed) },
-        ...(e.amount != null ? [{ label: "Original amount", value: peso(e.amount) }] : []),
-        { label: "Due", value: e.dueDate },
-        ...(e.sku ? [{ label: "For", value: e.sku }] : []),
-      ],
-      tone: due.overdue ? "bad" : "warn",
-      href: "/transactions",
-      hrefLabel: "Open in Transactions",
-    });
+    const plan = e.installments ? installmentSchedule(e).filter((i) => !i.paid) : null;
+    const dues = plan
+      ? plan.map((i) => ({ date: i.date, amount: cents2(i.amount - i.covered), label: `instalment ${i.n} of ${e.installments!.count}` }))
+      : e.dueDate
+        ? [{ date: e.dueDate, amount: owed, label: "" }]
+        : [];
+    for (const due of dues) {
+      const daysLate = Math.round((new Date(`${input.today}T00:00:00`).getTime() - new Date(`${due.date}T00:00:00`).getTime()) / 86_400_000);
+      out.push({
+        id: `payment:${e.id}${plan ? `:${due.date}` : ""}`,
+        category: "payments",
+        date: due.date,
+        title: `${receivable ? "To collect" : "To pay"}: ${peso(due.amount)}`,
+        subtitle: `${receivable ? "from" : "to"} ${who}${daysLate > 0 ? ` · ${plural(daysLate, "day")} overdue` : ""}${due.label ? ` · ${due.label}` : ""}`,
+        details: [
+          { label: receivable ? "Owed to you by" : "You owe", value: who },
+          { label: due.label ? "This instalment" : "Still owed", value: peso(due.amount) },
+          ...(due.label ? [{ label: "Still owed in all", value: peso(owed) }] : []),
+          ...(e.amount != null ? [{ label: "Original amount", value: peso(e.amount) }] : []),
+          { label: "Due", value: due.date },
+          ...(e.paymentMethod === "check" ? [{ label: "Paid by", value: `Check${e.bankName ? ` · ${e.bankName}` : ""}` }] : []),
+          ...(e.sku ? [{ label: "For", value: e.sku }] : []),
+        ],
+        tone: daysLate > 0 ? "bad" : "warn",
+        href: "/transactions",
+        hrefLabel: "Open in Transactions",
+      });
+    }
   }
+
 
   // The calendar's own items.
   for (const it of input.calendarItems ?? []) {

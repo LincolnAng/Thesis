@@ -5,12 +5,16 @@ import { ChevronDown, Search, SlidersHorizontal, X } from "lucide-react";
 
 export interface TransactionFilters {
   text: string;
+  /** A product's id (a product's sales and spoilage, whatever it was called then). */
   product: string;
-  person: string;
+  /** Who bought — sales only. */
+  customer: string;
+  /** Who was paid — expenses and assets only. */
+  supplier: string;
   recordedBy: string;
   /** Where it stands: paid on the spot, not paid yet, partly paid, paid in full, defaulted, overdue. */
   status: string;
-  /** "cash" or "bank_transfer". */
+  /** "cash", "bank_transfer" or "check". */
   method: string;
   bank: string;
   /** "standard", "friend" or "wholesale". */
@@ -28,7 +32,8 @@ export interface TransactionFilters {
 export const EMPTY_FILTERS: TransactionFilters = {
   text: "",
   product: "",
-  person: "",
+  customer: "",
+  supplier: "",
   recordedBy: "",
   status: "",
   method: "",
@@ -53,6 +58,7 @@ export const STATUS_FILTERS: [string, string][] = [
 const METHOD_FILTERS: [string, string][] = [
   ["cash", "Cash"],
   ["bank_transfer", "Bank transfer"],
+  ["check", "Check"],
 ];
 
 const PRICE_TYPE_FILTERS: [string, string][] = [
@@ -65,8 +71,10 @@ const PRICE_TYPE_FILTERS: [string, string][] = [
 const MORE_KEYS: (keyof TransactionFilters)[] = ["status", "method", "bank", "priceType", "category", "dateFrom", "dateTo", "minAmount", "maxAmount"];
 
 /**
- * One search bar with its filters built in: type to search, then narrow by product, customer or
- * supplier and who recorded it. "More filters" adds the rest of a transaction's characteristics —
+ * One search bar with its filters built in: type to search, then narrow by product, customer,
+ * supplier and who recorded it. Each dropdown lists only its own kind of thing: Product lists
+ * the products (named as in Inventory), Customer the people who bought, Supplier the people
+ * paid. "More filters" adds the rest of a transaction's characteristics —
  * its payment status, how and through which bank it was paid, its price type, an expense's
  * category, a range of dates and a range of amounts. Every choice combines with the others.
  *
@@ -76,7 +84,8 @@ export function TransactionSearch({
   value,
   onChange,
   products,
-  people,
+  customers,
+  suppliers,
   recorders,
   banks,
   categories,
@@ -84,8 +93,10 @@ export function TransactionSearch({
 }: {
   value: TransactionFilters;
   onChange: (next: TransactionFilters) => void;
-  products: string[];
-  people: string[];
+  /** [product id, name] */
+  products: [string, string][];
+  customers: string[];
+  suppliers: string[];
   recorders: string[];
   banks: string[];
   categories: [string, string][];
@@ -109,8 +120,9 @@ export function TransactionSearch({
             className="w-full bg-transparent text-[14px] outline-none placeholder:text-muted-foreground"
           />
         </label>
-        <Segment label="Product" value={value.product} onChange={set("product")} options={products.map((p) => [p, p])} />
-        <Segment label="Customer or supplier" value={value.person} onChange={set("person")} options={people.map((p) => [p, p])} />
+        <Segment label="Product" value={value.product} onChange={set("product")} options={products} />
+        <Segment label="Customer" value={value.customer} onChange={set("customer")} options={customers.map((p) => [p, p])} />
+        <Segment label="Supplier" value={value.supplier} onChange={set("supplier")} options={suppliers.map((p) => [p, p])} />
         <Segment label="Recorded by" value={value.recordedBy} onChange={set("recordedBy")} options={recorders.map((p) => [p, p])} />
         <button
           type="button"

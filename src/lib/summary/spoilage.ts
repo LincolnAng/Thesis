@@ -47,6 +47,6 @@ export function spoiledValue(
 /** Everything written off in pesos over a set of entries. */
 export function spoilageLoss(entries: Entry[]): number {
   return entries
-    .filter((e) => e.type === "WASTE" && e.amount && e.amount > 0)
+    .filter((e) => e.type === "WASTE" && e.category !== "material_waste" && e.amount && e.amount > 0)
     .reduce((sum, e) => sum + (e.amount as number), 0);
 }

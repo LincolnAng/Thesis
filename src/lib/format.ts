@@ -167,5 +167,7 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = { cash: "Cash", ban
 /** "Bank transfer · BDO", "Cash", or "" when not recorded. */
 export function describePaymentMethod(method: string | null | undefined, bank: string | null | undefined): string {
   if (!method) return "";
-  return method === "bank_transfer" ? `Bank transfer${bank ? ` · ${bank}` : ""}` : "Cash";
+  if (method === "bank_transfer") return `Bank transfer${bank ? ` · ${bank}` : ""}`;
+  if (method === "check") return `Check${bank ? ` · ${bank}` : ""}`;
+  return "Cash";
 }

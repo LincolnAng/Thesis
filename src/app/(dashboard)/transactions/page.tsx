@@ -3,7 +3,10 @@
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowDownLeft, ArrowUpRight, CircleDollarSign } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, CircleDollarSign, PackageX } from "lucide-react";
+import { isMaterialWaste } from "@/lib/transactions/waste";
+import { findProduct } from "@/lib/summary/product-match";
+import { fullName } from "@/lib/summary/product-sizes";
 import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 import { CarouselNav } from "@/components/ui/carousel-nav";
 import { Page } from "@/components/layout/page";
@@ -26,6 +29,7 @@ import { salesTarget, setSalesTarget } from "@/lib/summary/business-config";
 import {
   canBeOwed,
   cashMovements,
+  currentDueDate,
   dayOf,
   isAnyInvestment,
   methodOf,
@@ -41,7 +45,7 @@ import { EXPENSE_CATEGORY_LABELS, formatPeso, pluralize } from "@/lib/format";
 import type { Entry, EntryType } from "@/lib/store/types";
 
 /** Which kinds of transaction the list shows. One list, never split by direction. */
-type Kind = "all" | "SALE" | "EXPENSE" | "RECEIVABLE" | "PAYABLE" | "INVEST" | "WASTE";
+type Kind = "all" | "SALE" | "EXPENSE" | "RECEIVABLE" | "PAYABLE" | "INVEST" | "WASTE" | "MATERIAL_WASTE";
 const KINDS: [Kind, string][] = [
   ["all", "All"],
   ["SALE", "Sales"],
@@ -50,9 +54,10 @@ const KINDS: [Kind, string][] = [
   ["PAYABLE", "Payables"],
   ["INVEST", "Investments"],
   ["WASTE", "Spoilage"],
+  ["MATERIAL_WASTE", "Waste"],
 ];
-// Employees see sales, everyday expenses and spoilage — never what is owed or invested.
-const EMPLOYEE_KINDS: Kind[] = ["all", "SALE", "EXPENSE", "WASTE"];
+// Employees see sales, everyday expenses, spoilage and waste — never what is owed or invested.
+const EMPLOYEE_KINDS: Kind[] = ["all", "SALE", "EXPENSE", "WASTE", "MATERIAL_WASTE"];
 const LEDGER_TYPES = new Set<EntryType>(["SALE", "EXPENSE", "RND", "CAPITAL", "ASSET", "WASTE"]);
 const byNewest = (a: Entry, b: Entry) => b.timestamp.localeCompare(a.timestamp);
 
@@ -71,7 +76,7 @@ function monthLabel(key: string, style: "long" | "short" = "long") {
  * list itself. Executives handle those; employees see sales, everyday expenses and spoilage.
  */
 function TransactionsPageInner() {
-  const { entries, categoryBudgets, businessSettings } = useStore();
+  const { entries, categoryBudgets, businessSettings, products } = useStore();
   const exec = isExecutive(useCurrentUser());
   const searchParams = useSearchParams();
   // Arriving from a supplier's "See spending" link: show only what was paid to them.
@@ -107,24 +112,33 @@ function TransactionsPageInner() {
   const periodTarget = target * monthsInPeriod;
   const periodBudget = expenses.budget * monthsInPeriod;
 
-  // What the filter dropdowns offer: only values that actually occur.
+  // Which product a sale or spoilage line is, by id — whatever it was called at the time.
+  const productIdOf = (id: string | null, name: string | null) => (id && products.some((p) => p.id === id) ? id : (findProduct(products, name)?.id ?? null));
+  const productIdsIn = (e: Entry): string[] =>
+    e.type === "SALE" || (e.type === "WASTE" && !isMaterialWaste(e))
+      ? (e.lineItems?.length ? e.lineItems.map((l) => productIdOf(l.productId, l.name)) : [productIdOf(null, e.sku)]).filter((x): x is string => !!x)
+      : [];
+
+  // What the filter dropdowns offer: each lists only its own kind of thing.
   const choices = useMemo(() => {
     const uniq = (list: (string | null | undefined)[]) => [...new Set(list.filter((x): x is string => !!x))].sort((a, b) => a.localeCompare(b));
     return {
-      // A multi-product order offers each of its products, not the joined list.
-      products: uniq(ledger.flatMap((e) => (e.lineItems?.length ? e.lineItems.map((l) => l.name) : [e.sku]))),
-      people: uniq(ledger.map((e) => e.counterparty)),
+      // The products, named as Inventory names them.
+      products: products.map((p): [string, string] => [p.id, fullName(p, products)]).sort((a, b) => a[1].localeCompare(b[1])),
+      customers: uniq(ledger.filter((e) => e.type === "SALE").map((e) => e.counterparty)),
+      suppliers: uniq(ledger.filter((e) => e.type === "EXPENSE" || e.type === "ASSET").map((e) => e.counterparty)),
       recorders: uniq(ledger.map((e) => e.loggedByName)),
       banks: uniq(ledger.map((e) => methodOf(e).bank)),
       categories: uniq(ledger.filter((e) => e.type === "EXPENSE").map((e) => e.category)).map((c): [string, string] => [c, EXPENSE_CATEGORY_LABELS[c] ?? c]),
     };
-  }, [ledger]);
+  }, [ledger, products]);
 
   // The search bar and filters, applied to a transaction (or to the one a payment was made on).
   const matches = (e: Entry) => {
     if (supplierFilter && (e.counterparty ?? "").toLowerCase() !== supplierFilter.toLowerCase()) return false;
-    if (filters.product && e.sku !== filters.product && !e.lineItems?.some((l) => l.name === filters.product)) return false;
-    if (filters.person && e.counterparty !== filters.person) return false;
+    if (filters.product && !productIdsIn(e).includes(filters.product)) return false;
+    if (filters.customer && !(e.type === "SALE" && e.counterparty === filters.customer)) return false;
+    if (filters.supplier && !((e.type === "EXPENSE" || e.type === "ASSET") && e.counterparty === filters.supplier)) return false;
     if (filters.recordedBy && e.loggedByName !== filters.recordedBy) return false;
     if (filters.priceType && !(e.type === "SALE" && (e.priceType ?? "standard") === filters.priceType)) return false;
     if (filters.category && e.category !== filters.category) return false;
@@ -184,6 +198,10 @@ function TransactionsPageInner() {
         return obligationKind(e) === "payable";
       case "INVEST":
         return isAnyInvestment(e);
+      case "WASTE":
+        return e.type === "WASTE" && !isMaterialWaste(e);
+      case "MATERIAL_WASTE":
+        return isMaterialWaste(e);
       default:
         return e.type === effectiveKind;
     }
@@ -208,7 +226,7 @@ function TransactionsPageInner() {
       [...earlierRows.filter((e) => carriedFrom.has(e.id)), ...ledger.filter((e) => madeIn(e) && matches(e) && inKind(e))].sort(
         (a, b) =>
           Number(outstanding(b) > 0) - Number(outstanding(a) > 0) ||
-          (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999") ||
+          (currentDueDate(a) ?? "9999").localeCompare(currentDueDate(b) ?? "9999") ||
           byNewest(a, b),
       )
     : [
@@ -251,7 +269,7 @@ function TransactionsPageInner() {
         {/* Three cards. Cash that actually moved sits beside what is still owed, each in its own
             labelled figure — never added together — and the third is earnings, as before. */}
         {exec ? (
-          <section className="grid grid-cols-1 gap-3 min-[900px]:grid-cols-[1.25fr_1.25fr_0.8fr]" aria-label="Money summary">
+          <section className="grid grid-cols-1 gap-3 min-[900px]:grid-cols-2 min-[1300px]:grid-cols-[1.25fr_1.25fr_0.8fr_0.7fr]" aria-label="Money summary">
             <SplitCard
               icon={<ArrowDownLeft className="h-4 w-4" />}
               title="Money in & receivables"
@@ -297,14 +315,15 @@ function TransactionsPageInner() {
               filled
               note={summary.spoiled > 0 ? `Sales − expenses − ${formatPeso(summary.spoiled)} spoiled` : "Sales − expenses"}
             />
+            <MoneyBox
+              icon={<PackageX className="h-5 w-5" />}
+              label="Spoilage & waste"
+              value={summary.spoiled + summary.wasted}
+              tone={summary.spoiled + summary.wasted > 0 ? "bad" : "neutral"}
+              note={`${formatPeso(summary.spoiled)} products spoiled · ${formatPeso(summary.wasted)} materials wasted · ${periodName}`}
+            />
           </section>
-        ) : (
-          <section className="grid grid-cols-1 gap-3 min-[600px]:grid-cols-2" aria-label="Sales summary">
-            <MoneyBox icon={<ArrowDownLeft className="h-5 w-5" />} label="Sales" value={summary.sales} tone="good" note={`Everything sold · ${periodName}`} />
-            {/* Everyday expenses only — salaries never reach an employee's screen. */}
-            <MoneyBox icon={<ArrowUpRight className="h-5 w-5" />} label="Expenses" value={summary.expenses} tone="bad" note={`Everyday expenses · ${periodName}`} />
-          </section>
-        )}
+        ) : null /* Employees see no totals: what the company earns and spends stays with Executives. */}
 
         {exec && (
           <section className="flex flex-col gap-3 rounded-2xl border border-line/15 bg-card px-4 py-3" aria-labelledby="target-title">
@@ -372,7 +391,8 @@ function TransactionsPageInner() {
           value={filters}
           onChange={setFilters}
           products={choices.products}
-          people={choices.people}
+          customers={choices.customers}
+          suppliers={choices.suppliers}
           recorders={choices.recorders}
           banks={choices.banks}
           categories={choices.categories}
@@ -432,6 +452,7 @@ function TransactionsPageInner() {
             rows={rows}
             showPayment={exec}
             onEdit={setEditing}
+            onDelete={(e) => deleteEntry(e.id)}
             carriedFrom={carriedFrom}
             owed={
               exec

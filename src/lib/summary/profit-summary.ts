@@ -46,7 +46,7 @@ export function computeMonthlyProfitTrend(
     // Jars written off are a loss against the month they spoiled in. Left out, the chart and
     // the figures above it would disagree about the same month.
     const spoiled = sum(
-      monthEntries.filter((e) => e.type === "WASTE"),
+      monthEntries.filter((e) => e.type === "WASTE" && e.category !== "material_waste"),
       (e) => e.amount ?? 0,
     );
 

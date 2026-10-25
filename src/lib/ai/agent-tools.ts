@@ -139,7 +139,7 @@ export const AGENT_TOOLS: Anthropic.Tool[] = [
         category: { type: "string", description: "Expense category, e.g. packaging, utilities, transport, labor, raw_materials, misc." },
         counterparty: { type: "string", description: "Customer, supplier, or who put in capital." },
         paid_now: { type: "boolean", description: "False when the customer pays later (receivable) or the shop pays later (payable)." },
-        method: { type: "string", enum: ["cash", "bank_transfer"] },
+        method: { type: "string", enum: ["cash", "bank_transfer", "check"] },
         bank: { type: "string" },
         due_date: { type: "string", description: "YYYY-MM-DD, for something paid later." },
         notes: { type: "string" },
@@ -168,7 +168,7 @@ export const AGENT_TOOLS: Anthropic.Tool[] = [
         transaction_id: { type: "string" },
         amount: { type: "number" },
         date: { type: "string", description: "YYYY-MM-DD; omit for today." },
-        method: { type: "string", enum: ["cash", "bank_transfer"] },
+        method: { type: "string", enum: ["cash", "bank_transfer", "check"] },
         bank: { type: "string" },
       },
       required: ["transaction_id", "amount"],
@@ -493,13 +493,13 @@ function prepareTransaction(input: Record<string, unknown>, view: AgentView): To
 
   // Payment, for executives — employees never set payment terms.
   if (view.role === "executive" && ["SALE", "EXPENSE", "ASSET", "CAPITAL"].includes(draft.type)) {
-    const method: PaymentMethod = input.method === "bank_transfer" ? "bank_transfer" : "cash";
+    const method: PaymentMethod = input.method === "bank_transfer" || input.method === "check" ? (input.method as PaymentMethod) : "cash";
     const bank = String(input.bank ?? "").trim();
     if (method === "bank_transfer" && !bank) missing.push("Which bank was it sent through?");
     const later = input.paid_now === false && draft.type !== "CAPITAL";
     Object.assign(draft, {
       paymentMethod: input.method ? method : null,
-      bankName: method === "bank_transfer" && bank ? bank : null,
+      bankName: (method === "bank_transfer" || method === "check") && bank ? bank : null,
       paymentTerm: later ? (draft.type === "SALE" ? "receivable" : "payable") : "spot",
       dueDate: later && /^\d{4}-\d{2}-\d{2}$/.test(String(input.due_date ?? "")) ? String(input.due_date) : null,
       paymentStatus: later ? "pending" : null,
@@ -546,7 +546,7 @@ function preparePayment(input: Record<string, unknown>, view: AgentView): ToolOu
   const amount = Number(input.amount);
   if (!(amount > 0)) return { result: json({ error: "How much was paid?" }), isError: true };
   if (owed <= 0) return { result: json({ error: "Nothing is owed on that one any more." }), isError: true };
-  const method: PaymentMethod = input.method === "bank_transfer" ? "bank_transfer" : "cash";
+  const method: PaymentMethod = input.method === "bank_transfer" || input.method === "check" ? (input.method as PaymentMethod) : "cash";
   if (method === "bank_transfer" && !String(input.bank ?? "").trim()) return { result: json({ error: "Which bank?" }), isError: true };
   const date = /^\d{4}-\d{2}-\d{2}$/.test(String(input.date ?? "")) ? String(input.date) : today(view.now);
   const change = addPayment(e, { date, amount: Math.min(amount, owed), method, bankName: method === "bank_transfer" ? String(input.bank).trim() : null }, {}, view.now);
