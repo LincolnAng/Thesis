@@ -5,7 +5,7 @@ import { Check, ChevronDown, ChevronRight, Filter, Sparkles } from "lucide-react
 import { AGGREGATE_ID, aggregateForecast, type ProductForecast } from "@/lib/summary/forecast";
 import { seasonStrength } from "@/lib/summary/seasonality";
 import { ConfidenceDonut } from "@/components/inventory/confidence-donut";
-import { EMPTY, seasonColor } from "@/lib/summary/scale-colors";
+import { seasonColor } from "@/lib/summary/scale-colors";
 import { useStore } from "@/lib/store/use-store";
 import { CarouselNav } from "@/components/ui/carousel-nav";
 import { Segmented } from "@/components/ui/kit";
@@ -46,7 +46,7 @@ function Bar({ value, max }: { value: number; max: number }) {
 // The jars figure sits at the end of its own bar rather than in a column of its own: a bar and
 // the number it stands for are one fact, and putting them at opposite ends of a wide row makes
 // the eye travel to join them back up.
-const COLS = "grid grid-cols-[52px_minmax(0,1fr)_56px_170px_90px] items-center gap-3";
+const COLS = "grid grid-cols-[52px_minmax(0,1fr)_56px_120px_90px] items-center gap-3";
 
 /**
  * One month, split by product.
@@ -80,15 +80,18 @@ function MonthByProduct({
 
   return (
     <div className="border-t border-line/10 bg-secondary/30 px-3 py-2">
-      <div className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-        {`${label} — by product`}
+      <div className="mb-1 grid grid-cols-[minmax(0,1fr)_56px_120px_90px] items-end gap-3 text-[10px] font-bold uppercase leading-tight tracking-wide text-muted-foreground">
+        <span className="pl-4">{`${label} — by product`}</span>
+        <span className="text-right">Units</span>
+        <span className="w-[116px] text-center">Season</span>
+        <span className="text-center">Confidence level</span>
       </div>
       {rows.map(({ forecast, month }) => {
         if (!month) {
           return (
             <div
               key={forecast.productId}
-              className="grid grid-cols-[minmax(0,1fr)_56px_170px_90px] items-center gap-3 py-1 text-[12px]"
+              className="grid grid-cols-[minmax(0,1fr)_56px_120px_90px] items-center gap-3 py-1 text-[12px]"
             >
               <span className="truncate pl-4 text-muted-foreground">{nameOf(forecast)}</span>
               <span className="text-right text-muted-foreground">—</span>
@@ -102,7 +105,7 @@ function MonthByProduct({
         return (
           <div
             key={forecast.productId}
-            className="grid grid-cols-[minmax(0,1fr)_56px_170px_90px] items-center gap-3 py-1 text-[12px]"
+            className="grid grid-cols-[minmax(0,1fr)_56px_120px_90px] items-center gap-3 py-1 text-[12px]"
           >
             <span className="truncate pl-4">{nameOf(forecast)}</span>
             <span className="text-right font-semibold tabular-nums">{Math.round(month.units)}</span>
@@ -112,15 +115,6 @@ function MonthByProduct({
                 style={{ background: colour }}
               >
                 {word}
-              </span>
-              <span className="flex items-center gap-[2px]" aria-hidden>
-                {[1, 2, 3, 4, 5, 6, 7].map((i) => (
-                  <span
-                    key={i}
-                    className="h-2 w-[3px] rounded-[1px]"
-                    style={{ background: i <= score ? colour : EMPTY }}
-                  />
-                ))}
               </span>
             </span>
             <span className="flex justify-center">
@@ -141,7 +135,7 @@ function MonthByProduct({
         );
       })}
       <div className="mt-1 border-t border-line/10 pt-1 pl-4 text-[11px] text-muted-foreground">
-        {`Adds up to ${total} — the figure above.`}
+        {`Adds up to ${total} units — the figure above.`}
       </div>
     </div>
   );
@@ -272,7 +266,7 @@ function MonthSummary({
         />
         <div className="flex items-center gap-3">
           <span className="text-[13px] text-muted-foreground">
-            <b className="font-display text-[22px] text-foreground tabular-nums">{Math.round(m.units)}</b> expected
+            <b className="font-display text-[22px] text-foreground tabular-nums">{Math.round(m.units)}</b> units expected
           </span>
           <span
             className="whitespace-nowrap rounded-md px-2 py-[3px] text-[10px] font-bold tracking-wide text-white"
@@ -281,17 +275,20 @@ function MonthSummary({
           >
             {word}
           </span>
-          <ConfidenceDonut
-            reliability={chosen.reliability}
-            override={{
-              bars: m.bars,
-              range: m.range,
-              note:
-                m.observed === 0
-                  ? `You have never logged a ${m.label.replace(/\s+\d+$/, "")} yet, so this month leans on the pattern rather than your own figures.`
-                  : `You have ${m.observed} ${m.observed === 1 ? "year" : "years"} of this calendar month logged.`,
-            }}
-          />
+          <span className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+            <ConfidenceDonut
+              reliability={chosen.reliability}
+              override={{
+                bars: m.bars,
+                range: m.range,
+                note:
+                  m.observed === 0
+                    ? `You have never logged a ${m.label.replace(/\s+\d+$/, "")} yet, so this month leans on the pattern rather than your own figures.`
+                    : `You have ${m.observed} ${m.observed === 1 ? "year" : "years"} of this calendar month logged.`,
+              }}
+            />
+            Confidence level
+          </span>
         </div>
       </div>
       <div className="overflow-x-auto">
@@ -417,7 +414,7 @@ export function SeasonalBreakdown({
             <div className={`${COLS} border-b border-line/10 pb-2 text-[10px] font-bold uppercase leading-tight tracking-wide text-muted-foreground`}>
               <span>Month</span>
               <span>Expected demand</span>
-              <span className="text-right">Count</span>
+              <span className="text-right">Units</span>
               <span className="w-[116px] text-center">Season</span>
               <span className="text-center">Confidence Level</span>
             </div>
@@ -428,11 +425,6 @@ export function SeasonalBreakdown({
                 <span className="text-right text-muted-foreground/60">—</span>
                 <span className="flex items-center gap-2">
                   <span className="w-[116px] shrink-0 rounded-md bg-track py-[3px] text-center text-[10px] font-bold tracking-wide text-muted-foreground/60">—</span>
-                  <span className="flex items-center gap-[2px]">
-                    {[1, 2, 3, 4, 5, 6, 7].map((i) => (
-                      <span key={i} className="h-2.5 w-[3px] rounded-[1px]" style={{ background: EMPTY }} />
-                    ))}
-                  </span>
                 </span>
                 <span className="flex justify-center">
                   <span className="h-5 w-5 rounded-full border-[3px] border-track" />
@@ -512,7 +504,7 @@ export function SeasonalBreakdown({
       >
         <span>Month</span>
         <span>Expected demand</span>
-        <span className="text-right">Count</span>
+        <span className="text-right">Units</span>
         {/* Sat over the whole column, "Season" floated left of the thing it names. Boxed to the
             badge's own width so the heading sits centred on the badges below it. */}
         <span className="w-[116px] text-center">Season</span>
@@ -554,15 +546,6 @@ export function SeasonalBreakdown({
                 >
                   {word}
                 </span>
-                <span className="flex items-center gap-[2px]" aria-hidden>
-                  {[1, 2, 3, 4, 5, 6, 7].map((i) => (
-                    <span
-                      key={i}
-                      className="h-2.5 w-[3px] rounded-[1px]"
-                      style={{ background: i <= score ? colour : EMPTY }}
-                    />
-                  ))}
-                </span>
               </span>
 
               <span className="flex justify-center">
@@ -591,7 +574,7 @@ export function SeasonalBreakdown({
       <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
         <span className="font-semibold">Season</span> runs from VERY LEAN to VERY STRONG — red means you sell less than
         usual that month, green means more, and NORMAL is an ordinary month.{" "}
-        <span className="font-semibold">Sure?</span> is how much to trust the figure: it drops for months further ahead,
+        <span className="font-semibold">Confidence level</span> is how much to trust the figure: it drops for months further ahead,
         and for months you have never traded through.
       </p>
     </section>
