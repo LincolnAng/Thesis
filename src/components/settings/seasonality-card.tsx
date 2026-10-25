@@ -253,7 +253,7 @@ export function SeasonalityCard({ embedded = false }: { embedded?: boolean } = {
         <div className="flex flex-wrap items-center gap-3">
           <Button size="sm" className="gap-1.5" onClick={runAll} disabled={allBusy || products.length === 0}>
             <Sparkles className="h-4 w-4" />
-            {allBusy ? "Checking…" : unset > 0 ? `Check all ${products.length}` : "Check all again"}
+            {allBusy ? "Checking…" : unset > 0 ? `Check all ${products.length}` : "Optimize AI"}
           </Button>
           {unset > 0 && !allBusy && (
             <span className="text-[12px] text-muted-foreground">
