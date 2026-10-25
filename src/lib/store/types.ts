@@ -463,3 +463,35 @@ export interface PayrollRecord {
   philhealth: number;
   pagibig: number;
 }
+
+// --- The calendar's own items -----------------------------------------------------------
+
+/** What someone put on the calendar themselves — the kinds offered, though any can be typed. */
+export type AgendaKind = "event" | "task" | "meeting" | "delivery" | "receivable" | "payable" | "reminder";
+
+/** Who sees an item: only its owner, everyone, or the people it was shared with. */
+export type AgendaVisibility = "private" | "everyone" | "people";
+
+/** Something put on the calendar by hand — an event, a task, a meeting with a client, a deadline. */
+export interface CalendarItem {
+  id: string;
+  title: string;
+  kind: AgendaKind;
+  /** "YYYY-MM-DD" */
+  date: string;
+  /** Last day, for something over several days. */
+  endDate: string | null;
+  /** "HH:MM" — empty for an all-day item. */
+  startTime: string | null;
+  endTime: string | null;
+  location: string;
+  notes: string;
+  ownerId: string;
+  ownerName: string;
+  visibility: AgendaVisibility;
+  /** Profile ids, when shared with particular people. */
+  sharedWith: string[];
+  /** For tasks and deadlines: ticked off. */
+  done: boolean;
+  createdAt: string;
+}

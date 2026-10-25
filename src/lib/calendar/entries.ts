@@ -1,5 +1,6 @@
 import { dueInfo, outstanding, termOf } from "@/lib/transactions/ledger";
-import type { BusinessEvent, Entry, EventStockMovement, Product, TimeRecord } from "@/lib/store/types";
+import type { AgendaKind, BusinessEvent, CalendarItem, Entry, EventStockMovement, Product, TimeRecord } from "@/lib/store/types";
+import type { Holiday } from "@/lib/calendar/holidays";
 import type { PlanDay } from "@/lib/summary/production-schedule";
 import type { StockLot } from "@/lib/summary/product-lots";
 
@@ -12,6 +13,9 @@ import type { StockLot } from "@/lib/summary/product-lots";
  *   shipments   stock sent out to, or back from, an event or distributor (Event Stock)
  *   dayoffs     days marked off on the production calendar
  *   leaves      staff on leave (Salaries' time record), one entry per run of days
+ *   agenda      what people put on the calendar themselves — events, tasks, meetings,
+ *               deadlines — their own and what was shared with them
+ *   holidays    Philippine regular and special holidays
  *   payments    payables and receivables still owed, on their due date (Transactions)
  *   alerts      stock at or below its warning level, batches expiring, ingredients short
  *
@@ -19,12 +23,14 @@ import type { StockLot } from "@/lib/summary/product-lots";
  * carries no payment terms, so it simply produces no payment entries.
  */
 
-export type CalendarCategory = "production" | "events" | "shipments" | "dayoffs" | "leaves" | "payments" | "alerts";
+export type CalendarCategory = "agenda" | "production" | "events" | "shipments" | "dayoffs" | "leaves" | "payments" | "alerts" | "holidays";
 
 export const CATEGORY_LABELS: Record<CalendarCategory, string> = {
   production: "Production",
   events: "Events & orders",
   shipments: "Shipments",
+  agenda: "My calendar",
+  holidays: "Holidays",
   dayoffs: "Day-offs",
   leaves: "Leaves",
   payments: "Payments",
@@ -48,6 +54,29 @@ export interface CalendarEntry {
   /** Where the record lives, for "Open in …". */
   href?: string;
   hrefLabel?: string;
+  /** Agenda items: their own colour (by kind), time, and the item itself for editing. */
+  color?: string;
+  startTime?: string | null;
+  item?: CalendarItem;
+}
+
+export const AGENDA_KINDS: { kind: AgendaKind; label: string; color: string }[] = [
+  { kind: "event", label: "Event", color: "#1A73E8" },
+  { kind: "task", label: "Task", color: "#0B8043" },
+  { kind: "meeting", label: "Meeting", color: "#F4511E" },
+  { kind: "delivery", label: "Delivery deadline", color: "#039BE5" },
+  { kind: "receivable", label: "Collect payment", color: "#33B679" },
+  { kind: "payable", label: "Payment due", color: "#D50000" },
+  { kind: "reminder", label: "Reminder", color: "#616161" },
+];
+export const agendaKind = (k: AgendaKind) => AGENDA_KINDS.find((a) => a.kind === k) ?? AGENDA_KINDS[0];
+
+/** "14:30" → "2:30 PM" */
+export function clock(hhmm: string | null | undefined): string {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm ?? "");
+  if (!m) return "";
+  const h = Number(m[1]);
+  return `${((h + 11) % 12) + 1}:${m[2]} ${h < 12 ? "AM" : "PM"}`;
 }
 
 export interface CalendarInput {
@@ -69,6 +98,9 @@ export interface CalendarInput {
   /** Leave days from the time record, and whose they are. An employee's copy holds only their own. */
   timeRecords?: TimeRecord[];
   staff?: { id: string; name: string }[];
+  /** What the signed-in person may see of the calendar's own items (already filtered). */
+  calendarItems?: CalendarItem[];
+  holidays?: Holiday[];
 }
 
 /** Days off work in a row ("2026-10-05", "-06", "-07") become one leave, with its note. */
@@ -221,6 +253,44 @@ export function buildCalendarEntries(input: CalendarInput): CalendarEntry[] {
       tone: due.overdue ? "bad" : "warn",
       href: "/transactions",
       hrefLabel: "Open in Transactions",
+    });
+  }
+
+  // The calendar's own items.
+  for (const it of input.calendarItems ?? []) {
+    const k = agendaKind(it.kind);
+    const time = it.startTime ? `${clock(it.startTime)}${it.endTime ? `–${clock(it.endTime)}` : ""}` : "All day";
+    out.push({
+      id: `agenda:${it.id}`,
+      category: "agenda",
+      date: it.date,
+      endDate: it.endDate && it.endDate > it.date ? it.endDate : undefined,
+      title: it.title || k.label,
+      subtitle: [time, it.location || null, k.label].filter(Boolean).join(" · "),
+      details: [
+        { label: "Kind", value: k.label },
+        { label: "When", value: it.endDate && it.endDate > it.date ? `${it.date} to ${it.endDate}` : `${it.date} · ${time}` },
+        ...(it.location ? [{ label: "Where", value: it.location }] : []),
+        ...(it.notes ? [{ label: "Notes", value: it.notes }] : []),
+        { label: "Added by", value: it.ownerName || "—" },
+      ],
+      tone: it.done ? "good" : it.kind === "payable" ? "warn" : "neutral",
+      color: k.color,
+      startTime: it.startTime,
+      item: it,
+    });
+  }
+
+  // Holidays.
+  for (const h of input.holidays ?? []) {
+    out.push({
+      id: `holiday:${h.date}:${h.name}`,
+      category: "holidays",
+      date: h.date,
+      title: h.name,
+      subtitle: h.localName !== h.name ? h.localName : undefined,
+      details: [{ label: "Holiday", value: h.localName !== h.name ? `${h.name} (${h.localName})` : h.name }],
+      tone: "neutral",
     });
   }
 

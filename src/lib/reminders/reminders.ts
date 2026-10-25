@@ -1,5 +1,5 @@
 import type { CalendarCategory, CalendarEntry } from "@/lib/calendar/entries";
-import { coversDay } from "@/lib/calendar/entries";
+import { clock, coversDay } from "@/lib/calendar/entries";
 import { dayOf, outstanding, termOf } from "@/lib/transactions/ledger";
 import type { Entry } from "@/lib/store/types";
 
@@ -29,6 +29,44 @@ export interface Reminder {
   /** "YYYY-MM-DD" it's about — the due date, the event day. */
   date: string;
   href?: string;
+  /** A calendar item behind it, so ticking it off can be saved. */
+  itemId?: string;
+}
+
+/** The headings Today at a glance groups its tasks under, in this order. */
+export type ReminderGroup = "money" | "salaries" | "agenda" | "production" | "events" | "staff" | "stock";
+export const GROUP_LABELS: Record<ReminderGroup, string> = {
+  money: "Money",
+  salaries: "Salaries",
+  agenda: "My calendar",
+  production: "Production",
+  events: "Events & holidays",
+  staff: "Staff",
+  stock: "Stock alerts",
+};
+export const GROUP_ORDER: ReminderGroup[] = ["money", "salaries", "agenda", "production", "events", "staff", "stock"];
+
+export function groupOf(r: Reminder): ReminderGroup {
+  switch (r.category) {
+    case "payments":
+    case "followup":
+      return "money";
+    case "salaries":
+      return "salaries";
+    case "agenda":
+      return "agenda";
+    case "production":
+    case "dayoffs":
+      return "production";
+    case "events":
+    case "holidays":
+    case "shipments":
+      return "events";
+    case "leaves":
+      return "staff";
+    case "alerts":
+      return "stock";
+  }
 }
 
 export interface Reminders {
@@ -89,6 +127,19 @@ function taskFor(e: CalendarEntry, today: string): Pick<Reminder, "title" | "det
       return { title: "Day off — no production" };
     case "leaves":
       return { title: coversToday(e, today) ? `${e.title.replace(/^On leave: /, "")} is on leave` : e.title };
+    case "holidays":
+      return { title: `Holiday: ${e.title}` };
+    case "agenda": {
+      const it = e.item;
+      if (!it) return { title: e.title };
+      const at = it.startTime ? clock(it.startTime) : "";
+      const late = !it.done && (it.endDate ?? it.date) < today;
+      const verb: Record<string, string> = { event: "", task: "", meeting: "Meet: ", delivery: "Deliver: ", receivable: "Collect: ", payable: "Pay: ", reminder: "" };
+      return {
+        title: `${verb[it.kind] ?? ""}${e.title}${at ? ` at ${at}` : ""}`,
+        detail: [late ? "Late" : null, it.location || null, it.ownerName && it.visibility !== "private" ? `from ${it.ownerName}` : null].filter(Boolean).join(" · ") || undefined,
+      };
+    }
     case "alerts":
       if (kind === "Low") return { title: /^0 /.test(sub) ? `Out of ${what} — make more` : `Make more ${what}`, detail: sub };
       if (kind === "Past its date") return { title: `Check ${what} — past its date`, detail: sub };
@@ -106,15 +157,27 @@ const coversToday = (e: CalendarEntry, today: string) => coversDay(e, today);
 function fromCalendar(e: CalendarEntry, today: string): Reminder {
   let tone = TONE[e.tone];
   if (e.category === "payments") tone = e.date < today ? "bad" : e.date === today ? "warn" : "info";
-  if (e.category === "events" || e.category === "leaves") tone = "info";
-  return { id: e.id, category: e.category, tone, ...taskFor(e, today), date: e.date, href: e.href ?? (e.category === "events" || e.category === "leaves" ? "/calendar" : undefined) };
+  if (e.category === "events" || e.category === "leaves" || e.category === "holidays") tone = "info";
+  if (e.category === "agenda" && e.item) {
+    const late = !e.item.done && (e.item.endDate ?? e.item.date) < today;
+    tone = late ? "bad" : e.item.kind === "payable" || e.item.kind === "delivery" ? "warn" : "info";
+  }
+  return {
+    id: e.id,
+    category: e.category,
+    tone,
+    ...taskFor(e, today),
+    date: e.date,
+    href: e.href ?? (["events", "leaves", "agenda", "holidays"].includes(e.category) ? "/calendar" : undefined),
+    itemId: e.item?.id,
+  };
 }
 
 /** Stock alerts are listed on their own, under the to-dos. */
 export const isStockAlert = (r: Reminder) => r.category === "alerts";
 
 const RANK: Record<ReminderTone, number> = { bad: 0, warn: 1, info: 2 };
-const ORDER: Record<Reminder["category"], number> = { payments: 0, salaries: 1, followup: 2, alerts: 3, events: 4, leaves: 5, production: 6, shipments: 7, dayoffs: 8 };
+const ORDER: Record<Reminder["category"], number> = { payments: 0, salaries: 1, followup: 2, agenda: 3, alerts: 4, events: 5, holidays: 6, leaves: 7, production: 8, shipments: 9, dayoffs: 10 };
 const sortReminders = (list: Reminder[]) =>
   [...list].sort((a, b) => RANK[a.tone] - RANK[b.tone] || ORDER[a.category] - ORDER[b.category] || a.date.localeCompare(b.date));
 
@@ -138,8 +201,16 @@ export function buildReminders(
       else if (e.date <= horizon) upcoming.push(fromCalendar(e, today));
       continue;
     }
+    if (e.category === "agenda" && e.item) {
+      // Done items drop off. A task or deadline not done stays on today until it is.
+      if (e.item.done) continue;
+      const lingers = e.item.kind !== "event" && e.item.kind !== "meeting";
+      if (coversDay(e, today) || (lingers && (e.endDate ?? e.date) < today)) todays.push(fromCalendar(e, today));
+      else if (e.date > today && e.date <= horizon) upcoming.push(fromCalendar(e, today));
+      continue;
+    }
     if (coversDay(e, today)) todays.push(fromCalendar(e, today));
-    else if (e.date > today && e.date <= horizon && (e.category === "events" || e.category === "dayoffs" || e.category === "alerts" || e.category === "leaves")) upcoming.push(fromCalendar(e, today));
+    else if (e.date > today && e.date <= horizon && (e.category === "events" || e.category === "dayoffs" || e.category === "alerts" || e.category === "leaves" || e.category === "holidays")) upcoming.push(fromCalendar(e, today));
   }
 
   // Money a customer owes with no due date set: nudge once it has waited two weeks.

@@ -2,23 +2,36 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Check, ChevronRight, ListChecks, PackageX } from "lucide-react";
+import { CalendarDays, Check, ChevronRight, Factory, HandCoins, ListChecks, PackageX, PartyPopper, UsersRound, Wallet } from "lucide-react";
 import { useReminders } from "@/lib/reminders/use-reminders";
-import { isStockAlert, type Reminder } from "@/lib/reminders/reminders";
+import { GROUP_LABELS, GROUP_ORDER, groupOf, type Reminder, type ReminderGroup } from "@/lib/reminders/reminders";
 import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
+import { updateCalendarItem } from "@/lib/store/store";
 import { useStore } from "@/lib/store/use-store";
 import { formatPeso } from "@/lib/format";
 import { dayKey } from "@/lib/home/today";
 
 /**
  * Today at a glance, on Home: a plain task list — what to do today, in a few words each, with a
- * box to tick — then stock alerts, then what's coming up. Built from lib/reminders, which reads
- * the Calendar, so a task disappears on its own once it's dealt with (paid, restocked, the day
- * passes).
+ * box to tick — grouped by what it's about (money, salaries, your own calendar, production,
+ * events, staff, stock), then what's coming up. Built from lib/reminders, which reads the
+ * Calendar and every tab behind it, so it's personal: each person sees their own calendar items
+ * and what was shared with them, and a task disappears once it's dealt with.
  *
- * Ticking a box only crosses it off on this device, for today; it doesn't record anything.
- * Paying, collecting or restocking is still done on its own tab, which the arrow opens.
+ * Ticking one of your own calendar items marks it done for real. Ticking anything else only
+ * crosses it off on this device, for today — paying, collecting or restocking is still done on
+ * its own tab, which the arrow opens.
  */
+
+const GROUP_ICON: Record<ReminderGroup, React.ReactNode> = {
+  money: <HandCoins className="h-3.5 w-3.5" />,
+  salaries: <Wallet className="h-3.5 w-3.5" />,
+  agenda: <CalendarDays className="h-3.5 w-3.5" />,
+  production: <Factory className="h-3.5 w-3.5" />,
+  events: <PartyPopper className="h-3.5 w-3.5" />,
+  staff: <UsersRound className="h-3.5 w-3.5" />,
+  stock: <PackageX className="h-3.5 w-3.5" />,
+};
 
 const TICKED_KEY = "mangkiko.home.ticked";
 
@@ -96,14 +109,23 @@ function Heading({ icon, children }: { icon?: React.ReactNode; children: React.R
 export function TodayTasks() {
   const { today, upcoming } = useReminders();
   const [ticked, toggle] = useTicked();
-  const { entries } = useStore();
-  const exec = isExecutive(useCurrentUser());
+  const { entries, calendarItems } = useStore();
+  const me = useCurrentUser();
+  const exec = isExecutive(me);
 
-  // Not-done first; ticked ones sink to the bottom of their list.
-  const order = (list: Reminder[]) => [...list].sort((a, b) => Number(ticked.has(a.id)) - Number(ticked.has(b.id)));
-  const todo = order(today.filter((r) => !isStockAlert(r)));
-  const stock = order(today.filter(isStockAlert));
-  const left = todo.filter((r) => !ticked.has(r.id)).length;
+  // One's own calendar items are ticked off for real; anything else, on this device for today.
+  const mine = (r: Reminder) => (r.itemId ? calendarItems.find((c) => c.id === r.itemId && c.ownerId === me?.id) : undefined);
+  const isDone = (r: Reminder) => ticked.has(r.id);
+  const tick = (r: Reminder) => {
+    const own = mine(r);
+    if (own) updateCalendarItem(own.id, { done: !own.done });
+    else toggle(r.id);
+  };
+
+  // Not-done first; ticked ones sink to the bottom of their group.
+  const order = (list: Reminder[]) => [...list].sort((a, b) => Number(isDone(a)) - Number(isDone(b)));
+  const groups = GROUP_ORDER.map((g) => ({ g, items: order(today.filter((r) => groupOf(r) === g)) })).filter((x) => x.items.length > 0);
+  const left = today.filter((r) => !isDone(r) && groupOf(r) !== "stock").length;
 
   const todayIso = dayKey(new Date());
   const salesToday = entries.filter((e) => e.type === "SALE" && dayKey(e.timestamp) === todayIso).reduce((n, e) => n + (e.amount ?? 0), 0);
@@ -118,33 +140,25 @@ export function TodayTasks() {
           <ListChecks className="h-5 w-5 text-cacao" strokeWidth={2} />
           Today at a glance
         </h2>
-        <span className="text-[13px] font-semibold text-muted-foreground">{todo.length === 0 ? "" : left === 0 ? "All done" : `${left} to do`}</span>
+        <span className="text-[13px] font-semibold text-muted-foreground">{left === 0 ? "All done" : `${left} to do`}</span>
       </div>
       {exec && <p className="mb-2 text-[13px] text-muted-foreground">Sold {formatPeso(salesToday)} today</p>}
 
-      <Heading>To do</Heading>
-      {todo.length === 0 ? (
+      {groups.length === 0 ? (
         <p className="rounded-xl bg-success/10 px-3 py-2.5 text-[14px] font-medium text-success">Nothing to do today.</p>
       ) : (
-        <ul>
-          {todo.map((r) => (
-            <Task key={r.id} r={r} done={ticked.has(r.id)} onTick={() => toggle(r.id)} />
-          ))}
-        </ul>
+        groups.map(({ g, items }) => (
+          <div key={g} className="mt-3 first:mt-1">
+            <Heading icon={GROUP_ICON[g]}>{GROUP_LABELS[g]}</Heading>
+            <ul>
+              {items.map((r) => (
+                <Task key={r.id} r={r} done={isDone(r)} onTick={() => tick(r)} />
+              ))}
+            </ul>
+          </div>
+        ))
       )}
-
-      <div className="mt-4">
-        <Heading icon={<PackageX className="h-3.5 w-3.5" />}>Stock alerts</Heading>
-        {stock.length === 0 ? (
-          <p className="py-1 text-[14px] text-success">Stock is fine.</p>
-        ) : (
-          <ul>
-            {stock.map((r) => (
-              <Task key={r.id} r={r} done={ticked.has(r.id)} onTick={() => toggle(r.id)} />
-            ))}
-          </ul>
-        )}
-      </div>
+      {!groups.some((x) => x.g === "stock") && <p className="mt-3 text-[13px] text-success">Stock is fine.</p>}
 
       {upcoming.length > 0 && (
         <div className="mt-4">
@@ -161,7 +175,7 @@ export function TodayTasks() {
       )}
 
       <Link href="/calendar" className="mt-3 inline-block text-[13px] font-semibold text-cacao underline-offset-2 hover:underline">
-        See the calendar
+        Open the calendar
       </Link>
     </section>
   );

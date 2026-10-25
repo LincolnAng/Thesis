@@ -1,4 +1,4 @@
-import type { ActivityEvent, Entry, EntryType, PayrollRecord, RawMaterialStock, Role, StaffMember, TimeRecord } from "@/lib/store/types";
+import type { ActivityEvent, CalendarItem, Entry, EntryType, PayrollRecord, RawMaterialStock, Role, StaffMember, TimeRecord } from "@/lib/store/types";
 import type { ProductRow, RecipeRow } from "@/lib/store/sheet-shapes";
 import { entryIntegrityProblem } from "@/lib/transactions/ledger";
 import { daysIn, periodFor } from "@/lib/payroll/pay";
@@ -35,7 +35,8 @@ export type CollectionName =
   | "activity"
   | "staff"
   | "timeRecords"
-  | "payroll";
+  | "payroll"
+  | "calendarItems";
 
 export type WriteOp = "append" | "update" | "delete" | "migrate";
 
@@ -104,6 +105,30 @@ export interface BusinessData {
   staff: StaffMember[];
   timeRecords: TimeRecord[];
   payroll: PayrollRecord[];
+  /** Already narrowed to what the signed-in person may see (see visibleCalendarItems). */
+  calendarItems: CalendarItem[];
+}
+
+/**
+ * The calendar items one person sees: their own, ones shared with everyone, and ones shared with
+ * them. Private means private — an Executive doesn't see an employee's private items either.
+ */
+export function visibleCalendarItems(items: CalendarItem[], userId: string): CalendarItem[] {
+  return items.filter((c) => c.ownerId === userId || c.visibility === "everyone" || (c.visibility === "people" && c.sharedWith.includes(userId)));
+}
+
+/** Calendar items: anyone adds their own; only the owner changes or deletes one. Same for every role. */
+function decideCalendarItem(req: WriteRequest): WriteDecision {
+  const { op, item, existing, user } = req;
+  if (op === "migrate") return deny("forbidden");
+  if (op === "append") {
+    if (!item) return deny("forbidden");
+    return { allow: true, item: { ...item, ownerId: user.id, ownerName: user.name } };
+  }
+  if (!existing) return deny("forbidden");
+  if (existing.ownerId !== user.id) return deny("not_your_calendar_item");
+  if (op === "delete") return { allow: true };
+  return { allow: true, item: { ...item, ownerId: existing.ownerId, ownerName: existing.ownerName, createdAt: existing.createdAt } };
 }
 
 /**
@@ -187,6 +212,7 @@ const deny = (reason: string): WriteDecision => ({ allow: false, reason });
 
 /** Collections whose update/delete decision depends on the row already in the sheet. */
 export function needsExistingRow(role: Role, collection: CollectionName, op: WriteOp): boolean {
+  if (collection === "calendarItems") return op === "update" || op === "delete";
   return role === "employee" && (op === "update" || op === "delete") && ["entries", "products", "rawMaterials", "timeRecords"].includes(collection);
 }
 
@@ -214,6 +240,8 @@ export function decideWrite(req: WriteRequest): WriteDecision {
     const problem = entryIntegrityProblem(req.item as Partial<Entry>);
     if (problem) return deny(problem);
   }
+
+  if (req.collection === "calendarItems") return decideCalendarItem(req);
 
   if (req.role === "executive") return { allow: true, item: stamp(req) };
 

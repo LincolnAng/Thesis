@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { decideWrite, redactForEmployee, type BusinessData } from "./permissions.ts";
+import { decideWrite, redactForEmployee, visibleCalendarItems, type BusinessData } from "./permissions.ts";
 
 // Role gating: what an employee's device receives, and what the server lets an employee save.
 // Run with `npm test`.
@@ -41,6 +41,7 @@ function sample(): BusinessData {
       { id: "st2", name: "Old", payType: "daily", rate: 500, position: "", pwd: false, userId: null, startDate: null, active: false, allowanceOnly: false, createdAt: "" },
     ],
     timeRecords: [{ id: "t1", staffId: "st1", date: "2026-10-21", timeIn: "08:00", timeOut: "17:00", status: "present", otHours: 0, note: "", createdAt: "" }],
+    calendarItems: [],
     payroll: [{ id: "pay1", staffId: "st1", kind: "regular", periodStart: "2026-10-01", periodEnd: "2026-10-15", basic: 12500, overtime: 0, deductions: 0, deductionNote: "", net: 12500, paidOn: "2026-10-15", entryId: null, createdAt: "", sss: 0, philhealth: 0, pagibig: 0 }],
   };
 }
@@ -262,4 +263,15 @@ test("a timekeeper sees and records everyone's times (names only); others still 
   assert.ok(keeper.businessSettings.some((s) => s.key === "timekeepers"));
   const other = redactForEmployee(data, (p) => p.standardPrice, "u-emp");
   assert.equal(other.staff.length, 0);
+});
+
+test("calendar items: private stays private, shared reaches only who it's shared with, only the owner changes one", () => {
+  const item = (id: string, ownerId: string, visibility: "private" | "everyone" | "people", sharedWith: string[] = []) =>
+    ({ id, title: id, kind: "event", date: "2026-10-30", endDate: null, startTime: null, endTime: null, location: "", notes: "", ownerId, ownerName: ownerId, visibility, sharedWith, done: false, createdAt: "" }) as const;
+  const items = [item("mine", "u1", "private"), item("theirs", "u2", "private"), item("all", "u2", "everyone"), item("toMe", "u2", "people", ["u1"]), item("toOther", "u2", "people", ["u3"])];
+  assert.deepEqual(visibleCalendarItems([...items], "u1").map((i) => i.id), ["mine", "all", "toMe"]);
+  const add = decideWrite({ role: "employee", user: { id: "u1", name: "Ruchel" }, collection: "calendarItems", op: "append", item: { id: "n", ownerId: "someone-else" } });
+  assert.equal(add.allow && add.item?.ownerId, "u1");
+  assert.equal(decideWrite({ role: "executive", user: { id: "u9", name: "Boss" }, collection: "calendarItems", op: "update", item: { id: "theirs" }, existing: { ...items[1] } }).allow, false);
+  assert.ok(decideWrite({ role: "employee", user: { id: "u2", name: "X" }, collection: "calendarItems", op: "delete", existing: { ...items[1] } }).allow);
 });

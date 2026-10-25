@@ -41,6 +41,7 @@ import type {
   StaffMember,
   TimeRecord,
   PayrollRecord,
+  CalendarItem,
 } from "./types";
 
 export interface StoreState {
@@ -60,6 +61,8 @@ export interface StoreState {
   staff: StaffMember[];
   timeRecords: TimeRecord[];
   payroll: PayrollRecord[];
+  /** What the signed-in person has on their calendar, and what was shared with them. */
+  calendarItems: CalendarItem[];
   /** Business-level numbers the owner sets once — hourly labor rate today. */
   businessSettings: Record<string, string>;
   tokenUsage: TokenUsage;
@@ -112,6 +115,7 @@ function defaultState(): StoreState {
     staff: [],
     timeRecords: [],
     payroll: [],
+    calendarItems: [],
     businessSettings: {},
     tokenUsage: {
       totalInputTokens: 0,
@@ -292,6 +296,7 @@ const COLLECTION_NOUNS: Record<string, string> = {
   staff: "staff member",
   timeRecords: "time record",
   payroll: "salary payment",
+  calendarItems: "calendar item",
 };
 
 const OP_VERBS: Record<string, string> = { append: "added", update: "changed", delete: "deleted" };
@@ -656,6 +661,7 @@ async function loadAllFromServer() {
         // A time-in still on its way to the sheet stays on screen until the sheet has it.
         timeRecords: Array.isArray(json.timeRecords) ? mergePending(json.timeRecords as TimeRecord[], prev.timeRecords) : prev.timeRecords,
         payroll: Array.isArray(json.payroll) ? mergePending(json.payroll as PayrollRecord[], prev.payroll) : prev.payroll,
+        calendarItems: Array.isArray(json.calendarItems) ? mergePending(json.calendarItems as CalendarItem[], prev.calendarItems) : prev.calendarItems,
         businessSettings: businessSettingRowsToRecord(businessSettingsMigration.items),
         loadedFromServer: true,
       };
@@ -1364,7 +1370,7 @@ function mergePending<T extends { id: string }>(server: T[], local: T[]): T[] {
   return [...server.filter((r) => !pendingIds.has(r.id)), ...pending];
 }
 
-async function saveSalaryRow(collection: "staff" | "timeRecords" | "payroll", op: "append" | "update", item: { id: string }): Promise<boolean> {
+async function saveSalaryRow(collection: "staff" | "timeRecords" | "payroll" | "calendarItems", op: "append" | "update", item: { id: string }): Promise<boolean> {
   pendingSalaryIds.add(item.id);
   const ok = await mirrorOp(collection, op, { id: op === "update" ? item.id : undefined, item });
   // Once the server has it, the next poll will return it; until then keep showing ours.
@@ -1510,4 +1516,27 @@ export function recordRemittance(agency: "sss" | "philhealth" | "pagibig", agenc
   setState((prev) => ({ ...prev, payroll: [...prev.payroll, record] }));
   void saveSalaryRow("payroll", "append", record);
   return record;
+}
+
+// --- Calendar items ------------------------------------------------------------------------
+
+export function addCalendarItem(input: Omit<CalendarItem, "id" | "createdAt" | "ownerId" | "ownerName">): CalendarItem {
+  const who = currentUser();
+  const item: CalendarItem = { ...input, id: genId("cal"), ownerId: who?.id ?? "", ownerName: who?.name ?? "", createdAt: new Date().toISOString() };
+  setState((prev) => ({ ...prev, calendarItems: [...prev.calendarItems, item] }));
+  void saveSalaryRow("calendarItems", "append", item);
+  return item;
+}
+
+export function updateCalendarItem(id: string, patch: Partial<CalendarItem>) {
+  const current = state.calendarItems.find((c) => c.id === id);
+  if (!current) return;
+  const updated = { ...current, ...patch, id };
+  setState((prev) => ({ ...prev, calendarItems: prev.calendarItems.map((c) => (c.id === id ? updated : c)) }));
+  void saveSalaryRow("calendarItems", "update", updated);
+}
+
+export function deleteCalendarItem(id: string) {
+  setState((prev) => ({ ...prev, calendarItems: prev.calendarItems.filter((c) => c.id !== id) }));
+  void mirrorOp("calendarItems", "delete", { id });
 }

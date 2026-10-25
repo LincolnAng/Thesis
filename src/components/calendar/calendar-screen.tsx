@@ -8,6 +8,11 @@ import { CarouselNav } from "@/components/ui/carousel-nav";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EventPlanDialog } from "@/components/inventory/event-plan-dialog";
 import { LeaveDialog, type LeaveRun } from "@/components/calendar/leave-dialog";
+import { AgendaDialog } from "@/components/calendar/agenda-dialog";
+import { updateCalendarItem } from "@/lib/store/store";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ChevronDown, Plus } from "lucide-react";
+import type { AgendaKind } from "@/lib/store/types";
 import { PlanSettingsDialog } from "@/components/inventory/plan-settings-dialog";
 import { useStore } from "@/lib/store/use-store";
 import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
@@ -19,6 +24,7 @@ import {
   unavailableDays,
 } from "@/lib/summary/business-config";
 import {
+  AGENDA_KINDS,
   CATEGORY_LABELS,
   coversDay,
   type CalendarCategory,
@@ -39,10 +45,12 @@ type View = "month" | "week" | "day";
 
 const STRATEGIES: ScheduleStrategy[] = ["fastest", "balanced", "min_expiry"];
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const ALL_CATEGORIES: CalendarCategory[] = ["production", "events", "shipments", "dayoffs", "leaves", "payments", "alerts"];
+const ALL_CATEGORIES: CalendarCategory[] = ["agenda", "events", "holidays", "production", "shipments", "dayoffs", "leaves", "payments", "alerts"];
 
 /** One colour per category, from the design tokens' palette, used for dots and chip edges. */
 const CATEGORY_COLOR: Record<CalendarCategory, string> = {
+  agenda: "#1A73E8",
+  holidays: "#C2185B",
   production: "#7B4B2A",
   events: "#558A42",
   shipments: "#3F6E8C",
@@ -70,17 +78,21 @@ const longDate = (iso: string) =>
   fromIso(iso).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", year: "numeric" });
 const shortDate = (iso: string) => fromIso(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
-function Dot({ category }: { category: CalendarCategory }) {
-  return <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: CATEGORY_COLOR[category] }} />;
+function Dot({ category, color }: { category: CalendarCategory; color?: string }) {
+  return <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color ?? CATEGORY_COLOR[category] }} />;
 }
+
+/** An entry's own colour (calendar items are coloured by kind), else its category's. */
+const colorOf = (e: CalendarEntry) => e.color ?? CATEGORY_COLOR[e.category];
 
 /** A compact line in a month cell. */
 function Chip({ entry }: { entry: CalendarEntry }) {
   return (
     <span
       className="block truncate rounded px-1 py-px text-[10px] font-medium leading-tight"
-      style={{ background: `${CATEGORY_COLOR[entry.category]}1A`, color: CATEGORY_COLOR[entry.category] }}
+      style={{ background: `${colorOf(entry)}1A`, color: colorOf(entry) }}
     >
+      {entry.item?.done ? "✓ " : ""}
       {entry.title}
     </span>
   );
@@ -91,7 +103,7 @@ function Chip({ entry }: { entry: CalendarEntry }) {
  * colour, with a solid edge, so a day's list reads at a glance the same way the month does.
  */
 function EntryRow({ entry, onOpen }: { entry: CalendarEntry; onOpen: (e: CalendarEntry) => void }) {
-  const color = CATEGORY_COLOR[entry.category];
+  const color = colorOf(entry);
   return (
     <button
       type="button"
@@ -100,7 +112,7 @@ function EntryRow({ entry, onOpen }: { entry: CalendarEntry; onOpen: (e: Calenda
       className="flex min-h-11 w-full items-start gap-2.5 rounded-xl border border-l-4 px-3 py-2.5 text-left transition hover:brightness-95"
     >
       <span className="min-w-0 flex-1">
-        <span className={`block text-[14px] font-semibold ${entry.tone === "bad" ? "text-danger" : "text-foreground"}`}>{entry.title}</span>
+        <span className={`block text-[14px] font-semibold ${entry.item?.done ? "text-muted-foreground line-through" : entry.tone === "bad" ? "text-danger" : "text-foreground"}`}>{entry.title}</span>
         {entry.subtitle && <span className="block text-[12px] text-muted-foreground">{entry.subtitle}</span>}
       </span>
       <span className="shrink-0 text-[11px] font-semibold" style={{ color }}>
@@ -113,7 +125,9 @@ function EntryRow({ entry, onOpen }: { entry: CalendarEntry; onOpen: (e: Calenda
 export function CalendarScreen() {
   const store = useStore();
   const { products, events, businessSettings, loadedFromServer } = store;
-  const exec = isExecutive(useCurrentUser());
+  const me = useCurrentUser();
+  const exec = isExecutive(me);
+  const [agendaDialog, setAgendaDialog] = useState<{ item?: CalendarEntry["item"]; date: string; kind?: AgendaKind } | null>(null);
   const today = toIsoDate(new Date());
 
   const [view, setView] = useState<View>("month");
@@ -141,7 +155,9 @@ export function CalendarScreen() {
   const offDays = unavailableDays(businessSettings);
 
   const visible = all.filter((e) => categories.includes(e.category) && !hidden.has(e.category));
-  const on = (date: string) => visible.filter((e) => coversDay(e, date));
+  // A day's entries: all-day ones first, then by time, like Google Calendar.
+  const on = (date: string) =>
+    visible.filter((e) => coversDay(e, date)).sort((a, b) => (a.startTime ?? "").localeCompare(b.startTime ?? "") || Number(a.category !== "holidays") - Number(b.category !== "holidays"));
   const lastPlannedDay = plan.days.at(-1)?.date;
 
   // The days the current view covers.
@@ -190,26 +206,37 @@ export function CalendarScreen() {
       right={
         <>
           {exec && (
-            <button
-              type="button"
-              onClick={() => setShowSettings(true)}
-              className={BUTTON.secondary}
-            >
+            <button type="button" onClick={() => setShowSettings(true)} className={BUTTON.secondary}>
               Plan settings
             </button>
           )}
-          {exec && (
-            <button type="button" onClick={() => setLeaveDialog({ date: view === "month" ? today : cursor })} className={BUTTON.secondary}>
-              + Add leave
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => setEventDialog({ date: view === "day" ? cursor : undefined })}
-            className={BUTTON.primary}
-          >
-            + Add event
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger className={`${BUTTON.primary} min-w-[120px]`}>
+              <Plus className="h-4 w-4" strokeWidth={2.4} />
+              Create
+              <ChevronDown className="h-3.5 w-3.5 opacity-80" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-60">
+              <DropdownMenuLabel className="text-[12px] text-muted-foreground">On the calendar</DropdownMenuLabel>
+              {AGENDA_KINDS.map((k) => (
+                <DropdownMenuItem key={k.kind} className="min-h-10" onSelect={() => setAgendaDialog({ date: view === "month" ? today : cursor, kind: k.kind })}>
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: k.color }} />
+                  {k.label}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="min-h-10" onSelect={() => setEventDialog({ date: view === "day" ? cursor : undefined })}>
+                <span className="h-2.5 w-2.5 rounded-full" style={{ background: CATEGORY_COLOR.events }} />
+                Bazaar or event with stock to bring
+              </DropdownMenuItem>
+              {exec && (
+                <DropdownMenuItem className="min-h-10" onSelect={() => setLeaveDialog({ date: view === "month" ? today : cursor })}>
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: CATEGORY_COLOR.leaves }} />
+                  Staff leave
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </>
       }
     >
@@ -401,6 +428,13 @@ export function CalendarScreen() {
                 >
                   {offDays.includes(cursor) ? "Make it a working day" : "Mark as day off"}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setAgendaDialog({ date: cursor })}
+                  className="min-h-11 rounded-[10px] border border-line/20 px-4 text-[13px] font-semibold"
+                >
+                  + Add on this day
+                </button>
                 {exec && (
                   <button
                     type="button"
@@ -433,7 +467,7 @@ export function CalendarScreen() {
             <>
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
-                  <Dot category={open.category} />
+                  <Dot category={open.category} color={open.color} />
                   {open.title}
                 </DialogTitle>
                 <DialogDescription>
@@ -456,6 +490,42 @@ export function CalendarScreen() {
                   </div>
                 ))}
               </dl>
+              {open.item && open.item.ownerId === me?.id && (
+                <div className="mt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const item = open.item;
+                      setOpen(null);
+                      setAgendaDialog({ item, date: item!.date });
+                    }}
+                    className="flex min-h-11 flex-1 items-center justify-center rounded-[10px] px-4 text-[14px] font-semibold text-white"
+                    style={{ background: colorOf(open) }}
+                  >
+                    Edit
+                  </button>
+                  {open.item.kind !== "event" && open.item.kind !== "meeting" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateCalendarItem(open.item!.id, { done: !open.item!.done });
+                        setOpen(null);
+                      }}
+                      className="min-h-11 flex-1 rounded-[10px] border border-line/20 px-4 text-[14px] font-semibold"
+                    >
+                      {open.item.done ? "Not done yet" : "Mark done"}
+                    </button>
+                  )}
+                </div>
+              )}
+              {open.item && open.item.ownerId !== me?.id && (
+                <p className="mt-2 text-[13px] text-muted-foreground">Shared with you by {open.item.ownerName}. Only they can change it.</p>
+              )}
+              {open.item && open.item.ownerId === me?.id && (
+                <p className="text-[12.5px] text-muted-foreground">
+                  {open.item.visibility === "private" ? "Only you see this." : open.item.visibility === "everyone" ? "Shared with everyone." : "Shared with the people you picked."}
+                </p>
+              )}
               {exec && open.category === "leaves" && (
                 <button
                   type="button"
@@ -492,6 +562,15 @@ export function CalendarScreen() {
             setEventDialog({ eventId: id });
           }}
           onClose={() => setShowSettings(false)}
+        />
+      )}
+      {agendaDialog && (
+        <AgendaDialog
+          key={agendaDialog.item?.id ?? `new-${agendaDialog.kind}`}
+          existing={agendaDialog.item}
+          defaultDate={agendaDialog.date}
+          defaultKind={agendaDialog.kind}
+          onClose={() => setAgendaDialog(null)}
         />
       )}
       {leaveDialog && <LeaveDialog existing={leaveDialog.existing} defaultDate={leaveDialog.date} onClose={() => setLeaveDialog(null)} />}

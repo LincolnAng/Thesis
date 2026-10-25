@@ -10,7 +10,8 @@ import { businessSettingsCollection } from "@/lib/sheets/business-settings";
 import { usersCollection, toPublicProfile } from "@/lib/sheets/users";
 import { activityCollection } from "@/lib/sheets/activity";
 import { payrollCollection, staffCollection, timeRecordsCollection } from "@/lib/sheets/payroll";
-import { redactForEmployee, type BusinessData } from "@/lib/auth/permissions";
+import { calendarItemsCollection } from "@/lib/sheets/calendar-items";
+import { redactForEmployee, visibleCalendarItems, type BusinessData } from "@/lib/auth/permissions";
 import { assembleProduct, type ProductRow } from "@/lib/store/sheet-shapes";
 import { effectiveProductPrice, productCostPerJar, type CostContext } from "@/lib/summary/recipe-cost";
 import type { Session } from "@/lib/auth/session";
@@ -24,7 +25,7 @@ import type { Role } from "@/lib/store/types";
  * Returns null when the session's profile no longer exists (deleted on another device).
  */
 export async function loadBusinessDataFor(session: Session): Promise<{ role: Role; data: BusinessData } | null> {
-  const [entries, products, recipes, rawMaterials, suppliers, supplierPriceHistory, budgets, events, eventStock, machines, supplierPrices, businessSettings, users, activity, staff, timeRecords, payroll] =
+  const [entries, products, recipes, rawMaterials, suppliers, supplierPriceHistory, budgets, events, eventStock, machines, supplierPrices, businessSettings, users, activity, staff, timeRecords, payroll, calendarItems] =
     await Promise.all([
       entriesCollection.getAll(),
       productsCollection.getAll(),
@@ -43,6 +44,7 @@ export async function loadBusinessDataFor(session: Session): Promise<{ role: Rol
       staffCollection.getAll(),
       timeRecordsCollection.getAll(),
       payrollCollection.getAll(),
+      calendarItemsCollection.getAll(),
     ]);
 
   // The cookie says who signed in; the sheet says who they are now. A deleted profile is
@@ -68,6 +70,8 @@ export async function loadBusinessDataFor(session: Session): Promise<{ role: Rol
     staff,
     timeRecords,
     payroll,
+    // Everyone, Executives included, sees only their own and what was shared with them.
+    calendarItems: visibleCalendarItems(calendarItems, me.id),
   };
   if (me.role === "executive") return { role: me.role, data };
 
