@@ -9,16 +9,13 @@ import { MachinesPanel } from "@/components/scheduling/machines-panel";
 import { expiringWithinDays, setExpiringWithinDays, setShelfLifeDays, shelfLifeDays } from "@/lib/summary/business-config";
 import { formatDate, pluralize } from "@/lib/format";
 import { useStore } from "@/lib/store/use-store";
-import { updateProduct } from "@/lib/store/store";
-import { withBatchSize } from "@/lib/costing/per-unit";
 import type { BusinessEvent } from "@/lib/store/types";
 
-/** What the schedule depends on but the owner rarely changes: equipment, each product's usual
- * batch size, shelf life, and how much is planned for each upcoming event.
+/** What the schedule depends on but the owner rarely changes: the machines and what each one
+ * makes, shelf life, and how much is planned for each upcoming event.
  *
- * Batch sizes live here rather than in Costing: costing is per unit and doesn't need them, and
- * they only exist so the schedule can count batches. Changing one rescales that product's stored
- * recipe so its cost per unit stays put (lib/costing/per-unit). */
+ * There used to be a batch size per product here. The schedule now counts in jars and kilos
+ * straight from each machine's output an hour or a day, so a batch size had nothing left to do. */
 export function PlanSettingsDialog({
   upcomingEvents,
   eventPlans,
@@ -40,24 +37,6 @@ export function PlanSettingsDialog({
         </DialogHeader>
         <div className="space-y-4">
           <MachinesPanel machines={machines} />
-
-          <section className="space-y-2 rounded-2xl border border-border bg-card p-4">
-            <h2 className="text-sm font-semibold text-foreground">Batch sizes</h2>
-            <p className="text-xs text-muted-foreground">How many you usually make at once. Only used to plan production — it doesn&apos;t change any cost.</p>
-            <ul className="divide-y divide-border">
-              {products.map((p) => (
-                <li key={p.id} className="flex items-center gap-3 py-2 text-sm">
-                  <span className="min-w-0 flex-1 truncate text-foreground">{fullName(p, products)}</span>
-                  <SettingNumberInput
-                    className="h-9 w-20"
-                    value={p.batchYield}
-                    onCommit={(n) => n > 0 && n !== p.batchYield && updateProduct(p.id, withBatchSize(p, n))}
-                  />
-                  <span className="w-12 text-xs text-muted-foreground">{p.unit || "jars"}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
 
           <section className="space-y-2 rounded-2xl border border-border bg-card p-4">
             <h2 className="text-sm font-semibold text-foreground">Shelf life</h2>

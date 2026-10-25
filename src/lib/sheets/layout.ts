@@ -59,7 +59,7 @@ export const SHARED_TABS: Record<string, string[]> = {
     // Budget
     "category", "monthlyBudget",
     // Machine
-    "id", "name", "batchesPerDay", "workingDaysPerWeek", "notes", "createdAt",
+    "id", "name", "batchesPerDay", "workingDaysPerWeek", "notes", "createdAt", "outputs", "hoursPerDay",
   ],
   Logs: [
     "section",

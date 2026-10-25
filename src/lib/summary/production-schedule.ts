@@ -1,15 +1,18 @@
 import { forecastAll, type ProductForecast } from "@/lib/summary/forecast";
 import { rawQuantityNeeded } from "@/lib/summary/cacao";
+import { unitsPerBatch } from "@/lib/costing/per-unit";
+import { hasEquipment, makersOf, runsOn } from "@/lib/production/machines";
 import type { BusinessEvent, Entry, Machine, Product, RawMaterialStock } from "@/lib/store/types";
 
 /**
  * Turns next month's forecast (plus whatever the owner plans to bring to events) into a
  * day-by-day production calendar.
  *
- * Batches are the unit of work: a machine's day is spent on batches, and recipes are written
- * per batch. Every batch carries a deadline — the end of this month for forecast demand, the
- * day before the event for event stock — and the chosen strategy decides which free day
- * each batch lands on.
+ * Work is counted in the item's own unit (jars, kg), and each machine says how many of what it
+ * makes in an hour or a day. A machine that makes several things splits its day between them.
+ * Everything to make carries a deadline — the end of this month for forecast demand, the day
+ * before the event for event stock — and the chosen strategy decides which days it lands on.
+ * Raw materials a machine makes (nibs from a grinder) are scheduled too when they're short.
  */
 
 export type ScheduleStrategy = "fastest" | "balanced" | "min_expiry";
@@ -29,16 +32,18 @@ export const STRATEGY_HINTS: Record<ScheduleStrategy, string> = {
 export type DayStatus = "past" | "unavailable" | "no_equipment" | "open";
 
 export interface ScheduledRun {
-  productId: string;
-  productName: string;
-  batches: number;
-  jars: number;
+  /** A product's id, or a raw material's when `kind` is "material". */
+  itemId: string;
+  kind: "product" | "material";
+  name: string;
+  qty: number;
+  unit: string;
 }
 
 export interface PlanDay {
   date: string; // YYYY-MM-DD
   status: DayStatus;
-  capacity: number; // batches the equipment can do that day (0 unless open)
+  capacity: number; // machines running that day (0 unless open)
   runs: ScheduledRun[];
   eventNames: string[];
 }
@@ -50,14 +55,8 @@ export interface ProductNeed {
   eventQty: number;
   onHand: number;
   jarsToMake: number;
-  batchesNeeded: number;
-  batchesScheduled: number;
-  batchesLate: number;
-  /** Batches landing so far before their deadline that they'd be past their shelf life by
-   * the time they're needed. Fastest and Balanced both chase the deadline, not freshness,
-   * so without this nothing ever says the jars would be spoiled on arrival. */
-  batchesExpiring: number;
-  missingYield: boolean;
+  /** No machine says it makes this, so none of it can go on the calendar. */
+  noMachine: boolean;
 }
 
 export interface IngredientNeed {
@@ -67,6 +66,16 @@ export interface IngredientNeed {
   required: number;
   onHand: number;
   short: number;
+  /** A machine makes it, so what's short is scheduled rather than bought. */
+  madeInHouse: boolean;
+}
+
+/** An amount of one item, for saying what's late, early or has nowhere to go. */
+export interface ItemQty {
+  itemId: string;
+  name: string;
+  qty: number;
+  unit: string;
 }
 
 export interface ProductionPlan {
@@ -76,11 +85,14 @@ export interface ProductionPlan {
   forecasts: ProductForecast[];
   totalJarsToMake: number;
   totalJarsScheduled: number;
-  totalBatchesNeeded: number;
-  totalBatchesScheduled: number;
-  batchesLate: number;
-  batchesExpiring: number;
-  batchesUnscheduled: number;
+  /** Placed after the day it's needed. */
+  late: ItemQty[];
+  /** Placed so early it would be past its shelf life when it's needed. */
+  expiring: ItemQty[];
+  /** Has a machine, but the days ran out before all of it fit. */
+  unplaced: ItemQty[];
+  /** Needs making, but no machine makes it. */
+  noMachine: ItemQty[];
   hasEquipment: boolean;
 }
 
@@ -115,17 +127,6 @@ function addDays(iso: string, n: number): string {
   return toIsoDate(new Date(y, m - 1, d + n));
 }
 
-/** Monday = 0 … Sunday = 6, so "runs 6 days a week" reads as Mon–Sat. */
-function mondayFirstDay(d: Date): number {
-  return (d.getDay() + 6) % 7;
-}
-
-function capacityOn(machines: Machine[], date: Date): number {
-  return machines
-    .filter((m) => m.batchesPerDay > 0 && mondayFirstDay(date) < Math.max(0, Math.min(7, m.workingDaysPerWeek)))
-    .reduce((sum, m) => sum + m.batchesPerDay, 0);
-}
-
 interface DemandLine {
   productId: string;
   jars: number;
@@ -133,16 +134,23 @@ interface DemandLine {
 }
 
 interface Job {
-  productId: string;
+  itemId: string;
+  kind: "product" | "material";
+  name: string;
+  unit: string;
+  qty: number;
   deadline: string;
   shelfLife: number;
 }
+
+const EPS = 1e-6;
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export function buildProductionPlan(input: PlanInput): ProductionPlan {
   const now = input.now ?? new Date();
   const today = toIsoDate(now);
   const endOfMonth = toIsoDate(new Date(now.getFullYear(), now.getMonth() + 1, 0));
-  // The calendar runs through next month so late batches still have somewhere to land.
+  // The calendar runs through next month so late work still has somewhere to land.
   const windowEnd = toIsoDate(new Date(now.getFullYear(), now.getMonth() + 2, 0));
 
   const forecasts = forecastAll(input.products, input.entries, now, input.seasonMultipliers);
@@ -170,35 +178,30 @@ export function buildProductionPlan(input: PlanInput): ProductionPlan {
     }
   }
 
-  // --- Jobs: stock on hand covers the earliest deadlines first, the rest becomes batches ------
+  // --- Jobs: stock on hand covers the earliest deadlines first, the rest is to make ---------
   const jobs: Job[] = [];
   const needs: ProductNeed[] = input.products.map((product) => {
     const lines = [...(linesByProduct.get(product.id) ?? [])].sort((a, b) => a.deadline.localeCompare(b.deadline));
     const forecastQty = forecasts.find((f) => f.productId === product.id)?.forecastQty ?? 0;
     const eventQty = eventQtyByProduct.get(product.id) ?? 0;
-    const yieldPerBatch = product.batchYield;
     let stock = Math.max(0, product.stockQty);
-    let surplus = 0; // jars left over from the last batch, spent on the next line
     let jarsToMake = 0;
-    let batches = 0;
 
     for (const line of lines) {
-      let remaining = line.jars;
-      const fromStock = Math.min(stock, remaining);
+      const fromStock = Math.min(stock, line.jars);
       stock -= fromStock;
-      remaining -= fromStock;
+      const remaining = Math.ceil(line.jars - fromStock - EPS);
       if (remaining <= 0) continue;
       jarsToMake += remaining;
-      const fromSurplus = Math.min(surplus, remaining);
-      surplus -= fromSurplus;
-      remaining -= fromSurplus;
-      if (remaining <= 0 || yieldPerBatch <= 0) continue;
-      const count = Math.ceil(remaining / yieldPerBatch);
-      surplus += count * yieldPerBatch - remaining;
-      batches += count;
-      for (let i = 0; i < count; i++) {
-        jobs.push({ productId: product.id, deadline: line.deadline, shelfLife: input.shelfLifeDays(product.id) });
-      }
+      jobs.push({
+        itemId: product.id,
+        kind: "product",
+        name: product.name,
+        unit: product.unit || "jars",
+        qty: remaining,
+        deadline: line.deadline,
+        shelfLife: input.shelfLifeDays(product.id),
+      });
     }
 
     return {
@@ -208,134 +211,174 @@ export function buildProductionPlan(input: PlanInput): ProductionPlan {
       eventQty,
       onHand: product.stockQty,
       jarsToMake,
-      batchesNeeded: batches,
-      batchesScheduled: 0,
-      batchesLate: 0,
-      batchesExpiring: 0,
-      missingYield: jarsToMake > 0 && yieldPerBatch <= 0,
+      noMachine: jarsToMake > 0 && makersOf(input.machines, product.id).length === 0,
     };
   });
-
-  // --- Calendar ---------------------------------------------------------------------------
-  const days: PlanDay[] = [];
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  for (let d = new Date(start); toIsoDate(d) <= windowEnd; d.setDate(d.getDate() + 1)) {
-    const iso = toIsoDate(d);
-    const capacity = capacityOn(input.machines, d);
-    const status: DayStatus =
-      iso < today ? "past" : input.unavailable.has(iso) ? "unavailable" : capacity <= 0 ? "no_equipment" : "open";
-    days.push({
-      date: iso,
-      status,
-      capacity: status === "open" ? capacity : 0,
-      runs: [],
-      eventNames: upcomingEvents.filter((e) => e.startDate?.slice(0, 10) === iso).map((e) => e.name),
-    });
-  }
-  const openDays = days.filter((d) => d.status === "open");
-  const load = new Map<string, number>(openDays.map((d) => [d.date, 0]));
-  const placed = new Map<string, string[]>(); // date -> productIds, one per batch
-
-  const free = (day: PlanDay) => day.capacity - (load.get(day.date) ?? 0);
-  const place = (day: PlanDay, job: Job) => {
-    load.set(day.date, (load.get(day.date) ?? 0) + 1);
-    placed.set(day.date, [...(placed.get(day.date) ?? []), job.productId]);
-    const need = needs.find((n) => n.productId === job.productId);
-    if (need) {
-      need.batchesScheduled++;
-      if (day.date > job.deadline) need.batchesLate++;
-      else if (daysBetween(day.date, job.deadline) > job.shelfLife) need.batchesExpiring++;
-    }
-  };
-
-  let unscheduled = 0;
-  const earliestFree = () => openDays.find((d) => free(d) > 0);
-
-  if (input.strategy === "min_expiry") {
-    // Shortest shelf life claims the latest slots before its deadline; longer-lasting goods
-    // fill in earlier. Anything that can't fit before its deadline goes on the first free day after.
-    const ordered = [...jobs].sort((a, b) => a.shelfLife - b.shelfLife || b.deadline.localeCompare(a.deadline));
-    for (const job of ordered) {
-      const beforeDeadline = [...openDays].reverse().find((d) => d.date <= job.deadline && free(d) > 0);
-      const day = beforeDeadline ?? openDays.find((d) => d.date > job.deadline && free(d) > 0);
-      if (day) place(day, job);
-      else unscheduled++;
-    }
-  } else {
-    // Earliest deadline first. Balanced caps each day at an even share of the work, but a
-    // deadline always beats evenness: if the capped days run out, the cap is lifted.
-    const ordered = [...jobs].sort((a, b) => a.deadline.localeCompare(b.deadline));
-    const lastDeadline = ordered.at(-1)?.deadline ?? today;
-    const usableDays = openDays.filter((d) => d.date <= lastDeadline).length || openDays.length;
-    const cap = input.strategy === "balanced" && usableDays > 0 ? Math.ceil(ordered.length / usableDays) : Infinity;
-    for (const job of ordered) {
-      const day =
-        openDays.find((d) => d.date <= job.deadline && free(d) > 0 && (load.get(d.date) ?? 0) < cap) ??
-        earliestFree();
-      if (day) place(day, job);
-      else unscheduled++;
-    }
-  }
-
-  const productById = new Map(input.products.map((p) => [p.id, p]));
-  for (const day of days) {
-    const batchIds = placed.get(day.date);
-    if (!batchIds) continue;
-    const counts = new Map<string, number>();
-    for (const id of batchIds) counts.set(id, (counts.get(id) ?? 0) + 1);
-    day.runs = [...counts.entries()].map(([productId, batches]) => {
-      const product = productById.get(productId);
-      return {
-        productId,
-        productName: product?.name ?? "Unknown product",
-        batches,
-        jars: batches * (product?.batchYield ?? 0),
-      };
-    });
-  }
 
   // --- Ingredients for everything that needs making (raw cacao scaled up by utilization) ----
   // Counted against what has to be made, not against what the calendar managed to place: with
   // no equipment set up nothing is ever placed, and a shopping list that empties itself in
   // exactly that case is worse than useless — that's when you most need to know what to buy.
+  const productById = new Map(input.products.map((p) => [p.id, p]));
   const required = new Map<string, number>();
   for (const need of needs) {
-    if (need.batchesNeeded <= 0) continue;
-    for (const row of productById.get(need.productId)?.recipeIngredients ?? []) {
+    const product = productById.get(need.productId);
+    if (!product || need.jarsToMake <= 0) continue;
+    for (const row of product.recipeIngredients) {
       const material = input.rawMaterials.find((m) => m.id === row.materialId);
       const rawQty = rawQuantityNeeded(material?.name ?? "", row.quantity, input.cacaoUtilization);
-      required.set(row.materialId, (required.get(row.materialId) ?? 0) + rawQty * need.batchesNeeded);
+      required.set(row.materialId, (required.get(row.materialId) ?? 0) + (rawQty / unitsPerBatch(product)) * need.jarsToMake);
     }
   }
   const ingredientNeeds: IngredientNeed[] = [...required.entries()]
     .map(([materialId, qty]) => {
       const material = input.rawMaterials.find((m) => m.id === materialId);
       const onHand = material?.qty ?? 0;
-      const rounded = Math.round(qty * 100) / 100;
       return {
         materialId,
         name: material?.name ?? "Unknown ingredient",
         unit: material?.unit ?? "",
-        required: rounded,
+        required: round2(qty),
         onHand,
-        short: Math.max(0, Math.round((qty - onHand) * 100) / 100),
+        short: Math.max(0, round2(qty - onHand)),
+        madeInHouse: makersOf(input.machines, materialId).length > 0,
       };
     })
     .sort((a, b) => b.short - a.short || a.name.localeCompare(b.name));
+  // What a machine here makes is made, not bought — before the products that use it.
+  for (const n of ingredientNeeds.filter((x) => x.madeInHouse && x.short > 0)) {
+    jobs.push({ itemId: n.materialId, kind: "material", name: n.name, unit: n.unit, qty: n.short, deadline: endOfMonth, shelfLife: Infinity });
+  }
 
-  const totalBatchesScheduled = needs.reduce((s, n) => s + n.batchesScheduled, 0);
+  // --- Calendar ---------------------------------------------------------------------------
+  const days: PlanDay[] = [];
+  const dateOf = new Map<string, Date>();
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  for (let d = new Date(start); toIsoDate(d) <= windowEnd; d.setDate(d.getDate() + 1)) {
+    const iso = toIsoDate(d);
+    dateOf.set(iso, new Date(d));
+    const running = input.machines.filter((m) => runsOn(m, d)).length;
+    const status: DayStatus =
+      iso < today ? "past" : input.unavailable.has(iso) ? "unavailable" : running <= 0 ? "no_equipment" : "open";
+    days.push({
+      date: iso,
+      status,
+      capacity: status === "open" ? running : 0,
+      runs: [],
+      eventNames: upcomingEvents.filter((e) => e.startDate?.slice(0, 10) === iso).map((e) => e.name),
+    });
+  }
+  const openDays = days.filter((d) => d.status === "open");
+
+  // Share of each machine's day already spent, by "date|machineId".
+  const used = new Map<string, number>();
+  const made = new Map<string, Map<string, number>>(); // date -> itemId -> qty
+  const late = new Map<string, number>();
+  const expiring = new Map<string, number>();
+  const unplaced = new Map<string, number>();
+  const jobById = new Map<string, Job>();
+  const add = (m: Map<string, number>, id: string, qty: number) => m.set(id, (m.get(id) ?? 0) + qty);
+
+  /** Makes as much of `job` as fits on `day`, each machine up to `cap` of its day. */
+  const fill = (day: PlanDay, job: Job, wanted: number, cap: number): number => {
+    let done = 0;
+    for (const { machine, perDay } of makersOf(input.machines, job.itemId)) {
+      if (wanted - done <= EPS) break;
+      if (!runsOn(machine, dateOf.get(day.date) as Date)) continue;
+      const key = `${day.date}|${machine.id}`;
+      const room = cap - (used.get(key) ?? 0);
+      if (room <= EPS) continue;
+      let qty = Math.min(wanted - done, room * perDay);
+      // A jar is made whole or not at all.
+      if (job.kind === "product") qty = Math.floor(qty + EPS);
+      if (qty <= EPS) continue;
+      used.set(key, (used.get(key) ?? 0) + qty / perDay);
+      done += qty;
+    }
+    if (done > EPS) {
+      const forDay = made.get(day.date) ?? new Map<string, number>();
+      add(forDay, job.itemId, done);
+      made.set(day.date, forDay);
+      if (day.date > job.deadline) add(late, job.itemId, done);
+      else if (daysBetween(day.date, job.deadline) > job.shelfLife) add(expiring, job.itemId, done);
+    }
+    return done;
+  };
+
+  // Materials go before the products made from them; then earliest deadline first.
+  const kindRank = (j: Job) => (j.kind === "material" ? 0 : 1);
+  const placeable = jobs.filter((j) => makersOf(input.machines, j.itemId).length > 0);
+  for (const j of jobs) jobById.set(j.itemId, j);
+
+  const daysFor = (job: Job) =>
+    input.strategy === "min_expiry"
+      ? // Made as late as it can be and still be on time; anything that can't fit before its
+        // deadline goes on the first free day after.
+        [...openDays.filter((d) => d.date <= job.deadline).reverse(), ...openDays.filter((d) => d.date > job.deadline)]
+      : openDays;
+
+  let ordered: Job[];
+  let cap = 1;
+  if (input.strategy === "min_expiry") {
+    // Shortest shelf life claims the latest slots before its deadline; longer-lasting goods fill in earlier.
+    ordered = [...placeable].sort((a, b) => kindRank(b) - kindRank(a) || a.shelfLife - b.shelfLife || b.deadline.localeCompare(a.deadline));
+  } else {
+    ordered = [...placeable].sort((a, b) => a.deadline.localeCompare(b.deadline) || kindRank(a) - kindRank(b));
+    if (input.strategy === "balanced") {
+      // Every machine gets the same share of each day — the work spread evenly up to the last
+      // deadline. A deadline always beats evenness: what doesn't fit under the cap goes uncapped.
+      const lastDeadline = ordered.at(-1)?.deadline ?? today;
+      const work = ordered.reduce((t, j) => t + j.qty / Math.max(...makersOf(input.machines, j.itemId).map((x) => x.perDay)), 0);
+      const room = openDays.filter((d) => d.date <= lastDeadline).reduce((t, d) => t + d.capacity, 0);
+      cap = room > 0 ? Math.min(1, (work / room) * 1.02) : 1;
+    }
+  }
+
+  const left = new Map(ordered.map((j, i) => [i, j.qty]));
+  for (const pass of cap < 1 ? [cap, 1] : [1]) {
+    ordered.forEach((job, i) => {
+      for (const day of daysFor(job)) {
+        const want = left.get(i) ?? 0;
+        if (want <= EPS) break;
+        left.set(i, want - fill(day, job, want, pass));
+      }
+    });
+  }
+  ordered.forEach((job, i) => {
+    const rest = left.get(i) ?? 0;
+    if (rest > EPS) add(unplaced, job.itemId, rest);
+  });
+
+  for (const day of days) {
+    const forDay = made.get(day.date);
+    if (!forDay) continue;
+    day.runs = [...forDay.entries()].map(([itemId, qty]) => {
+      const job = jobById.get(itemId) as Job;
+      return { itemId, kind: job.kind, name: job.name, qty: round2(qty), unit: job.unit };
+    });
+  }
+
+  const listOf = (m: Map<string, number>): ItemQty[] =>
+    [...m.entries()]
+      .filter(([, qty]) => qty > EPS)
+      .map(([itemId, qty]) => {
+        const job = jobById.get(itemId) as Job;
+        return { itemId, name: job.name, qty: round2(qty), unit: job.unit };
+      });
+  const noMachine = new Map<string, number>();
+  for (const j of jobs.filter((x) => !placeable.includes(x))) add(noMachine, j.itemId, j.qty);
+
   return {
     days,
     needs,
     ingredientNeeds,
     forecasts,
     totalJarsToMake: needs.reduce((s, n) => s + n.jarsToMake, 0),
-    totalJarsScheduled: days.reduce((s, d) => s + d.runs.reduce((r, run) => r + run.jars, 0), 0),
-    totalBatchesNeeded: jobs.length,
-    totalBatchesScheduled,
-    batchesLate: needs.reduce((s, n) => s + n.batchesLate, 0),
-    batchesExpiring: needs.reduce((s, n) => s + n.batchesExpiring, 0),
-    batchesUnscheduled: unscheduled,
-    hasEquipment: input.machines.some((m) => m.batchesPerDay > 0 && m.workingDaysPerWeek > 0),
+    totalJarsScheduled: days.reduce((s, d) => s + d.runs.filter((r) => r.kind === "product").reduce((r, run) => r + run.qty, 0), 0),
+    late: listOf(late),
+    expiring: listOf(expiring),
+    unplaced: listOf(unplaced),
+    noMachine: listOf(noMachine),
+    hasEquipment: hasEquipment(input.machines),
   };
 }

@@ -1,3 +1,4 @@
+import { unitsPerBatch } from "@/lib/costing/per-unit";
 import type { Product } from "@/lib/store/types";
 
 /**
@@ -5,16 +6,16 @@ import type { Product } from "@/lib/store/types";
  * ice cream and brandy — worked backwards from what needs to be sold.
  *
  * Every product's need is its own demand plus what the products made from it will use. Each
- * stage is planned in whole batches, and everything is held to three rules:
+ * stage is planned in units (a jar, a kg), and everything is held to three rules:
  *
  *   1. NON-NEGATIVITY — nothing is planned below zero: no negative production, no negative
  *      stock, no negative purchases.
- *   2. BALANCE — what a stage produces covers what it is asked for (inputs ≥ outputs):
- *      batches × batch size ≥ need, and a batch draws exactly its recipe's inputs.
+ *   2. BALANCE — what a stage produces covers what it is asked for (inputs ≥ outputs), and
+ *      each unit draws exactly its recipe's inputs.
  *   3. AVAILABILITY — "can make now" never uses more beans, sugar, jars or tablea than are on
  *      hand. What is missing becomes a restock alert with the amount to buy.
  *
- * The sources of truth are Costing (recipes, batch sizes, components) and Transactions (stock,
+ * The sources of truth are Costing (recipes, components) and Transactions (stock,
  * worked out from what was bought, made, sold and spoiled). Pure: no store, no React.
  */
 
@@ -35,7 +36,7 @@ export interface PlanInput {
   demand: Map<string, number>;
   /** Units of each product on hand and still good, by product id. Defaults to stockQty. */
   onHand?: Map<string, number>;
-  /** Raw amount a batch draws for a recipe quantity (recipes are in usable cacao). */
+  /** Raw amount drawn for a recipe quantity (recipes are in usable cacao). */
   rawPerBatch?: (material: PlanMaterial, recipeQty: number) => number;
 }
 
@@ -50,24 +51,19 @@ export interface ProductPlan {
   /** demand + usedByOthers. */
   need: number;
   onHand: number;
-  /** need − onHand, never below zero. */
+  /** need − onHand, never below zero: how many to make. */
   shortfall: number;
-  batches: number;
-  /** batches × batch size — always ≥ shortfall. */
-  produced: number;
-  /** Of `batches`, how many the stock on hand right now allows. */
+  /** Of `shortfall`, how many the stock on hand right now allows. */
   canMakeNow: number;
-  /** What stops the rest, when canMakeNow < batches. */
+  /** What stops the rest, when canMakeNow < shortfall. */
   limitedBy: string | null;
-  /** Needs making but has no batch size in Costing, so it can't be planned. */
-  missingBatchSize: boolean;
 }
 
 export interface MaterialPlan {
   materialId: string;
   name: string;
   unit: string;
-  /** Drawn by every planned batch. */
+  /** Drawn by everything planned. */
   required: number;
   onHand: number;
   /** required − onHand, never below zero: the amount to buy. */
@@ -76,22 +72,9 @@ export interface MaterialPlan {
   belowReorderPoint: boolean;
 }
 
-export type PlanAlertKind = "produce" | "restock" | "limited" | "no_batch_size";
-
-export interface PlanAlert {
-  kind: PlanAlertKind;
-  urgent: boolean;
-  title: string;
-  detail: string;
-  /** What it's about, so a screen can file it under the right step. */
-  productId?: string;
-  materialId?: string;
-}
-
 export interface PlanResult {
   products: ProductPlan[];
   materials: MaterialPlan[];
-  alerts: PlanAlert[];
 }
 
 const round = (n: number) => Math.round(n * 100) / 100;
@@ -130,6 +113,8 @@ export function planProduction(input: PlanInput): PlanResult {
   const rawPerBatch = input.rawPerBatch ?? ((_m: PlanMaterial, qty: number) => qty);
   const materialById = new Map(materials.map((m) => [m.id, m]));
   const productById = new Map(products.map((p) => [p.id, p]));
+  // Recipes are stored a batch at a time; everything here is per unit.
+  const each = (p: Product, batchQty: number) => Math.max(0, batchQty) / unitsPerBatch(p);
 
   // ── Requirements, top down ────────────────────────────────────────────────
   const usedByOthers = new Map<string, number>();
@@ -142,8 +127,6 @@ export function planProduction(input: PlanInput): PlanResult {
     const need = own + fromOthers;
     const onHand = onHandOf(p);
     const shortfall = Math.max(0, need - onHand);
-    const missingBatchSize = shortfall > 0 && !(p.batchYield > 0);
-    const batches = shortfall > 0 && p.batchYield > 0 ? Math.ceil(round(shortfall / p.batchYield)) : 0;
 
     plans.set(p.id, {
       productId: p.id,
@@ -154,21 +137,18 @@ export function planProduction(input: PlanInput): PlanResult {
       need: round(need),
       onHand: round(onHand),
       shortfall: round(shortfall),
-      batches,
-      produced: batches * Math.max(0, p.batchYield),
       canMakeNow: 0,
       limitedBy: null,
-      missingBatchSize,
     });
 
     for (const c of p.recipeComponents ?? []) {
       if (c.productId === p.id || !productById.has(c.productId)) continue;
-      usedByOthers.set(c.productId, (usedByOthers.get(c.productId) ?? 0) + batches * Math.max(0, c.quantity));
+      usedByOthers.set(c.productId, (usedByOthers.get(c.productId) ?? 0) + shortfall * each(p, c.quantity));
     }
     for (const row of p.recipeIngredients) {
       const m = materialById.get(row.materialId);
       if (!m) continue;
-      required.set(m.id, (required.get(m.id) ?? 0) + batches * Math.max(0, rawPerBatch(m, row.quantity)));
+      required.set(m.id, (required.get(m.id) ?? 0) + shortfall * each(p, rawPerBatch(m, row.quantity)));
     }
   }
 
@@ -179,12 +159,12 @@ export function planProduction(input: PlanInput): PlanResult {
   const remainingProduct = new Map(products.map((p) => [p.id, onHandOf(p)]));
   for (const p of [...downstreamFirst(products)].reverse()) {
     const plan = plans.get(p.id) as ProductPlan;
-    if (plan.batches === 0) continue;
-    let possible = plan.batches;
+    if (plan.shortfall === 0) continue;
+    let possible = plan.shortfall;
     let limitedBy: string | null = null;
-    const limit = (available: number, perBatch: number, name: string) => {
-      if (perBatch <= 0) return;
-      const n = Math.floor(round(available / perBatch));
+    const limit = (available: number, perUnit: number, name: string) => {
+      if (perUnit <= 0) return;
+      const n = round(available / perUnit);
       if (n < possible) {
         possible = Math.max(0, n);
         limitedBy = name;
@@ -192,25 +172,25 @@ export function planProduction(input: PlanInput): PlanResult {
     };
     for (const row of p.recipeIngredients) {
       const m = materialById.get(row.materialId);
-      if (m) limit(remainingMaterial.get(m.id) ?? 0, rawPerBatch(m, row.quantity), m.name);
+      if (m) limit(remainingMaterial.get(m.id) ?? 0, each(p, rawPerBatch(m, row.quantity)), m.name);
     }
     for (const c of p.recipeComponents ?? []) {
       const comp = productById.get(c.productId);
-      if (comp && comp.id !== p.id) limit(remainingProduct.get(comp.id) ?? 0, c.quantity, comp.name);
+      if (comp && comp.id !== p.id) limit(remainingProduct.get(comp.id) ?? 0, each(p, c.quantity), comp.name);
     }
     for (const row of p.recipeIngredients) {
       const m = materialById.get(row.materialId);
-      if (m) remainingMaterial.set(m.id, Math.max(0, (remainingMaterial.get(m.id) ?? 0) - possible * rawPerBatch(m, row.quantity)));
+      if (m) remainingMaterial.set(m.id, Math.max(0, (remainingMaterial.get(m.id) ?? 0) - possible * each(p, rawPerBatch(m, row.quantity))));
     }
     for (const c of p.recipeComponents ?? []) {
       if (productById.has(c.productId) && c.productId !== p.id) {
-        remainingProduct.set(c.productId, Math.max(0, (remainingProduct.get(c.productId) ?? 0) - possible * c.quantity));
+        remainingProduct.set(c.productId, Math.max(0, (remainingProduct.get(c.productId) ?? 0) - possible * each(p, c.quantity)));
       }
     }
     // What this stage makes now is available to the stages made from it.
-    remainingProduct.set(p.id, (remainingProduct.get(p.id) ?? 0) + possible * p.batchYield);
-    plan.canMakeNow = possible;
-    plan.limitedBy = possible < plan.batches ? limitedBy : null;
+    remainingProduct.set(p.id, (remainingProduct.get(p.id) ?? 0) + possible);
+    plan.canMakeNow = round(possible);
+    plan.limitedBy = possible < plan.shortfall ? limitedBy : null;
   }
 
   // ── Materials ─────────────────────────────────────────────────────────────
@@ -229,87 +209,5 @@ export function planProduction(input: PlanInput): PlanResult {
     };
   });
 
-  // ── Alerts ────────────────────────────────────────────────────────────────
-  const alerts: PlanAlert[] = [];
-  const productPlans = products.map((p) => plans.get(p.id) as ProductPlan);
-  for (const m of materialPlans.filter((x) => x.toBuy > 0 || x.belowReorderPoint).sort((a, b) => b.toBuy - a.toBuy)) {
-    alerts.push({
-      kind: "restock",
-      materialId: m.materialId,
-      urgent: m.toBuy > 0,
-      title: m.toBuy > 0 ? `Buy at least ${m.toBuy} ${m.unit} of ${m.name}` : `${m.name} is at its restock point`,
-      detail:
-        m.toBuy > 0
-          ? `The plan needs ${m.required} ${m.unit}; ${m.onHand} ${m.unit} is on hand.`
-          : `${m.onHand} ${m.unit} left — the restock point is ${m.reorderPoint} ${m.unit}.`,
-    });
-  }
-  for (const p of productPlans.filter((x) => x.batches > 0)) {
-    alerts.push({
-      kind: "produce",
-      productId: p.productId,
-      urgent: p.onHand === 0 || p.onHand < p.demand / 2,
-      title: `Make ${p.batches} batch${p.batches === 1 ? "" : "es"} of ${p.name}`,
-      detail:
-        `${p.produced} ${p.unit} for a need of ${p.need}` +
-        (p.usedByOthers > 0 ? ` (${p.usedByOthers} of it goes into other products)` : "") +
-        `; ${p.onHand} on hand.`,
-    });
-    if (p.canMakeNow < p.batches) {
-      alerts.push({
-        kind: "limited",
-        productId: p.productId,
-        urgent: true,
-        title: `Only ${p.canMakeNow} of ${p.batches} ${p.name} batches can be made now`,
-        detail: `Not enough ${p.limitedBy ?? "stock"} on hand for the rest.`,
-      });
-    }
-  }
-  for (const p of productPlans.filter((x) => x.missingBatchSize)) {
-    alerts.push({
-      kind: "no_batch_size",
-      productId: p.productId,
-      urgent: false,
-      title: `${p.name} has no batch size`,
-      detail: `${p.shortfall} are needed, but production can't be planned until it has a usual batch size (Production → Settings → Batch sizes).`,
-    });
-  }
-  alerts.sort((a, b) => Number(b.urgent) - Number(a.urgent));
-
-  return { products: productPlans, materials: materialPlans, alerts };
-}
-
-// ── The process, as stages ─────────────────────────────────────────────────
-
-export interface ProcessNode {
-  id: string;
-  name: string;
-  /** Names of what this feeds into. */
-  feeds: string[];
-}
-
-export interface ProcessChain {
-  rawMaterials: ProcessNode[];
-  inHouse: ProcessNode[];
-  products: ProcessNode[];
-  packaging: ProcessNode[];
-}
-
-/**
- * The process drawn from the recipes: raw materials, what is made in-house from them (used
- * in other products — tablea), the products that are sold, and the packaging they go into.
- * Built from Costing, so adding a recipe line changes the picture.
- */
-export function processChain(products: Product[], materials: { id: string; name: string; kind?: string }[]): ProcessChain {
-  const componentIds = new Set(products.flatMap((p) => (p.recipeComponents ?? []).map((c) => c.productId)));
-  const usersOfMaterial = (id: string) => products.filter((p) => p.recipeIngredients.some((r) => r.materialId === id)).map((p) => p.name);
-  const usersOfProduct = (id: string) => products.filter((p) => p.id !== id && (p.recipeComponents ?? []).some((c) => c.productId === id)).map((p) => p.name);
-
-  const used = materials.filter((m) => usersOfMaterial(m.id).length > 0);
-  return {
-    rawMaterials: used.filter((m) => m.kind !== "packaging").map((m) => ({ id: m.id, name: m.name, feeds: usersOfMaterial(m.id) })),
-    inHouse: products.filter((p) => componentIds.has(p.id)).map((p) => ({ id: p.id, name: p.name, feeds: usersOfProduct(p.id) })),
-    products: products.filter((p) => !componentIds.has(p.id)).map((p) => ({ id: p.id, name: p.name, feeds: [] })),
-    packaging: used.filter((m) => m.kind === "packaging").map((m) => ({ id: m.id, name: m.name, feeds: usersOfMaterial(m.id) })),
-  };
+  return { products: products.map((p) => plans.get(p.id) as ProductPlan), materials: materialPlans };
 }

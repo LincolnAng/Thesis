@@ -34,7 +34,7 @@ export function useCalendarEntries(strategy: ScheduleStrategy = "fastest"): { al
       lotsByProduct,
       expiringWithinDays: within,
       ingredientShortages: plan.ingredientNeeds.filter((n) => n.short > 0),
-      lateBatches: plan.needs.filter((n) => n.batchesLate > 0).map((n) => ({ productName: n.productName, batches: n.batchesLate })),
+      late: plan.late,
       now: new Date(),
       timeRecords,
       staff,

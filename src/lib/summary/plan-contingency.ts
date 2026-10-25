@@ -1,7 +1,7 @@
 /**
  * When the plan can't be met, what to actually do about it.
  *
- * The schedule was good at saying "2 batches won't be ready in time" and said nothing after
+ * The schedule was good at saying "20 jars won't be ready in time" and said nothing after
  * that. For the person reading it that is a dead end: the sentence names a problem she did not
  * choose, in a system she did not build, and leaves her to work out the remedy herself.
  *
@@ -10,7 +10,7 @@
  * the first is a decision and the second is homework.
  *
  * Ordered hardest-blocker first: there is no point suggesting she free up a day if no equipment
- * is configured, because the day would still have nowhere to put the batch.
+ * is configured, because the day would still have nowhere to put the work.
  *
  * Pure: no store, no React, so the branching can be tested without a browser.
  */
@@ -26,21 +26,28 @@ export interface PlanFix {
   severity: FixSeverity;
 }
 
+/** An amount of one thing, in its own unit. */
+interface Amount {
+  name: string;
+  qty: number;
+  unit: string;
+}
+
 export interface ContingencyInput {
   totalJarsToMake: number;
-  batchesNeeded: number;
-  batchesScheduled: number;
-  batchesLate: number;
-  batchesExpiring: number;
+  /** Has a machine, but didn't all fit before the days ran out. */
+  unplaced: Amount[];
+  late: Amount[];
+  expiring: Amount[];
+  /** Needs making, but no machine makes it. */
+  noMachine: Amount[];
   hasEquipment: boolean;
   /** Every day in the planning window, with its status and capacity. */
   days: { date: string; status: string; capacity: number; runs: unknown[] }[];
   /** Days the owner has marked herself off. */
   unavailable: string[];
-  /** Materials she is short of, if any. */
+  /** Materials she is short of and has to buy, if any. */
   shortMaterials: { name: string; short: number; unit: string }[];
-  /** How many batches a day the equipment can manage, for the "raise it" suggestion. */
-  batchesPerDay: number;
 }
 
 function pretty(iso: string): string {
@@ -49,34 +56,51 @@ function pretty(iso: string): string {
   return new Date(y, m - 1, d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
 
+const amount = (a: Amount) => `${Math.ceil(a.qty * 100) / 100} ${a.unit} of ${a.name}`;
+/** "A", "A and B", "A, B and 2 more". */
+function list(items: Amount[]): string {
+  const shown = items.slice(0, 2).map(amount);
+  if (items.length > 2) return `${shown.join(", ")} and ${items.length - 2} more`;
+  return shown.join(" and ");
+}
+
 export function planContingencies(input: ContingencyInput): PlanFix[] {
   const fixes: PlanFix[] = [];
   if (input.totalJarsToMake <= 0) return fixes;
-
-  const unplaced = Math.max(0, input.batchesNeeded - input.batchesScheduled);
 
   // 1. Nothing can be scheduled at all. Every other suggestion is noise until this is fixed.
   if (!input.hasEquipment) {
     fixes.push({
       id: "no-equipment",
       problem: "Nothing can go on the calendar yet — the app doesn't know what you make with.",
-      fix: "Add your equipment under Settings, and say how many batches a day it can do.",
+      fix: "Add your machines under Settings, with what each one makes and how many an hour or a day.",
       severity: "blocked",
     });
     return fixes;
   }
 
+  // 2. Some things have no machine at all, so no amount of free days will place them.
+  if (input.noMachine.length > 0) {
+    fixes.push({
+      id: "no-machine",
+      problem: `No machine makes ${input.noMachine.map((a) => a.name).slice(0, 3).join(", ")}${input.noMachine.length > 3 ? ` and ${input.noMachine.length - 3} more` : ""}, so ${input.noMachine.length === 1 ? "it" : "they"} can't go on the calendar.`,
+      fix: "Under Settings, add it to the machine that makes it.",
+      severity: "blocked",
+    });
+  }
+
   const openDays = input.days.filter((d) => d.status === "open");
   const blockedInWindow = input.unavailable.filter((u) => input.days.some((d) => d.date === u));
   const freeDays = openDays.filter((d) => d.capacity > 0 && d.runs.length === 0);
+  const unplaced = input.unplaced;
 
-  if (unplaced > 0) {
+  if (unplaced.length > 0) {
     if (openDays.length === 0) {
       // Every single day is off. Name the first one she could give back.
       const firstBlocked = blockedInWindow.sort()[0];
       fixes.push({
         id: "all-days-off",
-        problem: `There is no working day left this month, so ${unplaced === 1 ? "that batch" : `those ${unplaced} batches`} have nowhere to go.`,
+        problem: `There is no working day left this month, so ${list(unplaced)} ${unplaced.length === 1 ? "has" : "have"} nowhere to go.`,
         fix: firstBlocked
           ? `Free up ${pretty(firstBlocked)} on the calendar — tap it to put yourself back on.`
           : "Mark at least one day as a working day on the calendar.",
@@ -87,29 +111,26 @@ export function planContingencies(input: ContingencyInput): PlanFix[] {
       const next = blockedInWindow.sort()[0];
       fixes.push({
         id: "free-up-a-day",
-        problem: `Your calendar is full — ${unplaced === 1 ? "1 batch has" : `${unplaced} batches have`} nowhere to go.`,
-        fix: `Free up ${pretty(next)}, or raise how many batches a day you can do${input.batchesPerDay > 0 ? ` (now ${input.batchesPerDay})` : ""}.`,
+        problem: `Your calendar is full — ${list(unplaced)} won't fit.`,
+        fix: `Free up ${pretty(next)}, or raise how many your machines make under Settings.`,
         severity: "blocked",
       });
     } else {
       // Every day is already working and still not enough: the constraint is capacity, not days.
       fixes.push({
         id: "not-enough-capacity",
-        problem: `Every day is already a working day and ${unplaced === 1 ? "1 batch" : `${unplaced} batches`} still won't fit.`,
-        fix:
-          input.batchesPerDay > 0
-            ? `Raise batches a day above ${input.batchesPerDay} under Settings, or make a smaller amount this month.`
-            : "Raise how many batches a day your equipment can do, under Settings.",
+        problem: `Every day is already a working day and ${list(unplaced)} still won't fit.`,
+        fix: "Add a machine or raise how many it makes under Settings, or make a smaller amount this month.",
         severity: "blocked",
       });
     }
   }
 
-  // 2. Placed, but after it is needed. Different problem, different fix.
-  if (input.batchesLate > 0) {
+  // 3. Placed, but after it is needed. Different problem, different fix.
+  if (input.late.length > 0) {
     fixes.push({
       id: "late",
-      problem: `${input.batchesLate === 1 ? "1 batch lands" : `${input.batchesLate} batches land`} after you need ${input.batchesLate === 1 ? "it" : "them"}.`,
+      problem: `${list(input.late)} won't be ready by the day ${input.late.length === 1 ? "it's" : "they're"} needed.`,
       fix: freeDays.length
         ? `Start earlier — ${pretty(freeDays[0].date)} is free.`
         : "Switch the schedule to Fastest, or free up an earlier day.",
@@ -117,17 +138,17 @@ export function planContingencies(input: ContingencyInput): PlanFix[] {
     });
   }
 
-  // 3. Placed early enough to go off before it is wanted.
-  if (input.batchesExpiring > 0) {
+  // 4. Placed early enough to go off before it is wanted.
+  if (input.expiring.length > 0) {
     fixes.push({
       id: "expiring",
-      problem: `${input.batchesExpiring === 1 ? "1 batch" : `${input.batchesExpiring} batches`} would be made so early they'd be past their best before you sell them.`,
+      problem: `${list(input.expiring)} would be made so early they'd be past their best before you sell them.`,
       fix: "Switch the schedule to Latest Start so they're made closer to when they're needed.",
       severity: "warning",
     });
   }
 
-  // 4. A day is useless without the materials to use it, so this comes last but still comes.
+  // 5. A day is useless without the materials to use it, so this comes last but still comes.
   for (const material of input.shortMaterials.slice(0, 3)) {
     fixes.push({
       id: `short-${material.name}`,
