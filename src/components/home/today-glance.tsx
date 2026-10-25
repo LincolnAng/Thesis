@@ -51,7 +51,7 @@ export function TodayGlance({ glance }: { glance: Glance }) {
         <Card
           href="/production"
           icon={<Box className={`h-5 w-5 ${glance.inventoryAlerts ? "text-danger" : "text-cacao"}`} strokeWidth={1.8} />}
-          label="Inventory alerts"
+          label="Stock alerts"
           value={glance.inventoryAlerts ? pluralize(glance.inventoryAlerts, "item") : "None"}
           valueTone={glance.inventoryAlerts ? "bad" : "good"}
           alert={glance.inventoryAlerts > 0}

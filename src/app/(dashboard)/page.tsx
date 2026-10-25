@@ -4,8 +4,7 @@ import { useMemo, useState } from "react";
 import { BarChart3, ChevronUp } from "lucide-react";
 import { Page } from "@/components/layout/page";
 import { HomeChat } from "@/components/home/home-chat";
-import { TodayReminders } from "@/components/reminders/reminders";
-import { TodayGlance } from "@/components/home/today-glance";
+import { TodayTasks } from "@/components/reminders/reminders";
 import { Headliners } from "@/components/home/headliners";
 import { AdvancedAnalytics } from "@/components/home/advanced-analytics";
 import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
@@ -15,7 +14,7 @@ import { productCostPerJar } from "@/lib/summary/recipe-cost";
 import { allStandings } from "@/lib/summary/material-stock";
 import { cacaoUtilizationPct } from "@/lib/summary/business-config";
 import { forecastAll } from "@/lib/summary/forecast";
-import { computeGlance, computeHeadliners, type TodayInputs } from "@/lib/home/today";
+import { computeHeadliners, type TodayInputs } from "@/lib/home/today";
 import type { Product } from "@/lib/store/types";
 
 /**
@@ -61,7 +60,6 @@ export default function HomePage() {
     };
   }, [entries, products, rawMaterials, businessSettings, costCtx, exec]);
 
-  const glance = useMemo(() => computeGlance(inputs), [inputs]);
   const headliners = useMemo(() => computeHeadliners(inputs), [inputs]);
 
   return (
@@ -84,16 +82,15 @@ export default function HomePage() {
       }
     >
       <div className="space-y-12 pb-4">
-        {/* BAi on the left, what's up today on the right; on a phone, what's up comes first. */}
+        {/* BAi on the left, today's task list on the right; on a phone, the tasks come first. */}
         <div className="grid gap-6 min-[1280px]:grid-cols-[minmax(0,1fr)_400px] min-[1280px]:items-start">
           <div className="order-2 min-w-0 min-[1280px]:order-1">
             <HomeChat />
           </div>
           <aside className="order-1 min-[1280px]:sticky min-[1280px]:top-[96px] min-[1280px]:order-2">
-            <TodayReminders />
+            <TodayTasks />
           </aside>
         </div>
-        <TodayGlance glance={glance} />
         <Headliners items={headliners} />
         {exec && advanced && <AdvancedAnalytics />}
       </div>

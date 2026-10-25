@@ -1,5 +1,5 @@
 import { dueInfo, outstanding, termOf } from "@/lib/transactions/ledger";
-import type { BusinessEvent, Entry, EventStockMovement, Product } from "@/lib/store/types";
+import type { BusinessEvent, Entry, EventStockMovement, Product, TimeRecord } from "@/lib/store/types";
 import type { PlanDay } from "@/lib/summary/production-schedule";
 import type { StockLot } from "@/lib/summary/product-lots";
 
@@ -11,6 +11,7 @@ import type { StockLot } from "@/lib/summary/product-lots";
  *   events      Events with dates, and what is planned for them
  *   shipments   stock sent out to, or back from, an event or distributor (Event Stock)
  *   dayoffs     days marked off on the production calendar
+ *   leaves      staff on leave (Salaries' time record), one entry per run of days
  *   payments    payables and receivables still owed, on their due date (Transactions)
  *   alerts      stock at or below its warning level, batches expiring, ingredients short
  *
@@ -18,13 +19,14 @@ import type { StockLot } from "@/lib/summary/product-lots";
  * carries no payment terms, so it simply produces no payment entries.
  */
 
-export type CalendarCategory = "production" | "events" | "shipments" | "dayoffs" | "payments" | "alerts";
+export type CalendarCategory = "production" | "events" | "shipments" | "dayoffs" | "leaves" | "payments" | "alerts";
 
 export const CATEGORY_LABELS: Record<CalendarCategory, string> = {
   production: "Production",
   events: "Events & orders",
   shipments: "Shipments",
   dayoffs: "Day-offs",
+  leaves: "Leaves",
   payments: "Payments",
   alerts: "Alerts",
 };
@@ -63,6 +65,32 @@ export interface CalendarInput {
   ingredientShortages: { name: string; short: number; unit: string }[];
   lateBatches: { productName: string; batches: number }[];
   now: Date;
+  /** Leave days from the time record, and whose they are. An employee's copy holds only their own. */
+  timeRecords?: TimeRecord[];
+  staff?: { id: string; name: string }[];
+}
+
+/** Days off work in a row ("2026-10-05", "-06", "-07") become one leave, with its note. */
+export function leaveRuns(records: TimeRecord[]): { staffId: string; start: string; end: string; dates: string[]; note: string }[] {
+  const next = (iso: string) => {
+    const [y, m, d] = iso.split("-").map(Number);
+    const t = new Date(y, m - 1, d + 1);
+    return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+  };
+  const byStaff = new Map<string, TimeRecord[]>();
+  for (const r of records) if (r.status === "leave") byStaff.set(r.staffId, [...(byStaff.get(r.staffId) ?? []), r]);
+  const runs: { staffId: string; start: string; end: string; dates: string[]; note: string }[] = [];
+  for (const [staffId, list] of byStaff) {
+    const sorted = [...list].sort((a, b) => a.date.localeCompare(b.date));
+    for (const r of sorted) {
+      const last = runs.at(-1);
+      if (last && last.staffId === staffId && next(last.end) === r.date && (r.note || "") === last.note) {
+        last.end = r.date;
+        last.dates.push(r.date);
+      } else runs.push({ staffId, start: r.date, end: r.date, dates: [r.date], note: r.note || "" });
+    }
+  }
+  return runs;
 }
 
 const plural = (n: number, word: string, many = `${word}s`) => `${n} ${n === 1 ? word : many}`;
@@ -192,6 +220,25 @@ export function buildCalendarEntries(input: CalendarInput): CalendarEntry[] {
       tone: due.overdue ? "bad" : "warn",
       href: "/transactions",
       hrefLabel: "Open in Transactions",
+    });
+  }
+
+  // Leaves.
+  for (const run of leaveRuns(input.timeRecords ?? [])) {
+    const name = input.staff?.find((s) => s.id === run.staffId)?.name ?? "Someone";
+    out.push({
+      id: `leave:${run.staffId}:${run.start}`,
+      category: "leaves",
+      date: run.start,
+      endDate: run.end > run.start ? run.end : undefined,
+      title: `On leave: ${name}`,
+      subtitle: [run.dates.length > 1 ? plural(run.dates.length, "day") : null, run.note || null].filter(Boolean).join(" · ") || undefined,
+      details: [
+        { label: "Who", value: name },
+        { label: "Dates", value: run.end > run.start ? `${run.start} to ${run.end}` : run.start },
+        ...(run.note ? [{ label: "Reason", value: run.note }] : []),
+      ],
+      tone: "neutral",
     });
   }
 

@@ -23,7 +23,7 @@ export function salaryReminders(input: {
   if (input.role !== "executive") {
     const mine = staff.find((s) => s.active && s.userId && s.userId === input.userId);
     if (mine && !timeRecords.some((r) => r.staffId === mine.id && r.date === today)) {
-      out.today.push({ id: "salary:timein", category: "salaries", tone: "warn", title: "You haven't timed in today", date: today, href: "/salaries" });
+      out.today.push({ id: "salary:timein", category: "salaries", tone: "warn", title: "Time in", date: today, href: "/salaries" });
     }
     return out;
   }
@@ -49,13 +49,13 @@ export function salaryReminders(input: {
       id: "salary:payday",
       category: "salaries",
       tone: "warn",
-      title: `Payday${today === current.payday ? " today" : ""}: ${peso(due.reduce((n, l) => n + l.net, 0))} for ${due.length === 1 ? "1 person" : `${due.length} people`}`,
-      detail: current.label,
+      title: `Pay salaries: ${peso(due.reduce((n, l) => n + l.net, 0))}`,
+      detail: `${due.length === 1 ? "1 person" : `${due.length} people`}${today === current.payday ? " · payday today" : ""}`,
       date: current.payday,
       href: "/salaries",
     });
   } else if (due.length && tomorrow === current.payday) {
-    out.upcoming.push({ id: "salary:payday", category: "salaries", tone: "info", title: `Payday tomorrow: about ${peso(due.reduce((n, l) => n + l.net, 0))}`, detail: current.label, date: current.payday, href: "/salaries" });
+    out.upcoming.push({ id: "salary:payday", category: "salaries", tone: "info", title: `Payday: about ${peso(due.reduce((n, l) => n + l.net, 0))} in salaries`, date: current.payday, href: "/salaries" });
   }
 
   const last = shiftPeriod(current, -1);
@@ -65,7 +65,8 @@ export function salaryReminders(input: {
       id: "salary:unpaid",
       category: "salaries",
       tone: "bad",
-      title: `Not paid yet from ${last.label}: ${lastDue.map((l) => l.staff.name).join(", ")}`,
+      title: `Pay ${lastDue.map((l) => l.staff.name).join(", ")} — last payday`,
+      detail: last.label,
       date: last.payday,
       href: "/salaries",
     });
@@ -73,7 +74,7 @@ export function salaryReminders(input: {
 
   const extra = active.reduce((n, s) => n + payFor(s, current, timeRecords).unapprovedExtra, 0);
   if (extra > 0) {
-    out.today.push({ id: "salary:ot", category: "salaries", tone: "info", title: `${extra} hours of overtime to approve`, detail: "Only approved overtime is paid", date: today, href: "/salaries" });
+    out.today.push({ id: "salary:ot", category: "salaries", tone: "info", title: `Approve ${extra} hours of overtime`, date: today, href: "/salaries" });
   }
 
   // Last month's SSS, PhilHealth and Pag-IBIG, until each is recorded as sent.
@@ -92,8 +93,7 @@ export function salaryReminders(input: {
         id: "salary:remit",
         category: "salaries",
         tone: "warn",
-        title: `Send ${monthName}'s ${unsent.map((a) => names[a]).join(", ")} contributions`,
-        detail: "Workers' shares plus the shop's — see Salaries",
+        title: `Pay ${monthName}'s ${unsent.map((a) => names[a]).join(", ")}`,
         date: today,
         href: "/salaries",
       });
@@ -109,7 +109,8 @@ export function salaryReminders(input: {
         id: "salary:13th",
         category: "salaries",
         tone: late ? "bad" : "warn",
-        title: `13th month pay ${late ? "was due Dec 24" : "due by Dec 24"} — ${unpaid13.length === 1 ? "1 person" : `${unpaid13.length} people`} not paid yet`,
+        title: `Pay 13th month ${late ? "— it was due Dec 24" : "by Dec 24"}`,
+        detail: `${unpaid13.length === 1 ? "1 person" : `${unpaid13.length} people`} not paid yet`,
         date: `${year}-12-24`,
         href: "/salaries",
       });

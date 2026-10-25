@@ -7,6 +7,7 @@ import { BUTTON, Segmented, toggleButton } from "@/components/ui/kit";
 import { CarouselNav } from "@/components/ui/carousel-nav";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EventPlanDialog } from "@/components/inventory/event-plan-dialog";
+import { LeaveDialog, type LeaveRun } from "@/components/calendar/leave-dialog";
 import { PlanSettingsDialog } from "@/components/inventory/plan-settings-dialog";
 import { useStore } from "@/lib/store/use-store";
 import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
@@ -38,7 +39,7 @@ type View = "month" | "week" | "day";
 
 const STRATEGIES: ScheduleStrategy[] = ["fastest", "balanced", "min_expiry"];
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const ALL_CATEGORIES: CalendarCategory[] = ["production", "events", "shipments", "dayoffs", "payments", "alerts"];
+const ALL_CATEGORIES: CalendarCategory[] = ["production", "events", "shipments", "dayoffs", "leaves", "payments", "alerts"];
 
 /** One colour per category, from the design tokens' palette, used for dots and chip edges. */
 const CATEGORY_COLOR: Record<CalendarCategory, string> = {
@@ -46,6 +47,7 @@ const CATEGORY_COLOR: Record<CalendarCategory, string> = {
   events: "#558A42",
   shipments: "#3F6E8C",
   dayoffs: "#9C9A92",
+  leaves: "#7A5C99",
   payments: "#9A6B12",
   alerts: "#B3261E",
 };
@@ -123,6 +125,13 @@ export function CalendarScreen() {
   const [open, setOpen] = useState<CalendarEntry | null>(null);
   const [eventDialog, setEventDialog] = useState<{ eventId?: string; date?: string } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [leaveDialog, setLeaveDialog] = useState<{ existing?: LeaveRun; date: string } | null>(null);
+  /** A leave entry's run, read back from its id ("leave:<staffId>:<start>") and dates. */
+  const runOf = (e: CalendarEntry): LeaveRun | undefined => {
+    if (e.category !== "leaves") return undefined;
+    const [, staffId, start] = e.id.split(":");
+    return { staffId, start, end: e.endDate ?? e.date, note: e.details.find((d) => d.label === "Reason")?.value ?? "" };
+  };
 
   const { all, plan } = useCalendarEntries(strategy);
   const eventPlans = useMemo(
@@ -187,6 +196,11 @@ export function CalendarScreen() {
               className={BUTTON.secondary}
             >
               Plan settings
+            </button>
+          )}
+          {exec && (
+            <button type="button" onClick={() => setLeaveDialog({ date: view === "month" ? today : cursor })} className={BUTTON.secondary}>
+              + Add leave
             </button>
           )}
           <button
@@ -387,6 +401,15 @@ export function CalendarScreen() {
                 >
                   {offDays.includes(cursor) ? "Make it a working day" : "Mark as day off"}
                 </button>
+                {exec && (
+                  <button
+                    type="button"
+                    onClick={() => setLeaveDialog({ date: cursor })}
+                    className="min-h-11 rounded-[10px] border border-line/20 px-4 text-[13px] font-semibold"
+                  >
+                    Someone on leave
+                  </button>
+                )}
               </div>
             )}
             {on(cursor).length === 0 ? (
@@ -433,6 +456,19 @@ export function CalendarScreen() {
                   </div>
                 ))}
               </dl>
+              {exec && open.category === "leaves" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const run = runOf(open);
+                    setOpen(null);
+                    if (run) setLeaveDialog({ existing: run, date: run.start });
+                  }}
+                  className="mt-2 flex min-h-11 items-center justify-center rounded-[10px] bg-cacao px-4 text-[14px] font-semibold text-ivory"
+                >
+                  Change or remove this leave
+                </button>
+              )}
               {open.href && (
                 <Link
                   href={open.href}
@@ -458,6 +494,7 @@ export function CalendarScreen() {
           onClose={() => setShowSettings(false)}
         />
       )}
+      {leaveDialog && <LeaveDialog existing={leaveDialog.existing} defaultDate={leaveDialog.date} onClose={() => setLeaveDialog(null)} />}
       {eventDialog && (
         <EventPlanDialog
           key={eventDialog.eventId ?? "new"}

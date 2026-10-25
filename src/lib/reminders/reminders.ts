@@ -4,16 +4,17 @@ import { dayOf, outstanding, termOf } from "@/lib/transactions/ledger";
 import type { Entry } from "@/lib/store/types";
 
 /**
- * What's up today — the bell on every page and the big card on Home. Built from the Calendar's
- * own entries (lib/calendar/entries), so the two always agree, plus what a calendar can't put on
- * a single day:
+ * Today at a glance — the task list on Home. Built from the Calendar's own entries
+ * (lib/calendar/entries), so the two always agree, plus what a calendar can't put on a single
+ * day:
  *
  *   overdue    a payment past its due date stays here every day until it's paid, not only on
  *              the day it fell due;
  *   follow-up  money a customer owes with no due date, once it has been waiting two weeks.
  *
- * "Today" is everything that needs doing now; "Coming up" is the next few days' payments and
- * events, so nothing due tomorrow is a surprise. Pure — no store, no React.
+ * "Today" is everything that needs doing now, each written as a short instruction ("Collect
+ * ₱800 from Ana"), with stock kept apart as stock alerts; "Coming up" is the next few days'
+ * payments and events, so nothing due tomorrow is a surprise. Pure — no store, no React.
  */
 
 export type ReminderTone = "bad" | "warn" | "info";
@@ -22,6 +23,7 @@ export interface Reminder {
   id: string;
   category: CalendarCategory | "followup" | "salaries";
   tone: ReminderTone;
+  /** What to do, in a few plain words — "Collect ₱800 from Ana". */
   title: string;
   detail?: string;
   /** "YYYY-MM-DD" it's about — the due date, the event day. */
@@ -32,7 +34,7 @@ export interface Reminder {
 export interface Reminders {
   today: Reminder[];
   upcoming: Reminder[];
-  /** Today's items that need action (not just information) — the bell's count. */
+  /** Today's items that need action (not just information). */
   urgentCount: number;
 }
 
@@ -57,21 +59,62 @@ function daysBetween(from: string, to: string): number {
 
 const TONE: Record<CalendarEntry["tone"], ReminderTone> = { bad: "bad", warn: "warn", good: "info", neutral: "info" };
 
-function fromCalendar(e: CalendarEntry, today: string): Reminder {
-  let title = e.title;
-  let tone = TONE[e.tone];
-  if (e.category === "payments") {
-    const late = e.date < today;
-    title = `${e.title} ${e.subtitle ?? ""}`.trim();
-    tone = late ? "bad" : e.date === today ? "warn" : "info";
-    return { id: e.id, category: e.category, tone, title, detail: late ? undefined : e.date === today ? "Due today" : undefined, date: e.date, href: e.href };
+/** "Low: Cacao Tablea" → ["Low", "Cacao Tablea"] */
+const split = (title: string): [string, string] => {
+  const i = title.indexOf(": ");
+  return i < 0 ? ["", title] : [title.slice(0, i), title.slice(i + 2)];
+};
+
+/** A calendar entry, said as the thing to do about it. */
+function taskFor(e: CalendarEntry, today: string): Pick<Reminder, "title" | "detail"> {
+  const [kind, what] = split(e.title);
+  const sub = e.subtitle ?? "";
+  switch (e.category) {
+    case "payments": {
+      // "To collect: ₱800" / "from Ana · 3 days overdue"
+      const [whoPart, latePart] = sub.split(" · ");
+      const who = whoPart.replace(/^(from|to) /, "");
+      const late = e.date < today;
+      return {
+        title: kind === "To collect" ? `Collect ${what} from ${who}` : `Pay ${who} ${what}`,
+        detail: late ? latePart?.replace("overdue", "late") : e.date === today ? "Due today" : undefined,
+      };
+    }
+    case "production":
+      // "Make Tablea" / "2 batches · about 24 jars · suggested"
+      return { title: `${e.title.replace(/^Make /, `Make ${sub.split(" · ")[0]} of `)}` };
+    case "events":
+      return { title: coversToday(e, today) ? `Event today: ${e.title}` : e.title };
+    case "dayoffs":
+      return { title: "Day off — no production" };
+    case "leaves":
+      return { title: coversToday(e, today) ? `${e.title.replace(/^On leave: /, "")} is on leave` : e.title };
+    case "alerts":
+      if (kind === "Low") return { title: /^0 /.test(sub) ? `Out of ${what} — make more` : `Make more ${what}`, detail: sub };
+      if (kind === "Past its date") return { title: `Check ${what} — past its date`, detail: sub };
+      if (kind === "Expires") return { title: `Sell ${what} first — expiring`, detail: sub };
+      if (kind === "Buy more") return { title: `Buy ${what}`, detail: sub.replace(" for the plan", "") };
+      if (kind === "Won't be ready in time") return { title: `${what} won't be ready in time`, detail: "Add production days" };
+      return { title: e.title, detail: sub || undefined };
+    default:
+      return { title: e.title, detail: sub || undefined };
   }
-  if (e.category === "events") tone = "info";
-  return { id: e.id, category: e.category, tone, title, detail: e.subtitle, date: e.date, href: e.href ?? (e.category === "events" ? "/calendar" : undefined) };
 }
 
+const coversToday = (e: CalendarEntry, today: string) => coversDay(e, today);
+
+function fromCalendar(e: CalendarEntry, today: string): Reminder {
+  let tone = TONE[e.tone];
+  if (e.category === "payments") tone = e.date < today ? "bad" : e.date === today ? "warn" : "info";
+  if (e.category === "events" || e.category === "leaves") tone = "info";
+  return { id: e.id, category: e.category, tone, ...taskFor(e, today), date: e.date, href: e.href ?? (e.category === "events" || e.category === "leaves" ? "/calendar" : undefined) };
+}
+
+/** Stock alerts are listed on their own, under the to-dos. */
+export const isStockAlert = (r: Reminder) => r.category === "alerts";
+
 const RANK: Record<ReminderTone, number> = { bad: 0, warn: 1, info: 2 };
-const ORDER: Record<Reminder["category"], number> = { payments: 0, salaries: 1, followup: 2, alerts: 3, events: 4, production: 5, shipments: 6, dayoffs: 7 };
+const ORDER: Record<Reminder["category"], number> = { payments: 0, salaries: 1, followup: 2, alerts: 3, events: 4, leaves: 5, production: 6, shipments: 7, dayoffs: 8 };
 const sortReminders = (list: Reminder[]) =>
   [...list].sort((a, b) => RANK[a.tone] - RANK[b.tone] || ORDER[a.category] - ORDER[b.category] || a.date.localeCompare(b.date));
 
@@ -96,7 +139,7 @@ export function buildReminders(
       continue;
     }
     if (coversDay(e, today)) todays.push(fromCalendar(e, today));
-    else if (e.date > today && e.date <= horizon && (e.category === "events" || e.category === "dayoffs" || e.category === "alerts")) upcoming.push(fromCalendar(e, today));
+    else if (e.date > today && e.date <= horizon && (e.category === "events" || e.category === "dayoffs" || e.category === "alerts" || e.category === "leaves")) upcoming.push(fromCalendar(e, today));
   }
 
   // Money a customer owes with no due date set: nudge once it has waited two weeks.
@@ -110,8 +153,8 @@ export function buildReminders(
       id: `followup:${e.id}`,
       category: "followup",
       tone: "warn",
-      title: `Follow up: ${e.counterparty || "a customer"} owes ${peso(owed)}`,
-      detail: `${waited} days since the sale${e.sku ? ` · ${e.sku}` : ""} · no due date set`,
+      title: `Ask ${e.counterparty || "the customer"} to pay ${peso(owed)}`,
+      detail: `Waiting ${waited} days`,
       date: dayOf(e.timestamp),
       href: "/transactions",
     });

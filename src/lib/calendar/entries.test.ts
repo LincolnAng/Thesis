@@ -136,3 +136,10 @@ test("event products link to their card in Costing, and alerts to the right Prod
   assert.equal(out.find((e) => e.id === "alert:short:Jars")?.href, "/production#what-to-buy");
   assert.equal(out.find((e) => e.id === "alert:low:p1")?.href, "/production#what-to-make");
 });
+
+test("leave days in a row show as one leave on the calendar", async () => {
+  const { leaveRuns } = await import("./entries.ts");
+  const rec = (date: string, note = "Vacation", staffId = "s1") => ({ id: date + staffId, staffId, date, timeIn: null, timeOut: null, status: "leave" as const, otHours: 0, note, createdAt: "" });
+  const runs = leaveRuns([rec("2026-10-05"), rec("2026-10-06"), rec("2026-10-07"), rec("2026-10-09"), rec("2026-10-06", "Sick", "s2"), { ...rec("2026-10-08"), status: "present" as const }]);
+  assert.deepEqual(runs.map((r) => [r.staffId, r.start, r.end]), [["s1", "2026-10-05", "2026-10-07"], ["s1", "2026-10-09", "2026-10-09"], ["s2", "2026-10-06", "2026-10-06"]]);
+});

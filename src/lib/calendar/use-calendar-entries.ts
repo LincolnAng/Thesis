@@ -13,7 +13,7 @@ import { buildCalendarEntries, type CalendarEntry } from "@/lib/calendar/entries
  * by the reminders bell, so the two never disagree about what's happening today.
  */
 export function useCalendarEntries(strategy: ScheduleStrategy = "fastest"): { all: CalendarEntry[]; plan: ProductionPlan; today: string } {
-  const { products, entries, events, eventStock, businessSettings } = useStore();
+  const { products, entries, events, eventStock, businessSettings, timeRecords, staff } = useStore();
   const today = toIsoDate(new Date());
   const plan = useProductionPlan(strategy);
 
@@ -36,8 +36,10 @@ export function useCalendarEntries(strategy: ScheduleStrategy = "fastest"): { al
       ingredientShortages: plan.ingredientNeeds.filter((n) => n.short > 0),
       lateBatches: plan.needs.filter((n) => n.batchesLate > 0).map((n) => ({ productName: n.productName, batches: n.batchesLate })),
       now: new Date(),
+      timeRecords,
+      staff,
     });
-  }, [today, products, plan, events, eventStock, entries, businessSettings]);
+  }, [today, products, plan, events, eventStock, entries, businessSettings, timeRecords, staff]);
 
   return { all, plan, today };
 }
