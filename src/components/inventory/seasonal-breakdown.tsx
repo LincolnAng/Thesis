@@ -478,16 +478,16 @@ export function SeasonalBreakdown({
       {learning === chosen.productId ? (
         <p className="mb-3 flex items-center gap-2 rounded-xl border border-cacao/25 bg-cacao/[0.04] px-4 py-2.5 text-[12px]">
           <Sparkles className="h-3.5 w-3.5 animate-pulse text-cacao" />
-          {`Working out when ${nameOf(chosen)} sells best…`}
+          {`Checking which months ${nameOf(chosen)} sells more, and which it sells less…`}
         </p>
       ) : pattern ? (
         <p className="mb-3 rounded-xl border border-cacao/25 bg-cacao/[0.04] px-4 py-2.5 text-[12px] leading-relaxed">
           <span className="font-semibold">
             {pattern.source === "measured"
-              ? "From your own sales: "
+              ? "Based on your past sales: "
               : pattern.source === "manual"
                 ? "You set this: "
-                : "BAi worked this out: "}
+                : "A best guess, until you have a year of sales: "}
           </span>
           {pattern.reason}
         </p>
