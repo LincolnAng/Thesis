@@ -21,6 +21,12 @@ export function cacaoMaterials(materials: RawMaterialStock[]): RawMaterialStock[
   return materials.filter((m) => m.kind !== "packaging" && isRawCacao(m.name));
 }
 
+/** What a run can start from: any ingredient, raw cacao first. */
+export function runMaterials(materials: RawMaterialStock[]): RawMaterialStock[] {
+  const ingredients = materials.filter((m) => m.kind !== "packaging");
+  return [...ingredients.filter((m) => isRawCacao(m.name)), ...ingredients.filter((m) => !isRawCacao(m.name))];
+}
+
 /** Usable cacao one unit of a product takes, by its recipe (recipes are written in usable cacao). */
 export function cacaoPerUnit(product: Product, materialId: string): number {
   const batch = product.recipeIngredients.filter((r) => r.materialId === materialId).reduce((t, r) => t + r.quantity, 0);

@@ -7,7 +7,7 @@ import { BUTTON } from "@/components/ui/kit";
 import { useStore } from "@/lib/store/use-store";
 import { addCacaoMove, deleteCacaoMove } from "@/lib/store/store";
 import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
-import { bucketBalance, cacaoMaterials, newestFirst } from "@/lib/production/runs";
+import { bucketBalance, newestFirst, runMaterials } from "@/lib/production/runs";
 import { fieldCls, labelCls } from "@/components/production/add-batch-dialog";
 
 const SHOWN = 8;
@@ -21,7 +21,7 @@ export const dayLabel = (iso: string) => {
 };
 
 /**
- * The leftover cacao bucket: usable cacao a run didn't use. How much is in it, and every time
+ * The leftover bucket: usable material (cacao, mostly) a run didn't use. How much is in it, and every time
  * some went in or came out — when, how much, what for and who logged it.
  */
 export function CacaoBucket() {
@@ -29,19 +29,20 @@ export function CacaoBucket() {
   const exec = isExecutive(useCurrentUser());
   const [dialog, setDialog] = useState<"in" | "out" | null>(null);
   const [all, setAll] = useState(false);
-  const cacao = cacaoMaterials(rawMaterials);
+  const cacao = runMaterials(rawMaterials);
   // A material still in the history but no longer listed keeps its bucket.
   const ids = [...new Set([...cacao.map((m) => m.id), ...cacaoBucket.map((m) => m.materialId)])];
   const nameOf = (id: string) => rawMaterials.find((m) => m.id === id)?.name ?? "Cacao no longer listed";
   const unitOf = (id: string) => rawMaterials.find((m) => m.id === id)?.unit ?? cacaoBucket.find((m) => m.materialId === id)?.unit ?? "kg";
-  const balances = ids.map((id) => ({ id, qty: bucketBalance(cacaoBucket, id) })).filter((b) => b.qty !== 0 || cacao.some((m) => m.id === b.id));
+  // Every material that has ever been in it, or the first one a run starts from (cacao) when it's empty.
+  const balances = ids.map((id) => ({ id, qty: bucketBalance(cacaoBucket, id) })).filter((b) => b.qty !== 0 || b.id === cacao[0]?.id);
   const history = newestFirst(cacaoBucket);
   const shown = all ? history : history.slice(0, SHOWN);
 
   return (
     <section className="flex flex-col gap-3 rounded-2xl border border-line/15 bg-card p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-display text-[20px] font-semibold">Leftover cacao</h2>
+        <h2 className="font-display text-[20px] font-semibold">Leftover bucket</h2>
         {cacao.length > 0 && (
           <div className="flex gap-2">
             <button type="button" onClick={() => setDialog("in")} className={BUTTON.secondary}>
@@ -55,7 +56,7 @@ export function CacaoBucket() {
       </div>
 
       {balances.length === 0 ? (
-        <p className="text-[13.5px] text-muted-foreground">No raw cacao set up yet — add it under Inventory.</p>
+        <p className="text-[13.5px] text-muted-foreground">No raw materials set up yet — add them under Inventory.</p>
       ) : (
         <div className="flex flex-wrap gap-x-8 gap-y-2">
           {balances.map((b) => (
@@ -133,7 +134,7 @@ export function CacaoBucket() {
 /** Putting cacao in by hand, or taking some out — always with what it was for. */
 function MoveDialog({ direction, onClose }: { direction: "in" | "out"; onClose: () => void }) {
   const { cacaoBucket, rawMaterials } = useStore();
-  const cacao = cacaoMaterials(rawMaterials);
+  const cacao = runMaterials(rawMaterials);
   const choices = direction === "out" ? cacao.filter((m) => bucketBalance(cacaoBucket, m.id) > 0) : cacao;
   const [materialId, setMaterialId] = useState(choices[0]?.id ?? "");
   const material = choices.find((m) => m.id === materialId);
@@ -168,7 +169,7 @@ function MoveDialog({ direction, onClose }: { direction: "in" | "out"; onClose: 
         <div className="flex flex-col gap-3">
           {choices.length > 1 && (
             <label className={labelCls}>
-              Cacao
+              What
               <select value={materialId} onChange={(e) => setMaterialId(e.target.value)} className={fieldCls}>
                 {choices.map((m) => (
                   <option key={m.id} value={m.id}>

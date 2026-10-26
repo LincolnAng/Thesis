@@ -293,7 +293,7 @@ function Details({
 }
 
 /** One action in a row: an icon with its name under it. Shaded out, not hidden, when it doesn't apply. */
-function ActionIcon({
+export function ActionIcon({
   icon: Icon,
   label,
   title,

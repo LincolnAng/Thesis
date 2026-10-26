@@ -9,7 +9,9 @@ import type { Entry, Product, RawMaterialStock } from "@/lib/store/types";
  *
  *   - The recipe is stored a batch at a time; a product with no batch size counts its recipe
  *     as one unit (lib/costing/per-unit).
- *   - Packaging picked in the Add form replaces the recipe's packaging for that batch.
+ *   - Packaging picked in the Add form replaces the recipe's packaging for that batch. Any other
+ *     material named in that list draws exactly what it says (a production run names its raw
+ *     material with 0: the run's own stock-out already took it).
  *   - Tingi repacked into jars is product that was already made: it draws no ingredients, only
  *     the packaging it went into.
  *   - A batch made in a production run draws no raw cacao: the run's roast already took what
@@ -24,8 +26,9 @@ export function drawOf(entry: Batch, product: Product, material: Pick<RawMateria
   const qty = entry.quantity ?? 0;
   if (qty <= 0) return 0;
   const picked = Array.isArray(entry.packagingUsed) ? entry.packagingUsed : null;
-  if (picked && material.kind === "packaging") {
-    return picked.filter((p) => p.materialId === material.id).reduce((t, p) => t + Math.max(0, p.qty), 0);
+  const named = picked?.filter((p) => p.materialId === material.id) ?? [];
+  if (picked && (material.kind === "packaging" || named.length > 0)) {
+    return named.reduce((t, p) => t + Math.max(0, p.qty), 0);
   }
   if (entry.fromTingi) return 0;
   if (entry.runId && isRawCacao(material.name)) return 0;

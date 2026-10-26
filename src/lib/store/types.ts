@@ -157,7 +157,9 @@ export interface Entry {
   lotId?: string | null;
   /** "YYYY-MM-DD" a batch is good until, when set at the time — otherwise made + shelf life. */
   expiresOn?: string | null;
-  /** The packaging a batch actually used, taken off its stock in place of the recipe's. */
+  /** The packaging a batch actually used, taken off its stock in place of the recipe's. Can also
+   *  name another material with what it really drew — 0 for the raw material a production run's
+   *  roast already took off the shelf. */
   packagingUsed?: { materialId: string; qty: number }[] | null;
   /** Repacked from the tingi bucket: already-made product, so it draws no ingredients. */
   fromTingi?: boolean | null;
@@ -557,15 +559,17 @@ export interface TingiMove {
  */
 export interface ProductionRun {
   id: string;
+  /** What the batch is called — "Tablea for Ayala bazaar". Empty on runs logged before names. */
+  name: string;
   /** "YYYY-MM-DD" */
   date: string;
   lotId: string;
-  /** The raw cacao material roasted. */
+  /** The raw material put in — usually cacao beans. */
   materialId: string;
   unit: string;
-  /** Raw cacao fed into the roaster. 0 when nothing was roasted (cacao from the bucket only). */
+  /** Raw material put in (cacao fed into the roaster). 0 when it all came from the bucket. */
   rawQty: number;
-  /** Usable cacao that came out of the roast. */
+  /** What was usable from it (usable cacao out of the roast). */
   usableQty: number;
   /** Usable cacao taken from the leftover bucket for this run. */
   fromBucketQty: number;

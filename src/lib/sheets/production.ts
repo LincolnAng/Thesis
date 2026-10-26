@@ -5,7 +5,7 @@ import type { CacaoMove, ProductionRun } from "@/lib/store/types";
 export const productionRunsCollection = createSheetCollection<ProductionRun>({
   sheetName: "Events & Stock",
   section: "Production run",
-  header: ["id", "date", "lotId", "materialId", "unit", "rawQty", "usableQty", "fromBucketQty", "intoProductsQty", "leftoverQty", "made", "notes", "loggedByName", "createdAt", "deletedAt"],
+  header: ["id", "date", "lotId", "materialId", "unit", "rawQty", "usableQty", "fromBucketQty", "intoProductsQty", "leftoverQty", "made", "notes", "loggedByName", "createdAt", "deletedAt", "name"],
   idColumn: "id",
   deletedColumn: "deletedAt",
   toRow: (r) => [
@@ -24,11 +24,14 @@ export const productionRunsCollection = createSheetCollection<ProductionRun>({
     r.loggedByName ?? "",
     r.createdAt,
     "",
+    r.name,
   ],
-  fromRow: ([id, date, lotId, materialId, unit, rawQty, usableQty, fromBucketQty, intoProductsQty, leftoverQty, made, notes, loggedByName, createdAt]) =>
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  fromRow: ([id, date, lotId, materialId, unit, rawQty, usableQty, fromBucketQty, intoProductsQty, leftoverQty, made, notes, loggedByName, createdAt, _deletedAt, name]) =>
     id
       ? {
           id,
+          name: name ?? "",
           date: date ?? "",
           lotId: lotId ?? "",
           materialId: materialId ?? "",

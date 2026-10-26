@@ -1619,6 +1619,20 @@ export function deleteProductionRun(id: string) {
   void mirrorOp("productionRuns", "delete", { id });
 }
 
+/**
+ * Changes a run: the old one is taken back whole (its stock-out, batches and bucket moves) and
+ * the new one saved in its place, so nothing it moved is left half-changed.
+ */
+export function replaceProductionRun(
+  id: string,
+  run: Omit<ProductionRun, "id" | "createdAt" | "loggedByName">,
+  entries: (Omit<Entry, "id" | "runId">)[],
+  moves: Omit<CacaoMove, "id" | "createdAt" | "loggedByName" | "runId">[],
+): ProductionRun {
+  deleteProductionRun(id);
+  return addProductionRun(run, entries, moves);
+}
+
 /** Usable cacao into or out of the leftover bucket. */
 export function addCacaoMove(input: Omit<CacaoMove, "id" | "createdAt" | "loggedByName">): CacaoMove {
   const m: CacaoMove = { ...input, id: genId("cacao"), loggedByName: currentUser()?.name ?? null, createdAt: new Date().toISOString() };

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bucketBalance, cacaoMaterials, cacaoPerUnit, packagingUsed, runTotals } from "./runs.ts";
+import { bucketBalance, cacaoMaterials, cacaoPerUnit, packagingUsed, runMaterials, runTotals } from "./runs.ts";
 import { drawOf } from "./batch-draws.ts";
 import { consumedQty } from "../summary/ingredient-cost.ts";
 
@@ -66,6 +66,16 @@ test("a batch in a run draws no raw cacao — the roast already took it — but 
   assert.ok(Math.abs(drawOf(plain, tablea, beans, 0.8) - 5) < 1e-9);
 });
 
+test("a material named in a batch's list draws exactly that — 0 for a run's raw material", () => {
+  const batch = entry({ type: "INVENTORY_IN", sku: "Tablea", quantity: 40, runId: "run1", packagingUsed: [{ materialId: "sugar", qty: 0 }, { materialId: "jar", qty: 40 }] });
+  assert.equal(drawOf(batch, tablea, sugar, 0.7), 0);
+  assert.equal(drawOf(batch, tablea, jar, 0.7), 40);
+});
+
+test("a run can start from any ingredient, raw cacao first", () => {
+  assert.deepEqual(runMaterials([sugar, jar, beans]).map((m) => m.id), ["beans", "sugar"]);
+});
+
 test("the roast counts as raw cacao consumed, once", () => {
   const roast = entry({ type: "INVENTORY_OUT", category: "material_use", sku: "Cacao beans", quantity: 10, unit: "kg", runId: "run1" });
   const batch = entry({ type: "INVENTORY_IN", sku: "Tablea", quantity: 40, runId: "run1" });
@@ -75,8 +85,8 @@ test("the roast counts as raw cacao consumed, once", () => {
 
 test("run totals add up the roast, the yield, the products and what was left", () => {
   const runs = [
-    { id: "run1", date: "2026-10-05", lotId: "L1", materialId: "beans", unit: "kg", rawQty: 10, usableQty: 7, fromBucketQty: 0, intoProductsQty: 6.6, leftoverQty: 0.4, made: "", notes: "", createdAt: "a" },
-    { id: "run2", date: "2026-10-09", lotId: "L2", materialId: "beans", unit: "kg", rawQty: 0, usableQty: 0, fromBucketQty: 0.4, intoProductsQty: 0.4, leftoverQty: 0, made: "", notes: "", createdAt: "b" },
+    { id: "run1", name: "", date: "2026-10-05", lotId: "L1", materialId: "beans", unit: "kg", rawQty: 10, usableQty: 7, fromBucketQty: 0, intoProductsQty: 6.6, leftoverQty: 0.4, made: "", notes: "", createdAt: "a" },
+    { id: "run2", name: "", date: "2026-10-09", lotId: "L2", materialId: "beans", unit: "kg", rawQty: 0, usableQty: 0, fromBucketQty: 0.4, intoProductsQty: 0.4, leftoverQty: 0, made: "", notes: "", createdAt: "b" },
   ];
   const entries = [
     entry({ type: "INVENTORY_IN", sku: "Tablea", quantity: 66, unit: "jars", runId: "run1" }),
