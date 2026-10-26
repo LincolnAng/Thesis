@@ -12,11 +12,11 @@ import { materialOptions, productOptions } from "@/lib/summary/search-options";
 import { shelfLifeDays } from "@/lib/summary/business-config";
 import { branchesOf, mainBranch } from "@/lib/inventory/branches";
 import { unitsPerBatch } from "@/lib/costing/per-unit";
+import { TINGI } from "@/lib/production/runs";
 import type { Product, RawMaterialStock } from "@/lib/store/types";
 
 export const fieldCls = "h-11 w-full rounded-lg border border-input bg-transparent px-3 text-[15px] outline-none focus:border-cacao";
 export const labelCls = "flex flex-col gap-1 text-[13px] font-semibold";
-export const TINGI_UNITS = ["g", "kg", "pcs", "mL", "L"];
 
 const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
@@ -76,7 +76,7 @@ export const packagingUsed = (lines: PackagingLine[]) => lines.filter((l) => num
 
 /**
  * Add: a batch that was just made. No price — that's set in Costing. It says how many finished
- * units came out, how much was left loose (tingi, into that product's bucket), the lot number
+ * units came out, how many tablea pellets were left loose (into tingi), the lot number
  * and expiry on the label, and the packaging it went into, which comes off the packaging stock.
  * The ingredients come off by the recipe, as for any batch.
  */
@@ -88,7 +88,6 @@ export function AddBatchDialog({ onClose }: { onClose: () => void }) {
   const unit = product?.unit || "jars";
   const [finished, setFinished] = useState("");
   const [tingi, setTingi] = useState("");
-  const [tingiUnit, setTingiUnit] = useState("g");
   const madeToday = entries.filter((e) => e.type === "INVENTORY_IN" && e.timestamp.slice(0, 10) === isoDay(today)).length;
   const [lotId, setLotId] = useState(`LOT-${isoDay(today).replace(/-/g, "")}-${madeToday + 1}`);
   const defaultExpiry = (id: string) => isoDay(addDays(today, shelfLifeDays(businessSettings, id)));
@@ -128,7 +127,7 @@ export function AddBatchDialog({ onClose }: { onClose: () => void }) {
       });
     }
     if (loose > 0) {
-      addTingiMove({ productId: product.id, direction: "in", qty: loose, unit: tingiUnit, date, lotId: lotId.trim(), usedForProductId: null, note: "" });
+      addTingiMove({ productId: TINGI.id, direction: "in", qty: loose, unit: TINGI.unit, date, lotId: lotId.trim(), usedForProductId: null, note: "" });
     }
     onClose();
   }
@@ -154,15 +153,8 @@ export function AddBatchDialog({ onClose }: { onClose: () => void }) {
                 <input autoFocus inputMode="decimal" value={finished} onChange={(e) => setFinished(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="e.g. 40" className={fieldCls} />
               </label>
               <label className={labelCls}>
-                Tingi (loose)
-                <span className="flex gap-1.5">
-                  <input inputMode="decimal" value={tingi} onChange={(e) => setTingi(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" className={`${fieldCls} min-w-0`} />
-                  <select value={tingiUnit} onChange={(e) => setTingiUnit(e.target.value)} className={`${fieldCls} w-[72px] px-2`} aria-label="Tingi unit">
-                    {[...new Set([...TINGI_UNITS, unit])].map((u) => (
-                      <option key={u}>{u}</option>
-                    ))}
-                  </select>
-                </span>
+                Tingi ({TINGI.unit} of pellets)
+                <input inputMode="decimal" value={tingi} onChange={(e) => setTingi(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" className={fieldCls} />
               </label>
               <label className={labelCls}>
                 Lot ID

@@ -46,11 +46,11 @@ test("cacao per unit comes from the recipe, per unit not per batch", () => {
   assert.equal(cacaoPerUnit(tablea, "sugar"), 0.05);
 });
 
-test("tingi is what went in minus what came out, per product and unit", () => {
+test("tingi is the kilos of pellets that went in minus what came out", () => {
   const move = (id: string, productId: string, direction: "in" | "out", qty: number, unit = "kg") => ({ id, productId, direction, qty, unit, date: "2026-10-01", lotId: "", usedForProductId: null, note: "", createdAt: "" });
   const moves = [move("a", "tablea", "in", 0.4), move("b", "tablea", "in", 0.3), move("c", "tablea", "out", 0.5), move("d", "tablea", "in", 9, "g"), move("e", "other", "in", 9)];
-  assert.equal(tingiBalance(moves, "tablea", "kg"), 0.2);
-  assert.equal(tingiBalance(moves, "tablea", "g"), 9);
+  // 0.4 + 0.3 − 0.5 + 9 g (0.009 kg) + 9 kg filed under another product — all pellets.
+  assert.equal(tingiBalance(moves), 9.209);
 });
 
 test("a batch in a run draws no raw cacao — the roast already took it — but still its other ingredients", () => {

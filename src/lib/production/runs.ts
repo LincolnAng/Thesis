@@ -2,6 +2,7 @@ import { isRawCacao } from "@/lib/summary/cacao";
 import { unitsPerBatch } from "@/lib/costing/per-unit";
 import { drawOf } from "@/lib/production/batch-draws";
 import { findProduct } from "@/lib/summary/product-match";
+import { convertQuantity } from "@/lib/units";
 import type { Entry, Product, ProductionRun, RawMaterialStock, TingiMove } from "@/lib/store/types";
 
 /**
@@ -33,9 +34,16 @@ export function cacaoPerUnit(product: Product, materialId: string): number {
   return batch / unitsPerBatch(product);
 }
 
-/** What's in one product's tingi, in one unit. */
-export function tingiBalance(moves: TingiMove[], productId: string, unit: string): number {
-  return round(moves.filter((m) => m.productId === productId && m.unit === unit).reduce((t, m) => t + (m.direction === "in" ? m.qty : -m.qty), 0));
+/**
+ * Tingi is tablea pellets and nothing else: what a run doesn't pack, kept loose until it's
+ * repacked into finished products. One store, in kilos. New moves carry this id; older ones
+ * filed under a product still count, since tingi was only ever pellets.
+ */
+export const TINGI = { id: "tablea-pellets", name: "Tablea pellets", unit: "kg" } as const;
+
+/** Kilos of tablea pellets in tingi: everything put in, less everything taken out. */
+export function tingiBalance(moves: TingiMove[]): number {
+  return round(moves.reduce((t, m) => t + (convertQuantity(m.qty, m.unit, TINGI.unit) ?? 0) * (m.direction === "in" ? 1 : -1), 0));
 }
 
 /** Newest first: by date, then by when it was logged. */
