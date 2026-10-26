@@ -14,7 +14,7 @@ import { Segmented } from "@/components/ui/kit";
 import { getSnapshot, restoreLocalCollections, setApiKeyMissing } from "@/lib/store/store";
 import type { BotLanguage } from "@/lib/sheets/settings";
 import { YourNameCard } from "@/components/settings/owner-name-card";
-import { ActivityCard } from "@/components/settings/people-card";
+import { ActivityCard, PeopleCard } from "@/components/settings/people-card";
 import { SpreadsheetButton } from "@/components/settings/spreadsheet-button";
 import { UnitsCard } from "@/components/settings/units-card";
 import { cn } from "@/lib/utils";
@@ -70,7 +70,7 @@ export default function SettingsPageInner() {
   const [backupMessage, setBackupMessage] = useState<string | null>(null);
   const [keyTest, setKeyTest] = useState<{ ok: boolean; message: string } | null>(null);
   const [testing, setTesting] = useState(false);
-  const [tab, setTab] = useState<"general" | "activity" | "ai" | "sheet">("general");
+  const [tab, setTab] = useState<"general" | "people" | "activity" | "ai" | "sheet">("general");
   const [textSize, setTextSize] = useTextSize();
 
   // next-themes resolves the real theme synchronously on the client's first render
@@ -290,6 +290,8 @@ export default function SettingsPageInner() {
         <div className="flex w-full max-w-4xl flex-col gap-4">
           <YourNameCard />
           {lookCards}
+          {/* The list of profiles; an employee can change only their own PIN here. */}
+          <PeopleCard />
         </div>
       </Page>
     );
@@ -306,6 +308,7 @@ export default function SettingsPageInner() {
         <PageTabs
           tabs={[
             ["general", "General"],
+            ["people", "People"],
             ["activity", "History"],
             ["ai", "AI assistant"],
             ["sheet", "Google Sheet"],
@@ -322,6 +325,12 @@ export default function SettingsPageInner() {
       {lookCards}
 
       <UnitsCard />
+        </div>
+      )}
+
+      {tab === "people" && (
+        <div className="flex flex-col gap-4">
+          <PeopleCard />
         </div>
       )}
 
