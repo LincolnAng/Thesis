@@ -6,43 +6,26 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useStore } from "@/lib/store/use-store";
 import { addEntry, addTingiMove } from "@/lib/store/store";
 import { blankEntryDraft } from "@/lib/store/blank-draft";
-import { familiesOf, fullName, sizeName } from "@/lib/summary/product-sizes";
+import { fullName } from "@/lib/summary/product-sizes";
+import { SearchSelect } from "@/components/ui/search-select";
+import { materialOptions, productOptions } from "@/lib/summary/search-options";
 import { shelfLifeDays } from "@/lib/summary/business-config";
 import { branchesOf, mainBranch } from "@/lib/inventory/branches";
 import { unitsPerBatch } from "@/lib/costing/per-unit";
+import { TINGI } from "@/lib/production/runs";
 import type { Product, RawMaterialStock } from "@/lib/store/types";
 
 export const fieldCls = "h-11 w-full rounded-lg border border-input bg-transparent px-3 text-[15px] outline-none focus:border-cacao";
 export const labelCls = "flex flex-col gap-1 text-[13px] font-semibold";
-export const TINGI_UNITS = ["g", "kg", "pcs", "mL", "L"];
 
 const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 const num = (s: string) => Number(s) || 0;
 
-/** A product and its sizes, one dropdown. */
-export function ProductPicker({ value, onChange, className = fieldCls }: { value: string; onChange: (id: string) => void; className?: string }) {
+/** A product and its sizes, one searchable dropdown — every product as Inventory lists it. */
+export function ProductPicker({ value, onChange, placeholder = "Choose a product" }: { value: string; onChange: (id: string) => void; placeholder?: string }) {
   const { products } = useStore();
-  const families = familiesOf(products).sort((a, b) => a.head.name.localeCompare(b.head.name));
-  return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} className={className}>
-      {families.map(({ head, all }) =>
-        all.length === 1 ? (
-          <option key={head.id} value={head.id}>
-            {fullName(head, products)}
-          </option>
-        ) : (
-          <optgroup key={head.id} label={head.name}>
-            {all.map((p) => (
-              <option key={p.id} value={p.id}>
-                {head.name} · {sizeName(p)}
-              </option>
-            ))}
-          </optgroup>
-        ),
-      )}
-    </select>
-  );
+  return <SearchSelect value={value} onChange={onChange} options={productOptions(products)} placeholder={placeholder} ariaLabel="Product" />;
 }
 
 export interface PackagingLine {
@@ -68,13 +51,9 @@ export function PackagingEditor({ lines, onChange }: { lines: PackagingLine[]; o
     <div className="flex flex-col gap-1.5">
       {lines.map((l, i) => (
         <div key={i} className="flex items-center gap-2">
-          <select value={l.materialId} onChange={(e) => set(i, { materialId: e.target.value })} className={`${fieldCls} min-w-0 flex-1`}>
-            {packaging.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
+          <div className="min-w-0 flex-1">
+            <SearchSelect value={l.materialId} onChange={(id) => set(i, { materialId: id })} options={materialOptions(packaging)} ariaLabel="Packaging" />
+          </div>
           <input inputMode="decimal" value={l.qty} onChange={(e) => set(i, { qty: e.target.value.replace(/[^0-9.]/g, "") })} className={`${fieldCls} w-20`} aria-label="How many" />
           <span className="w-12 truncate text-[12.5px] text-muted-foreground">{packaging.find((m) => m.id === l.materialId)?.unit}</span>
           <button type="button" aria-label="Remove" onClick={() => onChange(lines.filter((_, j) => j !== i))} className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary">
@@ -97,7 +76,7 @@ export const packagingUsed = (lines: PackagingLine[]) => lines.filter((l) => num
 
 /**
  * Add: a batch that was just made. No price — that's set in Costing. It says how many finished
- * units came out, how much was left loose (tingi, into that product's bucket), the lot number
+ * units came out, how many tablea pellets were left loose (into tingi), the lot number
  * and expiry on the label, and the packaging it went into, which comes off the packaging stock.
  * The ingredients come off by the recipe, as for any batch.
  */
@@ -109,7 +88,6 @@ export function AddBatchDialog({ onClose }: { onClose: () => void }) {
   const unit = product?.unit || "jars";
   const [finished, setFinished] = useState("");
   const [tingi, setTingi] = useState("");
-  const [tingiUnit, setTingiUnit] = useState("g");
   const madeToday = entries.filter((e) => e.type === "INVENTORY_IN" && e.timestamp.slice(0, 10) === isoDay(today)).length;
   const [lotId, setLotId] = useState(`LOT-${isoDay(today).replace(/-/g, "")}-${madeToday + 1}`);
   const defaultExpiry = (id: string) => isoDay(addDays(today, shelfLifeDays(businessSettings, id)));
@@ -149,7 +127,7 @@ export function AddBatchDialog({ onClose }: { onClose: () => void }) {
       });
     }
     if (loose > 0) {
-      addTingiMove({ productId: product.id, direction: "in", qty: loose, unit: tingiUnit, date, lotId: lotId.trim(), usedForProductId: null, note: "" });
+      addTingiMove({ productId: TINGI.id, direction: "in", qty: loose, unit: TINGI.unit, date, lotId: lotId.trim(), usedForProductId: null, note: "" });
     }
     onClose();
   }
@@ -165,25 +143,18 @@ export function AddBatchDialog({ onClose }: { onClose: () => void }) {
           <p className="text-sm text-muted-foreground">Add a product first, in Costing.</p>
         ) : (
           <div className="flex flex-col gap-3">
-            <label className={labelCls}>
+            <div className={labelCls}>
               Product
               <ProductPicker value={productId} onChange={pickProduct} />
-            </label>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <label className={labelCls}>
                 Finished ({unit})
                 <input autoFocus inputMode="decimal" value={finished} onChange={(e) => setFinished(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="e.g. 40" className={fieldCls} />
               </label>
               <label className={labelCls}>
-                Tingi (loose)
-                <span className="flex gap-1.5">
-                  <input inputMode="decimal" value={tingi} onChange={(e) => setTingi(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" className={`${fieldCls} min-w-0`} />
-                  <select value={tingiUnit} onChange={(e) => setTingiUnit(e.target.value)} className={`${fieldCls} w-[72px] px-2`} aria-label="Tingi unit">
-                    {[...new Set([...TINGI_UNITS, unit])].map((u) => (
-                      <option key={u}>{u}</option>
-                    ))}
-                  </select>
-                </span>
+                Tingi ({TINGI.unit} of pellets)
+                <input inputMode="decimal" value={tingi} onChange={(e) => setTingi(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" className={fieldCls} />
               </label>
               <label className={labelCls}>
                 Lot ID

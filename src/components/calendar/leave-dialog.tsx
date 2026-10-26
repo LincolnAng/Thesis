@@ -1,5 +1,6 @@
 "use client";
 
+import { SearchSelect } from "@/components/ui/search-select";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useStore } from "@/lib/store/use-store";
@@ -74,16 +75,10 @@ export function LeaveDialog({ existing, defaultDate, onClose }: { existing?: Lea
           <p className="text-[14px] text-muted-foreground">Add staff first, under Salaries → Staff.</p>
         ) : (
           <div className="grid grid-cols-2 gap-3">
-            <label className={`${label} col-span-2`}>
+            <div className={`${label} col-span-2`}>
               Who
-              <select value={staffId} onChange={(e) => setStaffId(e.target.value)} className={field}>
-                {people.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+              <SearchSelect value={staffId} onChange={setStaffId} options={people.map((s) => ({ value: s.id, label: s.name }))} placeholder="Choose someone" ariaLabel="Who" />
+            </div>
             <label className={label}>
               First day
               <input

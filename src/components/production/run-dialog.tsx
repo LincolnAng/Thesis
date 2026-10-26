@@ -1,20 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { QuantityStepper } from "@/components/ui/quantity-stepper";
 import { useStore } from "@/lib/store/use-store";
 import { addProductionRun, replaceProductionRun } from "@/lib/store/store";
 import { blankEntryDraft } from "@/lib/store/blank-draft";
-import { familiesOf, fullName, sizeName } from "@/lib/summary/product-sizes";
+import { fullName } from "@/lib/summary/product-sizes";
 import { findProduct } from "@/lib/summary/product-match";
 import { shelfLifeDays } from "@/lib/summary/business-config";
 import { MATERIAL_USE } from "@/lib/transactions/waste";
-import { batchesOf, cacaoMaterials, cacaoPerUnit, tingiBalance } from "@/lib/production/runs";
-import { ProductSearch } from "@/components/production/product-search";
-import { PackagingEditor, fieldCls, labelCls, packagingUsed, recipePackaging, type PackagingLine } from "@/components/production/add-batch-dialog";
-import type { Entry, Product, ProductionRun } from "@/lib/store/types";
+import { TINGI, batchesOf, cacaoMaterials, cacaoPerUnit, tingiBalance } from "@/lib/production/runs";
+import { FinishedProducts, linePackaging, madeLines, type Made } from "@/components/production/finished-products";
+import { SearchSelect } from "@/components/ui/search-select";
+import { materialOptions } from "@/lib/summary/search-options";
+import { fieldCls, labelCls, packagingUsed } from "@/components/production/add-batch-dialog";
+import type { Entry, ProductionRun } from "@/lib/store/types";
 
 const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const num = (s: string) => Number(s) || 0;
@@ -22,12 +22,6 @@ const round = (n: number) => Math.round(n * 1000) / 1000;
 const decimal = (v: string) => v.replace(/[^0-9.]/g, "");
 const text = (n: number) => (n ? String(n) : "");
 
-/** One finished product made in the run. */
-interface Made {
-  qty: number;
-  /** Null until changed by hand: then it follows the recipe for how many were made. */
-  packaging: PackagingLine[] | null;
-}
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -35,55 +29,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <h3 className="text-[12px] font-bold uppercase tracking-wide text-muted-foreground">{title}</h3>
       {children}
     </section>
-  );
-}
-
-/**
- * Every product as Inventory lists it — each family with its sizes — in one dropdown, each with
- * how many were made. Anything above zero is in the run.
- */
-function ProductsDropdown({ made, onChange }: { made: Record<string, Made>; onChange: (id: string, qty: number) => void }) {
-  const { products } = useStore();
-  const [open, setOpen] = useState(false);
-  const families = familiesOf(products).sort((a, b) => a.head.name.localeCompare(b.head.name));
-  const chosen = products.filter((p) => (made[p.id]?.qty ?? 0) > 0);
-  const row = (p: Product, label: string) => (
-    <div key={p.id} className="flex items-center gap-2 px-3 py-1.5">
-      <span className={`min-w-0 flex-1 truncate text-[14px] ${(made[p.id]?.qty ?? 0) > 0 ? "font-semibold" : ""}`}>{label}</span>
-      <QuantityStepper value={made[p.id]?.qty ?? 0} onChange={(v) => onChange(p.id, Math.max(0, v ?? 0))} className="w-[118px]" />
-      <span className="w-12 truncate text-[12px] text-muted-foreground">{p.unit || "jars"}</span>
-    </div>
-  );
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} className={`${fieldCls} flex items-center justify-between gap-2 text-left`}>
-        <span className={`truncate ${chosen.length ? "" : "text-muted-foreground"}`}>
-          {chosen.length ? chosen.map((p) => `${fullName(p, products)} × ${made[p.id].qty}`).join(", ") : "Choose products and how many"}
-        </span>
-        <ChevronDown className={`h-4 w-4 shrink-0 transition ${open ? "rotate-180" : ""}`} />
-      </button>
-      {open && (
-        <div className="max-h-80 overflow-y-auto rounded-lg border border-line/20 bg-card py-1 shadow-sm">
-          {families.length === 0 && <p className="px-3 py-2 text-[13px] text-muted-foreground">No products in Inventory yet.</p>}
-          {families.map(({ head, all }) =>
-            all.length === 1 ? (
-              row(head, fullName(head, products))
-            ) : (
-              <div key={head.id} className="border-b border-line/10 py-1 last:border-0">
-                <div className="px-3 pt-1 text-[11.5px] font-bold uppercase tracking-wide text-muted-foreground">{head.name}</div>
-                {all.map((p) => row(p, sizeName(p)))}
-              </div>
-            ),
-          )}
-          <div className="sticky bottom-0 flex justify-end border-t border-line/10 bg-card px-3 pt-1.5">
-            <button type="button" onClick={() => setOpen(false)} className="min-h-9 rounded-[10px] bg-cacao px-4 text-[13px] font-semibold text-ivory">
-              Done
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -114,10 +59,6 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
   // Null until typed: then it follows what was usable, which is usually all of it.
   const [pellets, setPellets] = useState<string | null>(existing ? text(existing.pelletsQty) : null);
   const [fromBucket, setFromBucket] = useState(text(existing?.fromBucketQty ?? 0));
-  const ownMoves = existing ? tingi.filter((m) => m.runId === existing.id) : [];
-  // Whose tingi the pellets came from, and whose the leftover goes into.
-  const [fromTingiId, setFromTingiId] = useState(ownMoves.find((m) => m.direction === "out")?.productId ?? "");
-  const [tingiId, setTingiId] = useState<string | null>(ownMoves.find((m) => m.direction === "in")?.productId ?? null);
   const [made, setMade] = useState<Record<string, Made>>(() => {
     const out: Record<string, Made> = {};
     for (const b of existing ? batchesOf(entries, new Set([existing.id])) : []) {
@@ -134,29 +75,14 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
 
   // When changing a run, what it took from and put into tingi goes back first.
   const otherMoves = existing ? tingi.filter((m) => m.runId !== existing.id) : tingi;
-  // Tingi in the same unit as the pellets (kg), with some in it.
-  const tingiChoices = products.map((p) => ({ p, qty: tingiBalance(otherMoves, p.id, unit) })).filter((c) => c.qty > 0);
-  const fromChoice = tingiChoices.find((c) => c.p.id === fromTingiId) ?? tingiChoices[0];
-  const inBucket = fromChoice?.qty ?? 0;
-  // In Inventory's order, so the list below reads like the dropdown.
-  const lines = familiesOf(products)
-    .sort((a, b) => a.head.name.localeCompare(b.head.name))
-    .flatMap((f) => f.all)
-    .filter((p) => (made[p.id]?.qty ?? 0) > 0)
-    .map((p) => ({ product: p, ...made[p.id] }));
-  const shownPackaging = (l: (typeof lines)[number]) => l.packaging ?? recipePackaging(l.product, l.qty, rawMaterials);
+  const inBucket = tingiBalance(otherMoves);
+  const lines = madeLines(made, products);
   const byRecipe = round(lines.reduce((t, l) => (material ? t + cacaoPerUnit(l.product, material.id) * l.qty : t), 0));
   const pelletsQty = pellets === null ? num(usable) : num(pellets);
   const available = round(pelletsQty + num(fromBucket));
   const intoQty = into === null ? Math.min(byRecipe, available) : num(into);
   const leftover = round(available - intoQty);
-  // Until picked, the leftover goes into the tingi of the first product made.
-  const leftoverTo = tingiId ?? lines[0]?.product.id ?? "";
   const yieldPct = num(raw) > 0 && num(usable) > 0 ? Math.round((num(usable) / num(raw)) * 100) : null;
-
-  function setQty(id: string, qty: number) {
-    setMade((m) => ({ ...m, [id]: { qty, packaging: m[id]?.packaging ?? null } }));
-  }
 
   function save() {
     if (!name.trim()) return setError("Give the batch a name.");
@@ -170,7 +96,6 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
     if (lines.length > 0 && byRecipe > 0 && available <= 0) {
       return setError("How many pellets went in? Fill in the cacao, or take some from tingi.");
     }
-    if (leftover > 0 && !products.some((p) => p.id === leftoverTo)) return setError("Which product's tingi do the leftover pellets go into?");
     if (!lotId.trim()) return setError("Give it a lot number.");
     if (num(raw) > 0 && !material) return setError("Add your cacao under Inventory first.");
 
@@ -205,15 +130,15 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
         lotId: lot,
         expiresOn: isoDay(expires),
         // The raw material is named with 0: this run's own stock-out already took it.
-        packagingUsed: [...packagingUsed(shownPackaging(l)), ...(usesMaterial ? [{ materialId: material!.id, qty: 0 }] : [])],
+        packagingUsed: [...packagingUsed(linePackaging(l, rawMaterials)), ...(usesMaterial ? [{ materialId: material!.id, qty: 0 }] : [])],
       });
     }
     const moves = [];
-    if (num(fromBucket) > 0 && fromChoice) {
-      moves.push({ productId: fromChoice.p.id, direction: "out" as const, qty: num(fromBucket), unit, date, lotId: lot, usedForProductId: null, note: `Used in ${batchName} · lot ${lot}` });
+    if (num(fromBucket) > 0) {
+      moves.push({ productId: TINGI.id, direction: "out" as const, qty: num(fromBucket), unit, date, lotId: lot, usedForProductId: null, note: `Used in ${batchName} · lot ${lot}` });
     }
     if (leftover > 0) {
-      moves.push({ productId: leftoverTo, direction: "in" as const, qty: leftover, unit, date, lotId: lot, usedForProductId: null, note: `Left over from ${batchName} · lot ${lot}` });
+      moves.push({ productId: TINGI.id, direction: "in" as const, qty: leftover, unit, date, lotId: lot, usedForProductId: null, note: `Left over from ${batchName} · lot ${lot}` });
     }
     const run = {
       name: batchName,
@@ -265,16 +190,10 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
               <div className={materials.length > 1 ? "grid grid-cols-[1fr_7rem] gap-2" : ""}>
                 {/* Only when there's more than one kind of cacao to say which. */}
                 {materials.length > 1 && (
-                  <label className={labelCls}>
+                  <div className={labelCls}>
                     Which cacao
-                    <select value={materialId} onChange={(e) => setMaterialId(e.target.value)} className={fieldCls}>
-                      {materials.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                    <SearchSelect value={materialId} onChange={setMaterialId} options={materialOptions(materials)} ariaLabel="Which cacao" />
+                  </div>
                 )}
                 <label className={labelCls}>
                   Cacao ({unit})
@@ -309,40 +228,16 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
                 {round(num(usable) - pelletsQty)} {unit} of the usable cacao didn&apos;t become pellets
               </p>
             )}
-            {tingiChoices.length > 0 && (
-              <div className="grid grid-cols-[1fr_7rem] gap-2">
-                <label className={labelCls}>
-                  Also from tingi
-                  <select value={fromChoice?.p.id} onChange={(e) => setFromTingiId(e.target.value)} className={fieldCls}>
-                    {tingiChoices.map((c) => (
-                      <option key={c.p.id} value={c.p.id}>
-                        {fullName(c.p, products)} — {c.qty} {unit}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className={labelCls}>
-                  How much ({unit})
-                  <input inputMode="decimal" value={fromBucket} onChange={(e) => setFromBucket(decimal(e.target.value))} placeholder="0" className={fieldCls} />
-                </label>
-              </div>
+            {inBucket > 0 && (
+              <label className={labelCls}>
+                Also from tingi ({unit}) — {inBucket} in it
+                <input inputMode="decimal" value={fromBucket} onChange={(e) => setFromBucket(decimal(e.target.value))} placeholder="0" className={fieldCls} />
+              </label>
             )}
           </Section>
 
           <Section title={materials.length > 0 ? "4 · Finished products made from the pellets" : "Finished products"}>
-            <ProductsDropdown made={made} onChange={setQty} />
-            {lines.map((l) => (
-              <div key={l.product.id} className="flex flex-col gap-1.5 border-t border-line/10 pt-2.5">
-                <div className="flex items-baseline justify-between gap-2 text-[14px]">
-                  <span className="truncate font-semibold">{fullName(l.product, products)}</span>
-                  <span className="shrink-0 tabular-nums">
-                    {l.qty} <span className="text-muted-foreground">{l.product.unit || "jars"}</span>
-                  </span>
-                </div>
-                <div className="text-[12px] font-semibold text-muted-foreground">Packaging used</div>
-                <PackagingEditor lines={shownPackaging(l)} onChange={(pk) => setMade((m) => ({ ...m, [l.product.id]: { ...m[l.product.id], packaging: pk } }))} />
-              </div>
-            ))}
+            <FinishedProducts made={made} setMade={setMade} />
           </Section>
 
           <Section title="Tingi">
@@ -362,12 +257,6 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
               {available > 0 ? `${available} ${unit} of pellets to work with` : "No pellets yet"}
               {byRecipe > 0 ? ` · the recipes call for ${byRecipe} ${unit}` : ""}
             </p>
-            {leftover > 0 && (
-              <div className={labelCls}>
-                Into the tingi of
-                <ProductSearch value={leftoverTo} onChange={setTingiId} />
-              </div>
-            )}
           </Section>
 
           <label className={labelCls}>

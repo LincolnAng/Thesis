@@ -1,5 +1,6 @@
 "use client";
 
+import { SearchSelect } from "@/components/ui/search-select";
 import { PAYMENT_METHODS, namesProvider } from "@/lib/format";
 import type { PaymentMethod } from "@/lib/store/types";
 import { EMPLOYEE_ENTRY_TYPES, PAYROLL_CATEGORIES } from "@/lib/auth/permissions";
@@ -301,27 +302,21 @@ export function QuickEditForm({
           <Label className="text-xs text-muted-foreground">
             Product / item{productRequired && <span className="text-destructive"> *</span>}
           </Label>
-          <select
-            className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
-            aria-invalid={missingProduct}
+          <SearchSelect
+            className={`h-9 rounded-md px-2 text-sm ${missingProduct ? "border-destructive" : ""}`}
+            ariaLabel="Product or item"
+            placeholder="Select…"
             value={draft.sku ?? ""}
-            onChange={(e) => {
-              if (e.target.value === "__new__") {
+            onChange={(v) => {
+              if (v === "__new__") {
                 setAddingProduct(true);
                 return;
               }
-              const name = e.target.value || null;
+              const name = v || null;
               change({ sku: name, unit: unitOfItem(name) ?? draft.unit });
             }}
-          >
-            <option value="">Select…</option>
-            {skuOptions.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-            <option value="__new__">+ Add a new product…</option>
-          </select>
+            options={[...skuOptions.map((s) => ({ value: s, label: s })), { value: "__new__", label: "+ Add a new product…" }]}
+          />
         </div>
 
         {/* Both halves are always here, whether or not an item has been picked, so the form
@@ -483,18 +478,13 @@ export function QuickEditForm({
       {canTagEvent && eventOptions.length > 0 && (
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">Where did this happen?</Label>
-          <select
-            className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
+          <SearchSelect
+            className="h-9 rounded-md px-2 text-sm"
+            ariaLabel="Where did this happen"
             value={draft.eventId ?? ""}
-            onChange={(e) => set("eventId", e.target.value || null)}
-          >
-            <option value="">Normal business</option>
-            {eventOptions.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.name}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => set("eventId", v || null)}
+            options={[{ value: "", label: "Normal business" }, ...eventOptions.map((e) => ({ value: e.id, label: e.name }))]}
+          />
           {draft.eventId && (
             <p className="text-xs text-muted-foreground">
               This comes out of what that place is holding, not your main stock.

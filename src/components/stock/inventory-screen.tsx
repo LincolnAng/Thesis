@@ -1,5 +1,7 @@
 "use client";
 
+import { SearchSelect } from "@/components/ui/search-select";
+import { productOptions } from "@/lib/summary/search-options";
 import { useMemo, useRef, useState } from "react";
 import { ArrowRightLeft, Camera, Package, Plus, Settings2 } from "lucide-react";
 import { Page } from "@/components/layout/page";
@@ -281,26 +283,7 @@ export function InventoryScreen() {
 
 function ProductSelect({ value, onChange }: { value: string; onChange: (id: string) => void }) {
   const { products } = useStore();
-  const families = familiesOf(products).sort((a, b) => a.head.name.localeCompare(b.head.name));
-  return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} className="h-11 w-full rounded-lg border border-input bg-transparent px-3 text-[15px]">
-      {families.map(({ head, all }) =>
-        all.length === 1 ? (
-          <option key={head.id} value={head.id}>
-            {fullName(head, products)}
-          </option>
-        ) : (
-          <optgroup key={head.id} label={head.name}>
-            {all.map((p) => (
-              <option key={p.id} value={p.id}>
-                {head.name} · {sizeName(p)}
-              </option>
-            ))}
-          </optgroup>
-        ),
-      )}
-    </select>
-  );
+  return <SearchSelect value={value} onChange={onChange} options={productOptions(products)} placeholder="Choose a product" ariaLabel="Product" />;
 }
 
 const fieldCls = "h-11 w-full rounded-lg border border-input bg-transparent px-3 text-[15px] outline-none focus:border-cacao";
@@ -339,10 +322,10 @@ function AddStockAtBranch({ branches, defaultBranch, onClose }: { branches: Bran
           <p className="text-sm text-muted-foreground">Add a product first, in Costing.</p>
         ) : (
           <div className="flex flex-col gap-3">
-            <label className={labelCls}>
+            <div className={labelCls}>
               Product
               <ProductSelect value={productId} onChange={setProductId} />
-            </label>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <label className={labelCls}>
                 How many ({product?.unit || "jars"})
@@ -419,10 +402,10 @@ function MoveStock({ branches, byBranch, onClose }: { branches: Branch[]; byBran
           <DialogDescription>Shipped from one branch to another. The total stays the same.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
-          <label className={labelCls}>
+          <div className={labelCls}>
             Product
             <ProductSelect value={productId} onChange={setProductId} />
-          </label>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             {branchSelect(from, setFrom, "From")}
             {branchSelect(to, setTo, "To")}

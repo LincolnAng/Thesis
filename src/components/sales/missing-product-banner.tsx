@@ -1,5 +1,6 @@
 "use client";
 
+import { SearchSelect } from "@/components/ui/search-select";
 import { useState } from "react";
 import { CircleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -54,18 +55,16 @@ export function MissingProductBanner({ sales }: { sales: Entry[] }) {
                   {entry.counterparty ? ` · ${entry.counterparty}` : ""} · {formatDate(entry.timestamp)}
                 </span>
               </span>
-              <select
-                className="h-8 rounded-md border border-input bg-transparent px-2 text-sm"
-                defaultValue=""
-                onChange={(e) => assign(entry, e.target.value)}
-              >
-                <option value="">Pick a product…</option>
-                {products.map((p) => (
-                  <option key={p.id} value={p.name}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+              <div className="w-56 max-w-full">
+                <SearchSelect
+                  className="h-8 rounded-md px-2 text-sm"
+                  value=""
+                  onChange={(name) => name && assign(entry, name)}
+                  options={products.map((p) => ({ value: p.name, label: p.name }))}
+                  placeholder="Pick a product…"
+                  ariaLabel="Which product"
+                />
+              </div>
             </li>
           ))}
         </ul>

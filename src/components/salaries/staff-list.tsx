@@ -1,5 +1,6 @@
 "use client";
 
+import { SearchSelect } from "@/components/ui/search-select";
 import { useState } from "react";
 import { Pencil, Plus, UserRound } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -141,17 +142,15 @@ function StaffDialog({ member, onClose }: { member: StaffMember | null; onClose:
             Started on
             <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={field} />
           </label>
-          <label className={`${label} col-span-2`}>
+          <div className={`${label} col-span-2`}>
             Times in with the profile
-            <select value={userId} onChange={(e) => setUserId(e.target.value)} className={field}>
-              <option value="">No profile — timed in on the Admin profile</option>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name}
-                </option>
-              ))}
-            </select>
-          </label>
+            <SearchSelect
+              value={userId}
+              onChange={setUserId}
+              options={[{ value: "", label: "No profile — timed in on the Admin profile" }, ...users.map((u) => ({ value: u.id, label: u.name }))]}
+              ariaLabel="Profile"
+            />
+          </div>
           <label className="col-span-2 flex min-h-11 items-center gap-2 text-[14px]">
             <input type="checkbox" checked={pwd} onChange={(e) => setPwd(e.target.checked)} className="h-5 w-5 accent-[var(--color-cacao,#5a3a22)]" />
             Person with disability (PWD)
