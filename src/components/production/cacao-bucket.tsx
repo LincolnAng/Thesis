@@ -7,12 +7,19 @@ import { BUTTON } from "@/components/ui/kit";
 import { useStore } from "@/lib/store/use-store";
 import { addCacaoMove, deleteCacaoMove } from "@/lib/store/store";
 import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
-import { bucketBalance, newestFirst, runMaterials } from "@/lib/production/runs";
+import { PELLETS, bucketBalance, newestFirst, runMaterials } from "@/lib/production/runs";
+import type { RawMaterialStock } from "@/lib/store/types";
 import { fieldCls, labelCls } from "@/components/production/add-batch-dialog";
 
 const SHOWN = 8;
 const OUT_REASONS = ["Samples", "Tasting", "Spoiled", "Given away"];
 const IN_REASONS = ["Not logged before", "Found while cleaning up"];
+
+/** What the bucket can hold: tablea pellets first (what runs leave over), then the raw materials. */
+function bucketItems(materials: RawMaterialStock[]): { id: string; name: string; unit: string }[] {
+  const raw = runMaterials(materials);
+  return [{ id: PELLETS.id, name: PELLETS.name, unit: raw[0]?.unit || "kg" }, ...raw.map((m) => ({ id: m.id, name: m.name, unit: m.unit }))];
+}
 
 const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 export const dayLabel = (iso: string) => {
@@ -21,7 +28,7 @@ export const dayLabel = (iso: string) => {
 };
 
 /**
- * The leftover bucket: usable material (cacao, mostly) a run didn't use. How much is in it, and every time
+ * The leftover bucket: tablea pellets a run didn't use (or a raw material put aside). How much is in it, and every time
  * some went in or came out — when, how much, what for and who logged it.
  */
 export function CacaoBucket() {
@@ -29,13 +36,13 @@ export function CacaoBucket() {
   const exec = isExecutive(useCurrentUser());
   const [dialog, setDialog] = useState<"in" | "out" | null>(null);
   const [all, setAll] = useState(false);
-  const cacao = runMaterials(rawMaterials);
-  // A material still in the history but no longer listed keeps its bucket.
-  const ids = [...new Set([...cacao.map((m) => m.id), ...cacaoBucket.map((m) => m.materialId)])];
-  const nameOf = (id: string) => rawMaterials.find((m) => m.id === id)?.name ?? "Cacao no longer listed";
-  const unitOf = (id: string) => rawMaterials.find((m) => m.id === id)?.unit ?? cacaoBucket.find((m) => m.materialId === id)?.unit ?? "kg";
-  // Every material that has ever been in it, or the first one a run starts from (cacao) when it's empty.
-  const balances = ids.map((id) => ({ id, qty: bucketBalance(cacaoBucket, id) })).filter((b) => b.qty !== 0 || b.id === cacao[0]?.id);
+  const items = bucketItems(rawMaterials);
+  // Something still in the history but no longer listed keeps its place in the bucket.
+  const ids = [...new Set([...items.map((m) => m.id), ...cacaoBucket.map((m) => m.materialId)])];
+  const nameOf = (id: string) => items.find((m) => m.id === id)?.name ?? "No longer listed";
+  const unitOf = (id: string) => items.find((m) => m.id === id)?.unit ?? cacaoBucket.find((m) => m.materialId === id)?.unit ?? "kg";
+  // Everything that's in it, and the tablea pellets even when there are none.
+  const balances = ids.map((id) => ({ id, qty: bucketBalance(cacaoBucket, id) })).filter((b) => b.qty !== 0 || b.id === PELLETS.id);
   const history = newestFirst(cacaoBucket);
   const shown = all ? history : history.slice(0, SHOWN);
 
@@ -43,32 +50,26 @@ export function CacaoBucket() {
     <section className="flex flex-col gap-3 rounded-2xl border border-line/15 bg-card p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-display text-[20px] font-semibold">Leftover bucket</h2>
-        {cacao.length > 0 && (
-          <div className="flex gap-2">
-            <button type="button" onClick={() => setDialog("in")} className={BUTTON.secondary}>
-              <ArrowDownToLine className="h-4 w-4" /> Put in
-            </button>
-            <button type="button" onClick={() => setDialog("out")} disabled={!balances.some((b) => b.qty > 0)} className={BUTTON.secondary}>
-              <ArrowUpFromLine className="h-4 w-4" /> Take out
-            </button>
-          </div>
-        )}
+        <div className="flex gap-2">
+          <button type="button" onClick={() => setDialog("in")} className={BUTTON.secondary}>
+            <ArrowDownToLine className="h-4 w-4" /> Put in
+          </button>
+          <button type="button" onClick={() => setDialog("out")} disabled={!balances.some((b) => b.qty > 0)} className={BUTTON.secondary}>
+            <ArrowUpFromLine className="h-4 w-4" /> Take out
+          </button>
+        </div>
       </div>
 
-      {balances.length === 0 ? (
-        <p className="text-[13.5px] text-muted-foreground">No raw materials set up yet — add them under Inventory.</p>
-      ) : (
-        <div className="flex flex-wrap gap-x-8 gap-y-2">
-          {balances.map((b) => (
-            <div key={b.id}>
-              <div className="font-display text-[30px] font-semibold leading-none tabular-nums text-cacao">
-                {b.qty} <span className="text-[16px] text-muted-foreground">{unitOf(b.id)}</span>
-              </div>
-              <div className="mt-1 text-[12.5px] text-muted-foreground">in the bucket{balances.length > 1 ? ` · ${nameOf(b.id)}` : ""}</div>
+      <div className="flex flex-wrap gap-x-8 gap-y-2">
+        {balances.map((b) => (
+          <div key={b.id}>
+            <div className="font-display text-[30px] font-semibold leading-none tabular-nums text-cacao">
+              {b.qty} <span className="text-[16px] text-muted-foreground">{unitOf(b.id)}</span>
             </div>
-          ))}
-        </div>
-      )}
+            <div className="mt-1 text-[12.5px] text-muted-foreground">{nameOf(b.id)} in the bucket</div>
+          </div>
+        ))}
+      </div>
 
       {history.length === 0 ? (
         <p className="text-[13px] text-muted-foreground">Nothing in or out yet. What a run doesn&apos;t use lands here when you log production.</p>
@@ -95,7 +96,7 @@ export function CacaoBucket() {
                   </td>
                   <td className="py-2 pr-3">
                     {m.purpose || "—"}
-                    {balances.length > 1 ? <span className="text-muted-foreground"> · {nameOf(m.materialId)}</span> : null}
+                    {m.materialId !== PELLETS.id ? <span className="text-muted-foreground"> · {nameOf(m.materialId)}</span> : null}
                   </td>
                   <td className="whitespace-nowrap py-2 pr-3 text-muted-foreground">{m.loggedByName || "—"}</td>
                   {exec && (
@@ -131,11 +132,11 @@ export function CacaoBucket() {
   );
 }
 
-/** Putting cacao in by hand, or taking some out — always with what it was for. */
+/** Putting pellets (or a raw material) in by hand, or taking some out — always with what it was for. */
 function MoveDialog({ direction, onClose }: { direction: "in" | "out"; onClose: () => void }) {
   const { cacaoBucket, rawMaterials } = useStore();
-  const cacao = runMaterials(rawMaterials);
-  const choices = direction === "out" ? cacao.filter((m) => bucketBalance(cacaoBucket, m.id) > 0) : cacao;
+  const items = bucketItems(rawMaterials);
+  const choices = direction === "out" ? items.filter((m) => bucketBalance(cacaoBucket, m.id) > 0) : items;
   const [materialId, setMaterialId] = useState(choices[0]?.id ?? "");
   const material = choices.find((m) => m.id === materialId);
   const balance = material ? bucketBalance(cacaoBucket, material.id) : 0;
@@ -163,7 +164,7 @@ function MoveDialog({ direction, onClose }: { direction: "in" | "out"; onClose: 
           <DialogDescription>
             {direction === "out"
               ? "Making more product with it? Use Log production instead — take it from the bucket there."
-              : "Leftover cacao that wasn't logged with a run."}
+              : "Leftover pellets that weren't logged with a run."}
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">

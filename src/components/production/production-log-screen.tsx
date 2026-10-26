@@ -42,8 +42,9 @@ function Step({ label, value, unit, note, tone }: { label: string; value: number
 /**
  * Production: what was actually made, laid out like Transactions — the month (or all time) and
  * the Log production button at the top, what it added up to, then one row per batch: its name,
- * the raw material put in, what was usable from it, the finished products made from that, what
- * was left over (into the bucket) and the packaging used. Forecast is what to make next; this
+ * the raw material put in, what was usable from it, the tablea pellets made from that, the
+ * finished products made from the pellets, the pellets left over (into the bucket) and the
+ * packaging used. Forecast is what to make next; this
  * is what happened.
  */
 export function ProductionLogScreen() {
@@ -98,21 +99,23 @@ export function ProductionLogScreen() {
           </button>
         </div>
 
-        {/* Raw → usable → products, with what was left over. */}
-        <section className="grid grid-cols-2 gap-3 min-[900px]:flex min-[900px]:items-stretch min-[900px]:gap-2" aria-label="Production summary">
+        {/* Raw → usable → tablea pellets → products, with what was left over. */}
+        <section className="grid grid-cols-2 gap-3 min-[1100px]:flex min-[900px]:items-stretch min-[900px]:gap-2" aria-label="Production summary">
           <Step label="Raw materials in" value={totals.raw} unit={unit} note={`${totals.runs} ${totals.runs === 1 ? "batch" : "batches"}`} />
-          <ArrowRight className="hidden h-5 w-5 shrink-0 self-center text-muted-foreground min-[900px]:block" />
+          <ArrowRight className="hidden h-5 w-5 shrink-0 self-center text-muted-foreground min-[1100px]:block" />
           <Step label="Usable from it" value={totals.usable} unit={unit} note={totals.yield === null ? "Nothing put in" : `${Math.round(totals.yield * 100)}% of the raw`} />
-          <ArrowRight className="hidden h-5 w-5 shrink-0 self-center text-muted-foreground min-[900px]:block" />
+          <ArrowRight className="hidden h-5 w-5 shrink-0 self-center text-muted-foreground min-[1100px]:block" />
+          <Step label="Tablea pellets" value={totals.pellets} unit={unit} note={totals.usable > 0 ? `${Math.round((totals.pellets / totals.usable) * 100)}% of the usable` : "Made from the usable"} />
+          <ArrowRight className="hidden h-5 w-5 shrink-0 self-center text-muted-foreground min-[1100px]:block" />
           <Step
-            label="Into finished products"
+            label="Pellets into products"
             value={totals.intoProducts}
             unit={unit}
             note={`${madeUnits} units made${totals.fromBucket > 0 ? ` · ${totals.fromBucket} ${unit} from the bucket` : ""}`}
             tone="brand"
           />
-          <ArrowRight className="hidden h-5 w-5 shrink-0 self-center text-muted-foreground min-[900px]:block" />
-          <Step label="Left over" value={totals.leftover} unit={unit} note="Into the bucket" />
+          <ArrowRight className="hidden h-5 w-5 shrink-0 self-center text-muted-foreground min-[1100px]:block" />
+          <Step label="Pellets left over" value={totals.leftover} unit={unit} note="Into the bucket" />
         </section>
 
         <div className="overflow-hidden rounded-2xl border border-line/15 bg-card">
@@ -158,7 +161,7 @@ export function ProductionLogScreen() {
 /**
  * One row per batch, in fixed columns like the Transactions table:
  *
- *   Date · Batch name · Lot · Raw materials in · Usable · Finished products · Left over · Packaging · Recorded by · Actions
+ *   Date · Batch name · Lot · Raw materials in · Usable · Tablea pellets · Finished products · Pellets left over · Packaging · Recorded by · Actions
  */
 function RunTable({ runs, canChange, onEdit }: { runs: ProductionRun[]; canChange: boolean; onEdit: (r: ProductionRun) => void }) {
   const { entries, products, rawMaterials, businessSettings } = useStore();
@@ -166,7 +169,7 @@ function RunTable({ runs, canChange, onEdit }: { runs: ProductionRun[]; canChang
   const rule = "border-r border-line/15 last:border-r-0";
   const th = `px-3 py-2.5 text-center text-[11px] font-bold uppercase leading-tight tracking-wide text-muted-foreground ${rule}`;
   const td = `px-3 py-3 text-center align-middle ${rule}`;
-  const widths = [108, 180, 130, 150, 130, 0, 110, 170, 130, 96];
+  const widths = [108, 170, 120, 140, 120, 120, 0, 110, 160, 120, 96];
 
   if (runs.length === 0) {
     return <p className="px-5 py-10 text-center text-sm text-muted-foreground">No batches logged. Use Log production after a batch is made.</p>;
@@ -174,7 +177,7 @@ function RunTable({ runs, canChange, onEdit }: { runs: ProductionRun[]; canChang
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[1360px] table-fixed border-collapse text-[13px]">
+      <table className="w-full min-w-[1480px] table-fixed border-collapse text-[13px]">
         <colgroup>
           {widths.map((w, i) => (
             <col key={i} style={w ? { width: w } : undefined} />
@@ -182,7 +185,7 @@ function RunTable({ runs, canChange, onEdit }: { runs: ProductionRun[]; canChang
         </colgroup>
         <thead className="border-b border-line/15 bg-secondary">
           <tr>
-            {["Date", "Batch name", "Lot", "Raw materials in", "Usable", "Finished products", "Left over", "Packaging", "Recorded by", "Actions"].map((h) => (
+            {["Date", "Batch name", "Lot", "Raw materials in", "Usable", "Tablea pellets", "Finished products", "Pellets left over", "Packaging", "Recorded by", "Actions"].map((h) => (
               <th key={h} scope="col" className={th}>
                 {h}
               </th>
@@ -220,15 +223,26 @@ function RunTable({ runs, canChange, onEdit }: { runs: ProductionRun[]; canChang
                   )}
                 </td>
                 <td className={td}>
-                  {r.usableQty > 0 || r.fromBucketQty > 0 ? (
+                  {r.usableQty > 0 ? (
                     <>
                       <span className="block font-semibold tabular-nums">
                         {r.usableQty} {u}
                       </span>
                       <span className="block text-[11.5px] text-muted-foreground">
                         {r.rawQty > 0 ? `${Math.round((r.usableQty / r.rawQty) * 100)}% usable` : ""}
-                        {r.fromBucketQty > 0 ? `${r.rawQty > 0 ? " · " : ""}+${r.fromBucketQty} from bucket` : ""}
                       </span>
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </td>
+                <td className={td}>
+                  {r.pelletsQty > 0 || r.fromBucketQty > 0 ? (
+                    <>
+                      <span className="block font-semibold tabular-nums">
+                        {r.pelletsQty} {u}
+                      </span>
+                      {r.fromBucketQty > 0 && <span className="block text-[11.5px] text-muted-foreground">+{r.fromBucketQty} from bucket</span>}
                     </>
                   ) : (
                     <span className="text-muted-foreground">—</span>
@@ -247,9 +261,9 @@ function RunTable({ runs, canChange, onEdit }: { runs: ProductionRun[]; canChang
                       </span>
                     ))
                   )}
-                  {material && r.intoProductsQty > 0 && (
+                  {r.intoProductsQty > 0 && (
                     <span className="mt-0.5 block text-[11.5px] text-muted-foreground">
-                      {r.intoProductsQty} {u} usable went in
+                      {r.intoProductsQty} {u} of pellets went in
                     </span>
                   )}
                 </td>

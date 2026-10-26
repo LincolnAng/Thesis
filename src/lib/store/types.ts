@@ -553,8 +553,8 @@ export interface TingiMove {
 
 /**
  * One production run, as logged in Production: raw cacao fed into the roaster, the usable
- * cacao that came out, how much of it went into finished products, and what was left over
- * (into the cacao bucket). The roast and the batches are entries carrying this run's id;
+ * cacao that came out, the tablea pellets made from it, how many of those went into finished
+ * products, and what was left over (into the leftover bucket). The roast and the batches are entries carrying this run's id;
  * the bucket moves carry it too. Quantities are in the cacao material's own unit.
  */
 export interface ProductionRun {
@@ -571,9 +571,11 @@ export interface ProductionRun {
   rawQty: number;
   /** What was usable from it (usable cacao out of the roast). */
   usableQty: number;
-  /** Usable cacao taken from the leftover bucket for this run. */
+  /** Tablea pellets made from the usable cacao — the step between roasting and the packs. */
+  pelletsQty: number;
+  /** Tablea pellets taken from the leftover bucket for this run. */
   fromBucketQty: number;
-  /** Usable cacao that went into the finished products. */
+  /** Tablea pellets that went into the finished products. */
   intoProductsQty: number;
   /** What was left over, put into the bucket. */
   leftoverQty: number;

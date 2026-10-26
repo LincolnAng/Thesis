@@ -44,6 +44,8 @@ export const SHARED_TABS: Record<string, string[]> = {
     "loggedByName",
     // Cacao bucket
     "direction", "runId", "purpose",
+    // Production run, later
+    "pelletsQty",
   ],
   "People & Payroll": [
     "section",

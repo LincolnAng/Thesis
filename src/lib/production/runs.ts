@@ -7,14 +7,20 @@ import type { CacaoMove, Entry, Product, ProductionRun, RawMaterialStock } from 
 /**
  * Production runs and the leftover cacao bucket, worked out from what was logged.
  *
- * A run goes raw cacao → roaster → usable cacao (+ any taken from the bucket) → finished
- * products, and whatever usable cacao wasn't used goes into the bucket. The bucket's balance
+ * A run goes raw cacao → roaster → usable cacao → tablea pellets (+ any taken from the bucket)
+ * → finished products, and whatever pellets weren't used go into the bucket. The bucket's balance
  * is always what went in minus what came out — never a stored total.
  *
  * Pure: no store, no React.
  */
 
 const round = (n: number) => Math.round(n * 1000) / 1000;
+
+/**
+ * Tablea pellets: what usable cacao is ground into before it's packed. Not a material or a
+ * product of its own — a stage of every run, and what the leftover bucket holds (by this id).
+ */
+export const PELLETS = { id: "tablea-pellets", name: "Tablea pellets" } as const;
 
 /** The raw cacao materials — the ones a roast starts from. */
 export function cacaoMaterials(materials: RawMaterialStock[]): RawMaterialStock[] {
@@ -47,6 +53,7 @@ export interface RunTotals {
   runs: number;
   raw: number;
   usable: number;
+  pellets: number;
   fromBucket: number;
   intoProducts: number;
   leftover: number;
@@ -73,6 +80,7 @@ export function runTotals(runs: ProductionRun[], entries: Entry[], products: Pro
     runs: runs.length,
     raw,
     usable: round(runs.reduce((t, r) => t + r.usableQty, 0)),
+    pellets: round(runs.reduce((t, r) => t + r.pelletsQty, 0)),
     fromBucket: round(runs.reduce((t, r) => t + r.fromBucketQty, 0)),
     intoProducts: round(runs.reduce((t, r) => t + r.intoProductsQty, 0)),
     leftover: round(runs.reduce((t, r) => t + r.leftoverQty, 0)),

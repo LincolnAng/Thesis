@@ -85,8 +85,8 @@ test("the roast counts as raw cacao consumed, once", () => {
 
 test("run totals add up the roast, the yield, the products and what was left", () => {
   const runs = [
-    { id: "run1", name: "", date: "2026-10-05", lotId: "L1", materialId: "beans", unit: "kg", rawQty: 10, usableQty: 7, fromBucketQty: 0, intoProductsQty: 6.6, leftoverQty: 0.4, made: "", notes: "", createdAt: "a" },
-    { id: "run2", name: "", date: "2026-10-09", lotId: "L2", materialId: "beans", unit: "kg", rawQty: 0, usableQty: 0, fromBucketQty: 0.4, intoProductsQty: 0.4, leftoverQty: 0, made: "", notes: "", createdAt: "b" },
+    { id: "run1", name: "", date: "2026-10-05", lotId: "L1", materialId: "beans", unit: "kg", rawQty: 10, usableQty: 7, pelletsQty: 7, fromBucketQty: 0, intoProductsQty: 6.6, leftoverQty: 0.4, made: "", notes: "", createdAt: "a" },
+    { id: "run2", name: "", date: "2026-10-09", lotId: "L2", materialId: "beans", unit: "kg", rawQty: 0, usableQty: 0, pelletsQty: 0, fromBucketQty: 0.4, intoProductsQty: 0.4, leftoverQty: 0, made: "", notes: "", createdAt: "b" },
   ];
   const entries = [
     entry({ type: "INVENTORY_IN", sku: "Tablea", quantity: 66, unit: "jars", runId: "run1" }),
@@ -96,6 +96,7 @@ test("run totals add up the roast, the yield, the products and what was left", (
   const t = runTotals(runs, entries, [tablea]);
   assert.equal(t.raw, 10);
   assert.equal(t.usable, 7);
+  assert.equal(t.pellets, 7);
   assert.equal(t.yield, 0.7);
   assert.equal(t.intoProducts, 7);
   assert.equal(t.leftover, 0.4);

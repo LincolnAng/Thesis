@@ -5,7 +5,7 @@ import type { CacaoMove, ProductionRun } from "@/lib/store/types";
 export const productionRunsCollection = createSheetCollection<ProductionRun>({
   sheetName: "Events & Stock",
   section: "Production run",
-  header: ["id", "date", "lotId", "materialId", "unit", "rawQty", "usableQty", "fromBucketQty", "intoProductsQty", "leftoverQty", "made", "notes", "loggedByName", "createdAt", "deletedAt", "name"],
+  header: ["id", "date", "lotId", "materialId", "unit", "rawQty", "usableQty", "fromBucketQty", "intoProductsQty", "leftoverQty", "made", "notes", "loggedByName", "createdAt", "deletedAt", "name", "pelletsQty"],
   idColumn: "id",
   deletedColumn: "deletedAt",
   toRow: (r) => [
@@ -25,9 +25,10 @@ export const productionRunsCollection = createSheetCollection<ProductionRun>({
     r.createdAt,
     "",
     r.name,
+    String(r.pelletsQty),
   ],
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  fromRow: ([id, date, lotId, materialId, unit, rawQty, usableQty, fromBucketQty, intoProductsQty, leftoverQty, made, notes, loggedByName, createdAt, _deletedAt, name]) =>
+  fromRow: ([id, date, lotId, materialId, unit, rawQty, usableQty, fromBucketQty, intoProductsQty, leftoverQty, made, notes, loggedByName, createdAt, _deletedAt, name, pelletsQty]) =>
     id
       ? {
           id,
@@ -38,6 +39,7 @@ export const productionRunsCollection = createSheetCollection<ProductionRun>({
           unit: unit ?? "",
           rawQty: Number(rawQty) || 0,
           usableQty: Number(usableQty) || 0,
+          pelletsQty: Number(pelletsQty) || 0,
           fromBucketQty: Number(fromBucketQty) || 0,
           intoProductsQty: Number(intoProductsQty) || 0,
           leftoverQty: Number(leftoverQty) || 0,
@@ -49,7 +51,7 @@ export const productionRunsCollection = createSheetCollection<ProductionRun>({
       : null,
 });
 
-/** The leftover cacao bucket: every time usable cacao went in or came out, and why. */
+/** The leftover bucket: every time tablea pellets (or a raw material) went in or came out, and why. */
 export const cacaoBucketCollection = createSheetCollection<CacaoMove>({
   sheetName: "Events & Stock",
   section: "Cacao bucket",
