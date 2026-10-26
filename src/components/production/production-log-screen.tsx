@@ -6,7 +6,6 @@ import { Page } from "@/components/layout/page";
 import { BUTTON, toggleButton } from "@/components/ui/kit";
 import { CarouselNav } from "@/components/ui/carousel-nav";
 import { ActionIcon } from "@/components/transactions/transaction-table";
-import { AddBatchDialog } from "@/components/production/add-batch-dialog";
 import { RunDialog } from "@/components/production/run-dialog";
 import { CacaoBucket } from "@/components/production/cacao-bucket";
 import { useStore } from "@/lib/store/use-store";
@@ -43,7 +42,7 @@ function Step({ label, value, unit, note, tone }: { label: string; value: number
  * Production: what was actually made, laid out like Transactions — the month (or all time) and
  * the Log production button at the top, what it added up to, then one row per batch: its name,
  * the raw material put in, what was usable from it, the tablea pellets made from that, the
- * finished products made from the pellets, the pellets left over (into the bucket) and the
+ * finished products made from the pellets, the pellets left over (into Leftover) and the
  * packaging used. Forecast is what to make next; this
  * is what happened.
  */
@@ -51,7 +50,6 @@ export function ProductionLogScreen() {
   const { productionRuns, entries, products, rawMaterials, businessSettings } = useStore();
   const exec = isExecutive(useCurrentUser());
   const [logging, setLogging] = useState(false);
-  const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<ProductionRun | null>(null);
   const thisMonth = monthOf(new Date());
   // Newest first, as Transactions steps them.
@@ -94,9 +92,6 @@ export function ProductionLogScreen() {
           <button type="button" onClick={() => setLogging(true)} className={BUTTON.primary}>
             + Log production
           </button>
-          <button type="button" onClick={() => setAdding(true)} className={BUTTON.secondary}>
-            Add batch
-          </button>
         </div>
 
         {/* Raw → usable → tablea pellets → products, with what was left over. */}
@@ -111,17 +106,17 @@ export function ProductionLogScreen() {
             label="Pellets into products"
             value={totals.intoProducts}
             unit={unit}
-            note={`${madeUnits} units made${totals.fromBucket > 0 ? ` · ${totals.fromBucket} ${unit} from the bucket` : ""}`}
+            note={`${madeUnits} units made${totals.fromBucket > 0 ? ` · ${totals.fromBucket} ${unit} from Leftover` : ""}`}
             tone="brand"
           />
           <ArrowRight className="hidden h-5 w-5 shrink-0 self-center text-muted-foreground min-[1100px]:block" />
-          <Step label="Pellets left over" value={totals.leftover} unit={unit} note="Into the bucket" />
+          <Step label="Pellets left over" value={totals.leftover} unit={unit} note="Into Leftover" />
         </section>
 
         <div className="overflow-hidden rounded-2xl border border-line/15 bg-card">
           <RunTable runs={runs} canChange={exec} onEdit={setEditing} />
           <div className="flex flex-wrap justify-between gap-2 border-t border-line/10 px-4 py-2.5 text-xs text-muted-foreground">
-            <span>One row per batch. Packaging comes off its stock; leftovers go into the bucket below.</span>
+            <span>One row per batch. Packaging comes off its stock; pellets left over go into Leftover below.</span>
             <span>
               Showing {runs.length} {runs.length === 1 ? "batch" : "batches"}
             </span>
@@ -146,14 +141,13 @@ export function ProductionLogScreen() {
                 ))}
               </ul>
             )}
-            <p className="mt-auto text-[12px] text-muted-foreground">Every batch {periodName}, logged here or with Add batch.</p>
+            <p className="mt-auto text-[12px] text-muted-foreground">Every batch {periodName}.</p>
           </section>
         </div>
       </div>
 
       {logging && <RunDialog onClose={() => setLogging(false)} />}
       {editing && <RunDialog key={editing.id} existing={editing} onClose={() => setEditing(null)} />}
-      {adding && <AddBatchDialog onClose={() => setAdding(false)} />}
     </Page>
   );
 }
@@ -242,7 +236,7 @@ function RunTable({ runs, canChange, onEdit }: { runs: ProductionRun[]; canChang
                       <span className="block font-semibold tabular-nums">
                         {r.pelletsQty} {u}
                       </span>
-                      {r.fromBucketQty > 0 && <span className="block text-[11.5px] text-muted-foreground">+{r.fromBucketQty} from bucket</span>}
+                      {r.fromBucketQty > 0 && <span className="block text-[11.5px] text-muted-foreground">+{r.fromBucketQty} from Leftover</span>}
                     </>
                   ) : (
                     <span className="text-muted-foreground">—</span>
@@ -294,7 +288,7 @@ function RunTable({ runs, canChange, onEdit }: { runs: ProductionRun[]; canChang
                       title={canChange ? "Delete this batch" : "Only an Executive can delete a batch"}
                       enabled={canChange}
                       onClick={() => {
-                        if (window.confirm(`Delete ${r.name || "this batch"}? The raw materials, the products made and the bucket all go back to how they were.`)) deleteProductionRun(r.id);
+                        if (window.confirm(`Delete ${r.name || "this batch"}? The raw materials, the products made and Leftover all go back to how they were.`)) deleteProductionRun(r.id);
                       }}
                     />
                   </div>

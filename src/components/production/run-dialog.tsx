@@ -155,10 +155,10 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
     if (num(usable) > 0 && !(num(raw) > 0)) return setError("How much cacao went in?");
     if (num(usable) > num(raw)) return setError("More usable than raw went in — check the two amounts.");
     if (pelletsQty > num(usable) + 1e-9) return setError("More tablea pellets than usable cacao — check the two amounts.");
-    if (num(fromBucket) > inBucket) return setError(`Only ${inBucket} ${unit} of pellets in the bucket.`);
-    if (intoQty > available + 1e-9) return setError(`Only ${available} ${unit} of pellets to work with — what was made plus what came from the bucket.`);
+    if (num(fromBucket) > inBucket) return setError(`Only ${inBucket} ${unit} of pellets in Leftover.`);
+    if (intoQty > available + 1e-9) return setError(`Only ${available} ${unit} of pellets to work with — what was made plus what came from Leftover.`);
     if (lines.length > 0 && byRecipe > 0 && available <= 0) {
-      return setError("How many pellets went in? Fill in the cacao or take some from the bucket — or log it with Add batch instead.");
+      return setError("How many pellets went in? Fill in the cacao, or take some from Leftover.");
     }
     if (!lotId.trim()) return setError("Give it a lot number.");
     if (num(raw) > 0 && !material) return setError("Add your cacao under Inventory first.");
@@ -229,7 +229,7 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
       <DialogContent className="max-h-[90vh] overflow-y-auto rounded-2xl sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{existing ? "Change production" : "Log production"}</DialogTitle>
-          <DialogDescription>Cacao in → usable cacao → tablea pellets → finished products. Pellets left over go in the bucket.</DialogDescription>
+          <DialogDescription>Cacao in → usable cacao → tablea pellets → finished products. Pellets left over go into Leftover.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
           <label className={labelCls}>
@@ -300,7 +300,7 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
             )}
             {inBucket > 0 && (
               <label className={labelCls}>
-                Also from the leftover bucket ({unit}) — {inBucket} in it
+                Also from Leftover ({unit}) — {inBucket} in it
                 <input inputMode="decimal" value={fromBucket} onChange={(e) => setFromBucket(decimal(e.target.value))} placeholder="0" className={fieldCls} />
               </label>
             )}
@@ -329,7 +329,7 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
                 <input inputMode="decimal" value={into ?? (intoQty ? String(round(intoQty)) : "")} onChange={(e) => setInto(decimal(e.target.value))} placeholder="0" className={fieldCls} />
               </label>
               <div className={labelCls}>
-                Left over → bucket
+                Left over → Leftover
                 <div className={`flex h-11 items-center rounded-lg bg-oat px-3 text-[17px] font-bold tabular-nums ${leftover < 0 ? "text-danger" : ""}`}>
                   {Math.max(0, leftover)} {unit}
                 </div>

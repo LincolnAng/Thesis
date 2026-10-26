@@ -28,7 +28,7 @@ export const dayLabel = (iso: string) => {
 };
 
 /**
- * The leftover bucket: tablea pellets a run didn't use (or a raw material put aside). How much is in it, and every time
+ * Leftover: tablea pellets a run didn't use (or a raw material put aside). How much is in it, and every time
  * some went in or came out — when, how much, what for and who logged it.
  */
 export function CacaoBucket() {
@@ -49,7 +49,7 @@ export function CacaoBucket() {
   return (
     <section className="flex flex-col gap-3 rounded-2xl border border-line/15 bg-card p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-display text-[20px] font-semibold">Leftover bucket</h2>
+        <h2 className="font-display text-[20px] font-semibold">Leftover</h2>
         <div className="flex gap-2">
           <button type="button" onClick={() => setDialog("in")} className={BUTTON.secondary}>
             <ArrowDownToLine className="h-4 w-4" /> Put in
@@ -66,7 +66,7 @@ export function CacaoBucket() {
             <div className="font-display text-[30px] font-semibold leading-none tabular-nums text-cacao">
               {b.qty} <span className="text-[16px] text-muted-foreground">{unitOf(b.id)}</span>
             </div>
-            <div className="mt-1 text-[12.5px] text-muted-foreground">{nameOf(b.id)} in the bucket</div>
+            <div className="mt-1 text-[12.5px] text-muted-foreground">{nameOf(b.id)}</div>
           </div>
         ))}
       </div>
@@ -107,7 +107,7 @@ export function CacaoBucket() {
                           type="button"
                           aria-label="Take back"
                           title="Take back"
-                          onClick={() => window.confirm("Take this back? The bucket goes back to what it was before it.") && deleteCacaoMove(m.id)}
+                          onClick={() => window.confirm("Take this back? Leftover goes back to what it was before it.") && deleteCacaoMove(m.id)}
                           className="rounded-md p-1 text-muted-foreground hover:bg-secondary hover:text-danger"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -150,7 +150,7 @@ function MoveDialog({ direction, onClose }: { direction: "in" | "out"; onClose: 
     const n = Number(qty);
     if (!material) return;
     if (!(n > 0)) return setError("How much?");
-    if (direction === "out" && n > balance) return setError(`Only ${balance} ${material.unit} in the bucket.`);
+    if (direction === "out" && n > balance) return setError(`Only ${balance} ${material.unit} in Leftover.`);
     if (!purpose.trim()) return setError(direction === "out" ? "What was it used for?" : "Where did it come from?");
     addCacaoMove({ materialId: material.id, direction, qty: n, unit: material.unit, date, runId: null, purpose: purpose.trim() });
     onClose();
@@ -160,10 +160,10 @@ function MoveDialog({ direction, onClose }: { direction: "in" | "out"; onClose: 
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto rounded-2xl sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{direction === "out" ? "Take out of the bucket" : "Put into the bucket"}</DialogTitle>
+          <DialogTitle>{direction === "out" ? "Take out of Leftover" : "Put into Leftover"}</DialogTitle>
           <DialogDescription>
             {direction === "out"
-              ? "Making more product with it? Use Log production instead — take it from the bucket there."
+              ? "Making more product with it? Use Log production instead — take it from Leftover there."
               : "Leftover pellets that weren't logged with a run."}
           </DialogDescription>
         </DialogHeader>
