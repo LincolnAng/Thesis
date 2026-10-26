@@ -8,11 +8,19 @@ import type { Role } from "@/lib/store/types";
 /**
  * The profile list, Netflix-style: anyone at the device can see who has a profile (names,
  * colours, roles — never a PIN), because that is what the picker shows before sign-in.
- * Adding people, changing roles and removing profiles are an executive's job. Anyone may
+ * Adding people, changing roles and removing profiles are an Executive's job only. Anyone may
  * change their own name, colour and PIN.
+ *
+ * "Executive" is read from the sheet on every request, not from the sign-in cookie: someone
+ * made an Employee while still signed in loses these powers at once, not at their next sign-in.
  */
 
 const readRole = (raw: unknown): Role => (raw === "employee" ? "employee" : "executive");
+
+/** Is the signed-in person an Executive right now, by the sheet? */
+function isExecutiveNow(users: UserRecord[], userId: string | undefined): boolean {
+  return Boolean(userId) && users.some((u) => u.id === userId && u.role === "executive");
+}
 
 export async function GET() {
   try {
@@ -41,7 +49,7 @@ export async function POST(req: NextRequest) {
   const firstProfile = users.length === 0;
   if (!firstProfile) {
     const session = await readSession();
-    if (!session || session.role !== "executive") {
+    if (!session || !isExecutiveNow(users, session.userId)) {
       return NextResponse.json({ success: false, reason: "forbidden" }, { status: 403 });
     }
   }
@@ -80,7 +88,8 @@ export async function PATCH(req: NextRequest) {
   if (!target) return NextResponse.json({ success: false, reason: "unknown_profile" }, { status: 404 });
 
   const isSelf = target.id === session.userId;
-  if (!isSelf && session.role !== "executive") {
+  const executive = isExecutiveNow(users, session.userId);
+  if (!isSelf && !executive) {
     return NextResponse.json({ success: false, reason: "forbidden" }, { status: 403 });
   }
 
@@ -98,7 +107,7 @@ export async function PATCH(req: NextRequest) {
     next.hasPin = true;
   }
   if (body.role !== undefined) {
-    if (session.role !== "executive") return NextResponse.json({ success: false, reason: "forbidden" }, { status: 403 });
+    if (!executive) return NextResponse.json({ success: false, reason: "forbidden" }, { status: 403 });
     next.role = readRole(body.role);
     const executivesLeft = users.filter((u) => (u.id === next.id ? next.role : u.role) === "executive").length;
     if (executivesLeft === 0) return NextResponse.json({ success: false, reason: "last_executive" }, { status: 409 });
@@ -111,7 +120,7 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const auth = await requireSession(["executive"]);
+  const auth = await requireSession();
   if (auth.denied) return auth.denied;
 
   let body: { id?: string };
@@ -121,8 +130,11 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ success: false, reason: "invalid_request" }, { status: 400 });
   }
   const users = await usersCollection.getAll();
+  // Only an Executive removes profiles — and not their own, so a shop can't lock itself out.
+  if (!isExecutiveNow(users, auth.session.userId)) return NextResponse.json({ success: false, reason: "forbidden" }, { status: 403 });
   const target = users.find((u) => u.id === body.id);
   if (!target) return NextResponse.json({ success: true });
+  if (target.id === auth.session.userId) return NextResponse.json({ success: false, reason: "not_yourself" }, { status: 409 });
   if (target.role === "executive" && users.filter((u) => u.role === "executive").length === 1) {
     return NextResponse.json({ success: false, reason: "last_executive" }, { status: 409 });
   }

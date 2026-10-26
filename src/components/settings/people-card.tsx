@@ -34,6 +34,7 @@ const REASONS: Record<string, string> = {
   forbidden: "Only an Executive can do that.",
   name_taken: "Someone already has that name.",
   last_executive: "There has to be at least one Executive.",
+  not_yourself: "You can't delete your own profile. Ask another Executive.",
   pin_must_be_4_digits: "The PIN has to be 4 digits.",
   missing_name: "Type a name first.",
   offline: "Couldn't reach the server. Check your connection.",
@@ -109,7 +110,7 @@ export function PeopleCard() {
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
             Everyone picks their profile when they open the app, on any device, and everything they save gets their name
-            on it. {exec ? "You can add people and choose what they see." : "Only an Executive can add people or change roles."}{" "}
+            on it. {exec ? "You can add and delete profiles and choose what each person sees." : "Only an Executive can add or delete profiles, or change roles."}{" "}
             The PIN keeps people sharing a tablet apart; it is not a password, and anyone with access to the Google Sheet
             can see every record in it.
           </p>
