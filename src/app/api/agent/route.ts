@@ -163,7 +163,9 @@ export async function POST(req: NextRequest) {
     `Today is ${today} (Philippine time). You are talking with ${auth.session.name}, ` +
     (view.role === "executive"
       ? "an Executive, who can see all the shop's records, including costs, recipes, payroll and debts."
-      : "an Employee, who can see sales, everyday expenses, spoilage, stock and selling prices only — not costs, recipes, salaries, investments or debts. Don't speculate about those.") +
+      : view.role === "admin"
+        ? "the Admin (the main computer), who times staff in and out and can see sales, everyday expenses, spoilage, stock and selling prices only — not costs, recipes, salaries, investments or debts. Don't speculate about those."
+        : "an Employee, who can see sales, everyday expenses, spoilage, stock and selling prices only — not costs, recipes, salaries, investments or debts. Don't speculate about those.") +
     `\n\n${matchLanguageRule(settings.botLanguage)}` +
     `\n\nThe shop's products: ${view.products.map((p) => fullName(p, view.products)).join("; ") || "none yet"}.` +
     (notes.length ? `\n\nNotes saved about ${auth.session.name}:\n${notes.map((n) => `- ${n.note}`).join("\n")}` : "") +

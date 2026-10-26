@@ -15,7 +15,6 @@ import type { PayrollRecord, StaffMember } from "@/lib/store/types";
 import { PayDialog, printPayslip, type PayBreakdown } from "@/components/salaries/pay-dialog";
 import { StaffList, rateLabel } from "@/components/salaries/staff-list";
 import { TimeRecordGrid } from "@/components/salaries/time-record";
-import { TimeInPanel } from "@/components/salaries/time-in-panel";
 
 /**
  * Salaries, for Executives: who's owed what this payday, worked out from each person's rate and
@@ -311,7 +310,9 @@ function TimeView() {
   if (staff.length === 0) return <NoStaffYet />;
   return (
     <div className="flex max-w-[1000px] flex-col gap-8">
-      <TimeInPanel />
+      <p className="rounded-xl bg-secondary px-4 py-3 text-[13.5px] text-muted-foreground">
+        People are timed in and out on the main computer, on the Admin profile. Here you correct a day, mark absences, leave and days off, and approve overtime.
+      </p>
       <section className="flex flex-col gap-3">
         <h2 className="font-display text-[20px] font-semibold">Daily time record</h2>
         <PeriodNav period={period} onShift={(n) => setPeriod((p) => shiftPeriod(p, n))} today={today} />

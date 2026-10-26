@@ -22,9 +22,10 @@ test("executives are reminded on payday, and about last payday's unpaid", () => 
 test("13th month is flagged in December until paid; employees are nudged to time in", () => {
   const dec = salaryReminders({ role: "executive", userId: null, staff: [s({ payType: "monthly", rate: 2000 })], timeRecords: [], payroll: [], today: "2026-12-05" });
   assert.ok(dec.today.some((r) => r.id === "salary:13th"));
-  const emp = salaryReminders({ role: "employee", userId: "u1", staff: [s({})], timeRecords: [], payroll: [], today: "2026-10-22" });
-  assert.equal(emp.today[0]?.title, "Time in");
-  assert.equal(salaryReminders({ role: "employee", userId: "u1", staff: [s({})], timeRecords: [day("2026-10-22")], payroll: [], today: "2026-10-22" }).today.length, 0);
+  const admin = salaryReminders({ role: "admin", userId: "u1", staff: [s({})], timeRecords: [], payroll: [], today: "2026-10-22" });
+  assert.equal(admin.today[0]?.title, "Time in: Shiela");
+  assert.equal(salaryReminders({ role: "admin", userId: "u1", staff: [s({})], timeRecords: [day("2026-10-22")], payroll: [], today: "2026-10-22" }).today.length, 0);
+  assert.equal(salaryReminders({ role: "employee", userId: "u1", staff: [s({})], timeRecords: [], payroll: [], today: "2026-10-22" }).today.length, 0);
 });
 
 test("after a month with contributions, the bell asks to send them until each is recorded", () => {

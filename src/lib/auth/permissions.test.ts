@@ -226,21 +226,19 @@ test("an employee sees only their own name and times — no one else's, no rates
   assert.equal(other.staff.length + other.timeRecords.length, 0);
 });
 
-test("employees put in and fix only their own times, this pay period only, and can't set pay-related fields", () => {
+test("only the Admin times people in and out — for this pay period, clock times only; employees can't", () => {
   const now = new Date("2026-10-22T02:00:00Z"); // 10 AM in Manila
-  const base = { role: "employee" as const, user: me, collection: "timeRecords" as const, now, ownStaffIds: ["st1"] };
+  const base = { role: "admin" as const, user: me, collection: "timeRecords" as const, now, ownStaffIds: ["st1", "st4"] };
   const ok = decideWrite({ ...base, op: "append", item: { id: "t9", staffId: "st1", date: "2026-10-22", timeIn: "08:03", status: "absent", otHours: 9 } });
   assert.ok(ok.allow);
   assert.equal(ok.allow && ok.item?.status, "present");
   assert.equal(ok.allow && ok.item?.otHours, 0);
   assert.equal(ok.allow && ok.item?.loggedByName, "Kuya Jun");
-  // A forgotten day earlier this period is fine; last period, the future and someone else are not.
-  assert.ok(decideWrite({ ...base, op: "append", item: { id: "t7", staffId: "st1", date: "2026-10-17", timeIn: "08:00", timeOut: "17:00" } }).allow);
+  // A forgotten day earlier this period is fine; last period, the future and someone not on staff are not.
+  assert.ok(decideWrite({ ...base, op: "append", item: { id: "t7", staffId: "st4", date: "2026-10-17", timeIn: "08:00", timeOut: "17:00" } }).allow);
   assert.equal(decideWrite({ ...base, op: "append", item: { id: "t8", staffId: "st1", date: "2026-10-10", timeIn: "08:00" } }).allow, false);
   assert.equal(decideWrite({ ...base, op: "append", item: { id: "t6", staffId: "st1", date: "2026-10-23", timeIn: "08:00" } }).allow, false);
   assert.equal(decideWrite({ ...base, op: "append", item: { id: "t5", staffId: "st2", date: "2026-10-22", timeIn: "08:00" } }).allow, false);
-  const theirs = { id: "t4", staffId: "st2", date: "2026-10-22", timeIn: "08:00", timeOut: null, status: "present", otHours: 0, createdAt: "x" };
-  assert.equal(decideWrite({ ...base, op: "update", item: { ...theirs, staffId: "st1" }, existing: theirs }).allow, false);
 
   const existing = { id: "t9", staffId: "st1", date: "2026-10-22", timeIn: "08:03", timeOut: null, status: "half", otHours: 1, createdAt: "x" };
   const out = decideWrite({ ...base, op: "update", item: { ...existing, timeOut: "17:10", status: "present", otHours: 5 }, existing });
@@ -249,20 +247,23 @@ test("employees put in and fix only their own times, this pay period only, and c
   assert.equal(out.allow && out.item?.status, "half");
   assert.equal(out.allow && out.item?.otHours, 1);
   assert.equal(decideWrite({ ...base, op: "delete", id: "t9", existing } as never).allow, false);
+
+  // An employee can't time anyone in — themselves included.
+  const emp = decideWrite({ ...base, role: "employee", op: "append", item: { id: "t3", staffId: "st1", date: "2026-10-22", timeIn: "08:00" } });
+  assert.equal(emp.allow, false);
   for (const collection of ["staff", "payroll"] as const) {
-    assert.equal(decideWrite({ role: "employee", user: me, collection, op: "append", item: { id: "x" } }).allow, false, collection);
+    assert.equal(decideWrite({ role: "admin", user: me, collection, op: "append", item: { id: "x" } }).allow, false, collection);
   }
 });
 
-test("a timekeeper sees and records everyone's times (names only); others still see only their own", () => {
+test("the Admin sees everyone's names and times (no pay); an employee sees only their own", () => {
   const data = sample();
   data.staff.push({ id: "st4", name: "Dadoy", payType: "daily", rate: 525, position: "", pwd: true, userId: null, startDate: null, active: true, allowanceOnly: false, createdAt: "" });
-  data.businessSettings.push({ key: "timekeepers", value: "u-ruchel" });
-  const keeper = redactForEmployee(data, (p) => p.standardPrice, "u-ruchel");
-  assert.deepEqual(keeper.staff.map((s) => [s.name, s.rate, s.pwd]).sort(), [["Dadoy", 0, false], ["Khent", 0, false]]);
-  assert.equal(keeper.timeRecords.length, 1);
-  assert.ok(keeper.businessSettings.some((s) => s.key === "timekeepers"));
-  const other = redactForEmployee(data, (p) => p.standardPrice, "u-emp");
+  const admin = redactForEmployee(data, (p) => p.standardPrice, "u-ruchel", "admin");
+  assert.deepEqual(admin.staff.map((s) => [s.name, s.rate, s.pwd]).sort(), [["Dadoy", 0, false], ["Khent", 0, false]]);
+  assert.equal(admin.timeRecords.length, 1);
+  assert.deepEqual(admin.payroll, []);
+  const other = redactForEmployee(data, (p) => p.standardPrice, "u-emp", "employee");
   assert.equal(other.staff.length, 0);
 });
 

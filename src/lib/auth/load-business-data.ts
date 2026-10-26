@@ -83,7 +83,7 @@ export async function loadBusinessDataFor(session: Session): Promise<{ role: Rol
     const product = ctx.products.find((p) => p.id === row.id);
     return product ? effectiveProductPrice(product, productCostPerJar(product, ctx)) : row.standardPrice;
   };
-  return { role: me.role, data: redactForEmployee(data, sellingPrice, me.id) };
+  return { role: me.role, data: redactForEmployee(data, sellingPrice, me.id, me.role) };
 }
 
 /** The cost chain's inputs, built from sheet rows (the client builds the same in useCostContext). */

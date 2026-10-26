@@ -1,5 +1,6 @@
 "use client";
 
+import { ROLE_LABELS } from "@/lib/auth/roles";
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { Camera } from "lucide-react";
@@ -24,7 +25,7 @@ import type { AppUser } from "@/lib/store/types";
  * first profile, which is how a new shop gets in at all.
  */
 
-const ROLE_LABEL: Record<AppUser["role"], string> = { executive: "Executive", employee: "Employee" };
+const ROLE_LABEL: Record<AppUser["role"], string> = ROLE_LABELS;
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);

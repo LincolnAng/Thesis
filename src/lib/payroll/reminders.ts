@@ -5,7 +5,7 @@ import { payFor, periodFor, shiftPeriod, parseDay, isoDay } from "@/lib/payroll/
 /**
  * Salary reminders for the bell. Executives: payday (the day before and the day itself),
  * anyone left unpaid from last payday, overtime waiting for approval, and 13th month pay in
- * December. Employees: a nudge to time in, once their profile is linked to a staff member.
+ * December. The Admin: who still needs timing in today. Employees: nothing — they don't time in.
  */
 export function salaryReminders(input: {
   role: Role;
@@ -20,13 +20,23 @@ export function salaryReminders(input: {
   const out = { today: [] as Reminder[], upcoming: [] as Reminder[] };
   const peso = (n: number) => `₱${Math.round(n).toLocaleString("en-US")}`;
 
-  if (input.role !== "executive") {
-    const mine = staff.find((s) => s.active && s.userId && s.userId === input.userId);
-    if (mine && !timeRecords.some((r) => r.staffId === mine.id && r.date === today)) {
-      out.today.push({ id: "salary:timein", category: "salaries", tone: "warn", title: "Time in", date: today, href: "/salaries" });
+  // The Admin (the main computer) times everyone in: who isn't in yet. Employees don't time in.
+  if (input.role === "admin") {
+    const notIn = staff.filter((s) => s.active && !timeRecords.some((r) => r.staffId === s.id && r.date === today));
+    if (notIn.length) {
+      out.today.push({
+        id: "salary:timein",
+        category: "salaries",
+        tone: "warn",
+        title: `Time in: ${notIn.length === 1 ? notIn[0].name : `${notIn.length} people`}`,
+        detail: notIn.length > 1 ? notIn.map((s) => s.name).join(", ") : undefined,
+        date: today,
+        href: "/salaries",
+      });
     }
     return out;
   }
+  if (input.role !== "executive") return out;
 
   const active = staff.filter((s) => s.active);
   if (active.length === 0) return out;

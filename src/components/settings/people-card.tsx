@@ -11,6 +11,7 @@ import { useStore } from "@/lib/store/use-store";
 import { canUndo, createProfile, deleteProfile, undoActivity, updateProfile } from "@/lib/store/store";
 import { isExecutive, signOut, useCurrentUser } from "@/lib/auth/current-user";
 import type { AppUser, Role } from "@/lib/store/types";
+import { canAddProfiles, ROLE_HINTS } from "@/lib/auth/roles";
 
 /**
  * Who may use the app, what each person can see, and what everyone has been changing.
@@ -25,10 +26,7 @@ import type { AppUser, Role } from "@/lib/store/types";
 
 const SHOW_FIRST = 12;
 
-const ROLE_HINT: Record<Role, string> = {
-  executive: "Executive — sees everything, including costs, R&D and payroll",
-  employee: "Employee — logs sales, spoilage and batches; no costs or profit",
-};
+const ROLE_HINT: Record<Role, string> = ROLE_HINTS;
 
 const REASONS: Record<string, string> = {
   forbidden: "Only an Executive can do that.",
@@ -59,6 +57,7 @@ function RolePicker({ value, onChange, disabled }: { value: Role; onChange: (r: 
       aria-label="Role"
     >
       <option value="executive">Executive</option>
+      <option value="admin">Admin</option>
       <option value="employee">Employee</option>
     </select>
   );
@@ -68,6 +67,8 @@ export function PeopleCard() {
   const { users } = useStore();
   const me = useCurrentUser();
   const exec = isExecutive(me);
+  // Executives and the Admin add people; only an Executive picks their role.
+  const canAdd = canAddProfiles(me?.role);
   const [name, setName] = useState("");
   const [pin, setPin] = useState("");
   const [role, setRole] = useState<Role>("employee");
@@ -85,7 +86,7 @@ export function PeopleCard() {
   async function add() {
     const trimmed = name.trim();
     if (!trimmed || pin.length !== 4) return;
-    if (await run(createProfile({ name: trimmed, pin, role }))) {
+    if (await run(createProfile({ name: trimmed, pin, role: exec ? role : "employee" }))) {
       setName("");
       setPin("");
       setRole("employee");
@@ -110,7 +111,12 @@ export function PeopleCard() {
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
             Everyone picks their profile when they open the app, on any device, and everything they save gets their name
-            on it. {exec ? "You can add and delete profiles and choose what each person sees." : "Only an Executive can add or delete profiles, or change roles."}{" "}
+            on it.{" "}
+            {exec
+              ? "You can add and delete profiles and choose each person's role."
+              : canAdd
+                ? "You can add people; they start as Employees, and an Executive sets their role."
+                : "Only an Executive or the Admin can add people, and only an Executive can change roles."}{" "}
             The PIN keeps people sharing a tablet apart; it is not a password, and anyone with access to the Google Sheet
             can see every record in it.
           </p>
@@ -170,7 +176,7 @@ export function PeopleCard() {
             </ul>
           )}
 
-          {exec && (
+          {canAdd && (
             <div className="flex flex-wrap items-end gap-2 border-t border-border pt-3">
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Name</Label>
@@ -194,10 +200,14 @@ export function PeopleCard() {
                   onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
                 />
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Role</Label>
-                <RolePicker value={role} onChange={setRole} />
-              </div>
+              {exec ? (
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Role</Label>
+                  <RolePicker value={role} onChange={setRole} />
+                </div>
+              ) : (
+                <span className="pb-3 text-xs text-muted-foreground">Starts as an Employee</span>
+              )}
               <Button className="min-h-11" disabled={!name.trim() || pin.length !== 4} onClick={() => void add()}>
                 Add person
               </Button>

@@ -86,6 +86,11 @@ export function isExecutive(user: SignedInUser | null): boolean {
   return user?.role === "executive";
 }
 
+/** The Admin profile on the main computer: the only one that times people in and out. */
+export function isAdmin(user: SignedInUser | null): boolean {
+  return user?.role === "admin";
+}
+
 /**
  * Checks the PIN on the server. On success the page reloads, so nothing loaded for the
  * previous person stays in memory.

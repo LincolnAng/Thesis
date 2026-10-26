@@ -11,9 +11,8 @@ export interface NavItem {
  * The main tabs. Ask AI lives on Home.
  *
  * Inventory is everyone's: what's on the shelf, at each branch. Costing (what things cost and
- * what they sell for) and Salaries are Executives'. Time in is for whoever keeps time — the
- * timekeepers an Executive names under Salaries → Staff — and Executives, who have it inside
- * Salaries.
+ * what they sell for) and Salaries are Executives'. Time in is the Admin's alone (the profile
+ * on the main computer), so there is one place anyone is timed in or out.
  *
  * ONE name per section: a page that renames itself depending on a toggle elsewhere leaves a
  * note like "check Inventory" pointing at nothing.
@@ -31,11 +30,12 @@ export const NAV_ITEMS: NavItem[] = [
 const TIME_IN: NavItem = { href: "/salaries", label: "Time in", icon: Clock };
 
 /** The tabs as a profile sees them. */
-export function navItemsFor(role: Role | undefined, opts: { timekeeper?: boolean } = {}): NavItem[] {
+export function navItemsFor(role: Role | undefined): NavItem[] {
   if (role === "executive") return NAV_ITEMS;
   return NAV_ITEMS.flatMap((item) => {
     if (item.href === "/costing") return [];
-    if (item.href === "/salaries") return opts.timekeeper ? [TIME_IN] : [];
+    // Time in and out happens on the Admin profile only — the main computer.
+    if (item.href === "/salaries") return role === "admin" ? [TIME_IN] : [];
     return [item];
   });
 }

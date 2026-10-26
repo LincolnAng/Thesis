@@ -12,7 +12,6 @@ import { usersCollection } from "@/lib/sheets/users";
 import { activityCollection } from "@/lib/sheets/activity";
 import { payrollCollection, staffCollection, timeRecordsCollection } from "@/lib/sheets/payroll";
 import type { StaffMember } from "@/lib/store/types";
-import { isTimekeeper } from "@/lib/payroll/timekeepers";
 import { calendarItemsCollection } from "@/lib/sheets/calendar-items";
 import { stockTransfersCollection } from "@/lib/sheets/stock-transfers";
 import type { SheetCollection } from "@/lib/sheets/collection";
@@ -103,11 +102,10 @@ export async function POST(req: NextRequest) {
     // An employee's time record can only be their own: which staff member is theirs is read
     // from the sheet, never taken from the browser.
     let ownStaffIds: string[] | undefined;
-    if (session.role === "employee" && body.collection === "timeRecords") {
-      const [staff, settings] = await Promise.all([staffCollection.getAll() as Promise<StaffMember[]>, businessSettingsCollection.getAll()]);
-      // A timekeeper (Ruchel, Aunty Sandy) records anyone's time; anyone else, only their own.
-      const keeper = isTimekeeper(settings as { key: string; value: string }[], session.userId);
-      ownStaffIds = staff.filter((s) => s.active && (keeper || s.userId === session.userId)).map((s) => s.id);
+    if (session.role === "admin" && body.collection === "timeRecords") {
+      // The Admin (the main computer) times in and out anyone still working here.
+      const staff = (await staffCollection.getAll()) as StaffMember[];
+      ownStaffIds = staff.filter((s) => s.active).map((s) => s.id);
     }
     const decision = decideWrite({
       ownStaffIds,

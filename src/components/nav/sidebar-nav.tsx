@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChocolateBarLogo } from "@/components/ui/chocolate-bar-logo";
 import { cn } from "@/lib/utils";
-import { isTimekeeper } from "@/lib/payroll/timekeepers";
+import { ROLE_LABELS } from "@/lib/auth/roles";
 import { navItemsFor, SECONDARY_ITEMS, type NavItem } from "@/lib/nav-items";
 import { profileColor } from "@/lib/auth/profile-colors";
 import { useStore } from "@/lib/store/use-store";
@@ -40,7 +40,7 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
 export function SidebarNav() {
   const pathname = usePathname();
   const me = useCurrentUser();
-  const { users, businessSettings } = useStore();
+  const { users } = useStore();
   const myIndex = Math.max(0, users.findIndex((u) => u.id === me?.id));
 
   return (
@@ -60,7 +60,7 @@ export function SidebarNav() {
       </div>
 
       <nav className="flex w-full flex-col gap-1">
-        {navItemsFor(me?.role, { timekeeper: isTimekeeper(businessSettings, me?.id) }).map((item) => (
+        {navItemsFor(me?.role).map((item) => (
           <NavLink key={item.href} item={item} active={isActive(pathname, item.href)} />
         ))}
       </nav>
@@ -87,7 +87,7 @@ export function SidebarNav() {
             <span className="hidden min-w-0 min-[1024px]:block">
               <span className="block truncate text-[13px] font-semibold leading-tight">{me.name}</span>
               <span className="block text-[11px] leading-tight text-muted-foreground">
-                {me.role === "executive" ? "Executive" : "Employee"} · tap to switch
+                {ROLE_LABELS[me.role]} · tap to switch
               </span>
             </span>
           </button>

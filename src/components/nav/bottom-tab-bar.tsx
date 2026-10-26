@@ -4,10 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogOut, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { isTimekeeper } from "@/lib/payroll/timekeepers";
+import { ROLE_LABELS } from "@/lib/auth/roles";
 import { navItemsFor, SECONDARY_ITEMS } from "@/lib/nav-items";
 import { signOut, useCurrentUser } from "@/lib/auth/current-user";
-import { useStore } from "@/lib/store/use-store";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,13 +25,12 @@ const TAB = "flex min-w-16 flex-1 shrink-0 flex-col items-center gap-1 px-1 py-3
 export function BottomTabBar() {
   const pathname = usePathname();
   const me = useCurrentUser();
-  const { businessSettings } = useStore();
   const secondary = SECONDARY_ITEMS;
   const inSecondary = secondary.some((item) => pathname.startsWith(item.href));
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 flex overflow-x-auto border-t border-line/10 bg-card min-[900px]:hidden">
-      {navItemsFor(me?.role, { timekeeper: isTimekeeper(businessSettings, me?.id) }).map((item) => {
+      {navItemsFor(me?.role).map((item) => {
         const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
         const Icon = item.icon;
         return (
@@ -52,7 +50,7 @@ export function BottomTabBar() {
             <DropdownMenuLabel>
               {me.name}
               <span className="block text-xs font-normal text-muted-foreground">
-                {me.role === "executive" ? "Executive" : "Employee"}
+                {ROLE_LABELS[me.role]}
               </span>
             </DropdownMenuLabel>
           )}

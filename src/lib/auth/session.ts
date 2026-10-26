@@ -1,3 +1,4 @@
+import { parseRole } from "@/lib/auth/roles";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
@@ -55,7 +56,7 @@ function decode(value: string | undefined): Session | null {
     const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
     if (typeof data.exp !== "number" || data.exp < Date.now() / 1000) return null;
     if (typeof data.userId !== "string" || typeof data.name !== "string") return null;
-    return { userId: data.userId, name: data.name, role: data.role === "employee" ? "employee" : "executive" };
+    return { userId: data.userId, name: data.name, role: parseRole(data.role) };
   } catch {
     return null;
   }

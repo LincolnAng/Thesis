@@ -371,7 +371,7 @@ export interface SyncStatus {
  * batches but never costs, margins, R&D or payroll. Enforced on the server (lib/auth/permissions),
  * so hiding a screen is only ever the polite half of it.
  */
-export type Role = "executive" | "employee";
+export type Role = "executive" | "admin" | "employee";
 
 /**
  * Someone who uses this app, as every device sees them. The PIN itself never leaves the server:

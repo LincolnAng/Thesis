@@ -4,22 +4,29 @@ import { isValidPin, pinColumns } from "@/lib/auth/pin";
 import { readSession, requireSession, startSession } from "@/lib/auth/session";
 import { PROFILE_COLORS } from "@/lib/auth/profile-colors";
 import type { Role } from "@/lib/store/types";
+import { canAddProfiles, parseRole } from "@/lib/auth/roles";
 
 /**
  * The profile list, Netflix-style: anyone at the device can see who has a profile (names,
  * colours, roles — never a PIN), because that is what the picker shows before sign-in.
- * Adding people, changing roles and removing profiles are an Executive's job only. Anyone may
+ * Executives assign roles and remove profiles. Executives and the Admin (the main computer) add
+ * people — the Admin's start as Employees until an Executive gives them a role. Anyone may
  * change their own name, colour and PIN.
  *
  * "Executive" is read from the sheet on every request, not from the sign-in cookie: someone
  * made an Employee while still signed in loses these powers at once, not at their next sign-in.
  */
 
-const readRole = (raw: unknown): Role => (raw === "employee" ? "employee" : "executive");
+const readRole = (raw: unknown): Role => parseRole(raw);
 
 /** Is the signed-in person an Executive right now, by the sheet? */
 function isExecutiveNow(users: UserRecord[], userId: string | undefined): boolean {
   return Boolean(userId) && users.some((u) => u.id === userId && u.role === "executive");
+}
+
+/** Their role right now, by the sheet. */
+function roleNow(users: UserRecord[], userId: string | undefined): Role | null {
+  return users.find((u) => u.id === userId)?.role ?? null;
 }
 
 export async function GET() {
@@ -45,11 +52,13 @@ export async function POST(req: NextRequest) {
 
   const users = await usersCollection.getAll();
   // The very first profile is how a new shop gets in at all, so it needs no sign-in — and it
-  // is the owner's, so it is an executive. After that, only an executive adds people.
+  // is the owner's, so it is an executive. After that, an Executive or the Admin adds people.
   const firstProfile = users.length === 0;
+  let adderRole: Role | null = null;
   if (!firstProfile) {
     const session = await readSession();
-    if (!session || !isExecutiveNow(users, session.userId)) {
+    adderRole = session ? roleNow(users, session.userId) : null;
+    if (!canAddProfiles(adderRole)) {
       return NextResponse.json({ success: false, reason: "forbidden" }, { status: 403 });
     }
   }
@@ -61,7 +70,8 @@ export async function POST(req: NextRequest) {
   const record: UserRecord = {
     id,
     name,
-    role: firstProfile ? "executive" : readRole(body.role),
+    // Only an Executive chooses roles; someone the Admin adds starts as an Employee.
+    role: firstProfile ? "executive" : adderRole === "executive" ? readRole(body.role) : "employee",
     color: PROFILE_COLORS.includes(String(body.color)) ? String(body.color) : PROFILE_COLORS[users.length % PROFILE_COLORS.length],
     hasPin: true,
     ...pinColumns(id, pin, LEGACY_PIN_COLUMNS),

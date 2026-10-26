@@ -1,3 +1,4 @@
+import { parseRole as parseRoleShared } from "@/lib/auth/roles";
 import { createSheetCollection } from "./collection";
 import type { AppUser, Role } from "@/lib/store/types";
 
@@ -16,7 +17,7 @@ import type { AppUser, Role } from "@/lib/store/types";
  * themselves (four digits are 10,000 guesses). Once the redesign is live, run the cleanup
  * that blanks `pin` and `pinHash` and drop the legacy writes (see `LEGACY_PIN_COLUMNS`).
  *
- * `role` is "executive" or "employee". A blank role reads as executive: every profile made
+ * `role` is "executive", "admin" or "employee". A blank role reads as executive: every profile made
  * before roles came back had full access, and taking it away silently would lock the owners
  * out of their own costing. New profiles always get an explicit role.
  *
@@ -44,7 +45,7 @@ function idFromName(name: string): string {
 }
 
 export function parseRole(raw: string | undefined): Role {
-  return (raw ?? "").trim().toLowerCase() === "employee" ? "employee" : "executive";
+  return parseRoleShared(raw);
 }
 
 function userToRow(u: UserRecord): string[] {

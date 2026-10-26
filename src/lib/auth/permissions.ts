@@ -2,7 +2,6 @@ import type { ActivityEvent, CalendarItem, Entry, EntryType, PayrollRecord, RawM
 import type { ProductRow, RecipeRow } from "@/lib/store/sheet-shapes";
 import { entryIntegrityProblem } from "@/lib/transactions/ledger";
 import { daysIn, periodFor } from "@/lib/payroll/pay";
-import { isTimekeeper, TIMEKEEPERS_KEY } from "@/lib/payroll/timekeepers";
 
 /**
  * What each role may read and write — the one place that decides it, run on the server by
@@ -71,8 +70,6 @@ const EMPLOYEE_SETTING_KEYS = new Set([
   "wholesaleCaseSize",
   "wholesaleCaseWord",
   "unavailableDays",
-  // Which profiles keep time — so a timekeeper's screens know to show Time in.
-  TIMEKEEPERS_KEY,
   // The branches, for Inventory.
   "branches",
 ]);
@@ -142,9 +139,10 @@ function decideCalendarItem(req: WriteRequest): WriteDecision {
  * on the server — a cost- or margin-based price can't be recomputed without the costs, so the
  * employee copy carries the answer as a fixed price instead of the recipe for it.
  */
-export function redactForEmployee(data: BusinessData, sellingPrice: (product: ProductRow) => number, userId?: string): BusinessData {
-  // An employee sees only their own time record — unless they keep time for everyone.
-  const keeper = isTimekeeper(data.businessSettings, userId);
+export function redactForEmployee(data: BusinessData, sellingPrice: (product: ProductRow) => number, userId?: string, role: Role = "employee"): BusinessData {
+  // The Admin (the main computer) times everyone in and out, so sees every name and time; an
+  // employee sees only their own day records (their leave on the calendar), never anyone else's.
+  const keeper = role === "admin";
   const own = data.staff.filter((s) => s.active && (keeper || (userId && s.userId === userId)));
   const ownIds = new Set(own.map((s) => s.id));
   return {
@@ -219,7 +217,7 @@ const deny = (reason: string): WriteDecision => ({ allow: false, reason });
 /** Collections whose update/delete decision depends on the row already in the sheet. */
 export function needsExistingRow(role: Role, collection: CollectionName, op: WriteOp): boolean {
   if (collection === "calendarItems") return op === "update" || op === "delete";
-  return role === "employee" && (op === "update" || op === "delete") && ["entries", "products", "rawMaterials", "timeRecords"].includes(collection);
+  return role !== "executive" && (op === "update" || op === "delete") && ["entries", "products", "rawMaterials", "timeRecords"].includes(collection);
 }
 
 function stamp(req: WriteRequest): Record<string, unknown> | undefined {
@@ -295,8 +293,10 @@ export function decideWrite(req: WriteRequest): WriteDecision {
     case "activity":
       return op === "append" ? { allow: true, item: stamp(req) } : deny("forbidden");
     case "timeRecords": {
-      // Staff put in and fix their OWN times, for this pay period only — and only the clock
-      // times. Anyone else's, whether a day counts, and overtime are an Executive's to set.
+      // Time in and out happens on the Admin profile only — the main computer — for this pay
+      // period, and only the clock times. Whether a day counts, and overtime, are an
+      // Executive's to set. Employees can't time anyone in, themselves included.
+      if (req.role !== "admin") return deny("time_in_is_admin_only");
       if (op !== "append" && op !== "update") return deny("forbidden");
       if (!item) return deny("forbidden");
       const mine = req.ownStaffIds ?? [];
