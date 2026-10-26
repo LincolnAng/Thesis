@@ -20,8 +20,8 @@ import { fullName } from "@/lib/summary/product-sizes";
  * filtered by role here on the server, and executive-only tools aren't offered to an employee.
  * Web pages and tool results are treated as information, never as instructions.
  *
- * Each message goes to the smallest model that can handle it (lib/ai/route-model): Haiku for
- * small talk, Sonnet for records and lookups, Opus only for advice and analysis. BAi replies in
+ * Each message goes to the model it needs (lib/ai/route-model): Haiku for admin — small talk,
+ * logging, edits and looking up a figure — and Opus for everything else. BAi replies in
  * the language the person wrote in, and keeps short notes on how each person works (AI Memory)
  * along with their habits from their own records, so it fits itself to them over time.
  */

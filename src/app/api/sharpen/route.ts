@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth/session";
 import { callClaude, stripJsonFences } from "@/lib/ai/client";
 import { getAiSettings, type BotLanguage } from "@/lib/sheets/settings";
 import { languageRule } from "@/lib/ai/language";
+import { DEEP_MODEL } from "@/lib/ai/route-model";
 
 /**
  * Turns a vague question into two to four sharper ones, written against the owner's real data.
@@ -50,12 +51,13 @@ export async function POST(req: NextRequest) {
   }
 
   let apiKey: string | null = null;
-  let model: string | null = null;
+  let model: string = DEEP_MODEL;
   let language: BotLanguage = "english";
   try {
     const settings = await getAiSettings();
     apiKey = settings.apiKey;
-    model = settings.model;
+    // Not admin work, so the strong model — the one Settings picks, or Opus.
+    model = settings.model || DEEP_MODEL;
     language = settings.botLanguage;
   } catch {
     // Fall through to env defaults.

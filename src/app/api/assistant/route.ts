@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth/session";
 import { callClaude, stripJsonFences, type AnthropicMessage } from "@/lib/ai/client";
 import { assistantSystemPromptStatic, assistantSystemPromptDynamic, buildAssistantPrompt } from "@/lib/ai/prompts";
 import { getAiSettings } from "@/lib/sheets/settings";
+import { QUICK_MODEL } from "@/lib/ai/route-model";
 import { normalizeUnit } from "@/lib/units";
 import type { Entry } from "@/lib/store/types";
 import { INVESTMENT_CATEGORIES } from "@/lib/format";
@@ -186,12 +187,13 @@ export async function POST(req: NextRequest) {
   // to be fetched here AND again inside callClaude, two serial Sheets round trips before the
   // Anthropic request could even begin.
   let apiKey: string | null = null;
-  let model: string | null = null;
+  // Turning a typed line into a record is admin work: always the small, cheap model, whatever
+  // model Settings picks for the deeper questions.
+  const model = QUICK_MODEL;
   let botLanguage: Awaited<ReturnType<typeof getAiSettings>>["botLanguage"] = "english";
   try {
     const settings = await getAiSettings();
     apiKey = settings.apiKey;
-    model = settings.model;
     botLanguage = settings.botLanguage;
   } catch {
     // Sheets unavailable — fall back to English/env defaults rather than failing the request.

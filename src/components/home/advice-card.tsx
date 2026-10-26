@@ -2,6 +2,7 @@
 
 import { ExternalLink, TriangleAlert } from "lucide-react";
 import type { AdviceResult } from "@/app/api/advisor/route";
+import { InlineText } from "@/components/home/rich-text";
 
 /**
  * Business advice, kept deliberately small.
@@ -17,9 +18,9 @@ import type { AdviceResult } from "@/app/api/advisor/route";
 export function AdviceCard({ advice }: { advice: AdviceResult }) {
   return (
     <div className="max-w-[560px] space-y-3 rounded-2xl border border-line/15 bg-card p-4">
-      {advice.headline && <p className="font-display text-[17px] font-semibold leading-snug">{advice.headline}</p>}
+      {advice.headline && <p className="font-display text-[17px] font-semibold leading-snug"><InlineText text={advice.headline} /></p>}
 
-      {advice.because && <p className="text-[13px] leading-relaxed text-muted-foreground">{advice.because}</p>}
+      {advice.because && <p className="text-[13px] leading-relaxed text-muted-foreground"><InlineText text={advice.because} /></p>}
 
       {advice.steps.length > 0 && (
         <ol className="space-y-2 border-t border-line/10 pt-3">
@@ -29,9 +30,9 @@ export function AdviceCard({ advice }: { advice: AdviceResult }) {
                 {i + 1}
               </span>
               <div className="min-w-0">
-                <span className="text-[13px] font-semibold">{step.do}</span>
+                <span className="text-[13px] font-semibold"><InlineText text={step.do} /></span>
                 {step.detail && (
-                  <span className="block text-[12px] leading-relaxed text-muted-foreground">{step.detail}</span>
+                  <span className="block text-[12px] leading-relaxed text-muted-foreground"><InlineText text={step.detail} /></span>
                 )}
               </div>
             </li>
@@ -42,7 +43,7 @@ export function AdviceCard({ advice }: { advice: AdviceResult }) {
       {advice.headsUp && (
         <p className="flex items-start gap-1.5 rounded-lg bg-[#9A6B12]/[0.07] px-3 py-2 text-[12px] leading-relaxed text-[#7A5410]">
           <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          {advice.headsUp}
+          <span><InlineText text={advice.headsUp} /></span>
         </p>
       )}
 

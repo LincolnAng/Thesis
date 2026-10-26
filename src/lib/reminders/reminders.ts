@@ -33,8 +33,12 @@ export interface Reminder {
   itemId?: string;
 }
 
-/** The headings Today at a glance groups its tasks under, in this order. */
-export type ReminderGroup = "money" | "salaries" | "agenda" | "production" | "events" | "staff" | "stock";
+/**
+ * The headings Today at a glance groups its tasks under, in this order. Warnings are split by
+ * what they ask for — make more, use up what's expiring, buy — rather than one "stock alerts"
+ * pile; one that says production won't be ready in time goes under Production.
+ */
+export type ReminderGroup = "money" | "salaries" | "agenda" | "production" | "events" | "staff" | "low" | "expiring" | "buy" | "stock";
 export const GROUP_LABELS: Record<ReminderGroup, string> = {
   money: "Money",
   salaries: "Salaries",
@@ -42,9 +46,14 @@ export const GROUP_LABELS: Record<ReminderGroup, string> = {
   production: "Production",
   events: "Events & holidays",
   staff: "Staff",
-  stock: "Stock alerts",
+  low: "Running low",
+  expiring: "Expiring",
+  buy: "To buy",
+  stock: "Other stock alerts",
 };
-export const GROUP_ORDER: ReminderGroup[] = ["money", "salaries", "agenda", "production", "events", "staff", "stock"];
+export const GROUP_ORDER: ReminderGroup[] = ["money", "salaries", "agenda", "production", "events", "staff", "low", "expiring", "buy", "stock"];
+/** The groups that are stock warnings rather than tasks. */
+export const STOCK_GROUPS = new Set<ReminderGroup>(["low", "expiring", "buy", "stock"]);
 
 export function groupOf(r: Reminder): ReminderGroup {
   switch (r.category) {
@@ -65,6 +74,11 @@ export function groupOf(r: Reminder): ReminderGroup {
     case "leaves":
       return "staff";
     case "alerts":
+      // Which warning it is lives in its id: alert:low:…, alert:expiry:…, alert:short:…, alert:late:…
+      if (r.id.startsWith("alert:low:")) return "low";
+      if (r.id.startsWith("alert:expiry:")) return "expiring";
+      if (r.id.startsWith("alert:short:")) return "buy";
+      if (r.id.startsWith("alert:late:")) return "production";
       return "stock";
   }
 }

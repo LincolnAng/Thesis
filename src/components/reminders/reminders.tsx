@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { CalendarDays, Check, ChevronRight, Factory, HandCoins, ListChecks, PackageX, PartyPopper, UsersRound, Wallet } from "lucide-react";
+import { CalendarDays, Check, ChevronRight, Clock, Factory, HandCoins, ListChecks, PackageX, PartyPopper, ShoppingCart, TrendingDown, UsersRound, Wallet } from "lucide-react";
 import { useReminders } from "@/lib/reminders/use-reminders";
-import { GROUP_LABELS, GROUP_ORDER, groupOf, type Reminder, type ReminderGroup } from "@/lib/reminders/reminders";
+import { GROUP_LABELS, GROUP_ORDER, STOCK_GROUPS, groupOf, type Reminder, type ReminderGroup } from "@/lib/reminders/reminders";
 import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 import { updateCalendarItem } from "@/lib/store/store";
 import { useStore } from "@/lib/store/use-store";
@@ -14,7 +14,8 @@ import { dayKey } from "@/lib/home/today";
 /**
  * Today at a glance, on Home: a plain task list — what to do today, in a few words each, with a
  * box to tick — grouped by what it's about (money, salaries, your own calendar, production,
- * events, staff, stock), then what's coming up. Built from lib/reminders, which reads the
+ * events, staff), then the stock warnings by kind (running low, expiring, to buy), then what's
+ * coming up. Built from lib/reminders, which reads the
  * Calendar and every tab behind it, so it's personal: each person sees their own calendar items
  * and what was shared with them, and a task disappears once it's dealt with.
  *
@@ -30,6 +31,9 @@ const GROUP_ICON: Record<ReminderGroup, React.ReactNode> = {
   production: <Factory className="h-3.5 w-3.5" />,
   events: <PartyPopper className="h-3.5 w-3.5" />,
   staff: <UsersRound className="h-3.5 w-3.5" />,
+  low: <TrendingDown className="h-3.5 w-3.5" />,
+  expiring: <Clock className="h-3.5 w-3.5" />,
+  buy: <ShoppingCart className="h-3.5 w-3.5" />,
   stock: <PackageX className="h-3.5 w-3.5" />,
 };
 
@@ -125,7 +129,7 @@ export function TodayTasks() {
   // Not-done first; ticked ones sink to the bottom of their group.
   const order = (list: Reminder[]) => [...list].sort((a, b) => Number(isDone(a)) - Number(isDone(b)));
   const groups = GROUP_ORDER.map((g) => ({ g, items: order(today.filter((r) => groupOf(r) === g)) })).filter((x) => x.items.length > 0);
-  const left = today.filter((r) => !isDone(r) && groupOf(r) !== "stock").length;
+  const left = today.filter((r) => !isDone(r) && !STOCK_GROUPS.has(groupOf(r))).length;
 
   const todayIso = dayKey(new Date());
   const salesToday = entries.filter((e) => e.type === "SALE" && dayKey(e.timestamp) === todayIso).reduce((n, e) => n + (e.amount ?? 0), 0);
@@ -158,7 +162,7 @@ export function TodayTasks() {
           </div>
         ))
       )}
-      {!groups.some((x) => x.g === "stock") && <p className="mt-3 text-[13px] text-success">Stock is fine.</p>}
+      {!groups.some((x) => STOCK_GROUPS.has(x.g)) && <p className="mt-3 text-[13px] text-success">Stock is fine.</p>}
 
       {upcoming.length > 0 && (
         <div className="mt-4">

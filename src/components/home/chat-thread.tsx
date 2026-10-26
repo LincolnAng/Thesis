@@ -14,7 +14,7 @@ import { ReviewCard } from "@/components/home/review-card";
 import { AdviceCard } from "@/components/home/advice-card";
 import { PromptGateCard } from "@/components/home/prompt-gate-card";
 import { FormOfferCard } from "@/components/home/form-offer-card";
-import { RichText } from "@/components/home/rich-text";
+import { InlineText, RichText } from "@/components/home/rich-text";
 
 // A JSON-mode reply can't be streamed token by token, so there's no real progress to report —
 // this just makes the wait feel shorter than one motionless bubble does. Mounted only while a
@@ -222,7 +222,7 @@ export function ChatThread({
             <div className="max-w-[85%] space-y-1.5 rounded-2xl bg-secondary px-3.5 py-2.5 text-sm text-secondary-foreground">
               <div className="flex items-start gap-2">
                 <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                <p>{m.text}</p>
+                <p><InlineText text={m.text} /></p>
               </div>
               <Link href="/" className="pl-6 text-xs font-medium text-primary underline">
                 See summary

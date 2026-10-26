@@ -25,6 +25,11 @@ function inline(text: string, key: string): ReactNode[] {
   return out.map((part) => (typeof part === "string" ? part.replace(/\*\*/g, "").replace(/(^|\s)\*(\s|$)/g, "$1$2") : part));
 }
 
+/** One line of model text with its **bold** shown as bold and any stray asterisks dropped. */
+export function InlineText({ text }: { text: string }) {
+  return <>{inline(text, "t")}</>;
+}
+
 type Block =
   | { kind: "p"; lines: string[] }
   | { kind: "h"; text: string }

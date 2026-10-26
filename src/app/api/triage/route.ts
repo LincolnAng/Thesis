@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth/session";
 import { callClaude, stripJsonFences } from "@/lib/ai/client";
 import { getAiSettings } from "@/lib/sheets/settings";
+import { QUICK_MODEL } from "@/lib/ai/route-model";
 
 /**
  * Decides which of the three helpers should answer, when the word rules can't.
@@ -19,7 +20,7 @@ import { getAiSettings } from "@/lib/sheets/settings";
 export const maxDuration = 30;
 
 /** Small and fast on purpose: this is a one-word decision, not a reasoning task. */
-const TRIAGE_MODEL = process.env.ANTHROPIC_TRIAGE_MODEL || "claude-haiku-4-5";
+const TRIAGE_MODEL = process.env.ANTHROPIC_TRIAGE_MODEL || QUICK_MODEL;
 
 const SYSTEM = `You route one message from the owner of a small Filipino cacao spread business to the right helper. She writes in English, Tagalog, Cebuano, or a mix.
 
