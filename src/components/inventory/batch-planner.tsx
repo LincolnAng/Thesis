@@ -1,5 +1,7 @@
 "use client";
 
+import { SearchSelect } from "@/components/ui/search-select";
+import { productOptions } from "@/lib/summary/search-options";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -62,17 +64,14 @@ export function BatchPlannerDialog({
           <div className="flex flex-wrap items-end gap-2">
             <div className="min-w-[10rem] flex-1 space-y-1">
               <Label className="text-xs text-muted-foreground">Product</Label>
-              <select
-                className="h-9 w-full rounded-[var(--radius-control)] border border-input bg-transparent px-2 text-sm"
+              <SearchSelect
+                className="h-9 rounded-[var(--radius-control)] px-2 text-sm"
                 value={productId}
-                onChange={(e) => setProductId(e.target.value)}
-              >
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+                onChange={setProductId}
+                options={productOptions(products)}
+                placeholder="Choose a product"
+                ariaLabel="Product"
+              />
             </div>
             <div className="w-24 space-y-1">
               <Label className="text-xs text-muted-foreground">How many jars</Label>

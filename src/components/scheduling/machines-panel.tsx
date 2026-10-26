@@ -1,5 +1,6 @@
 "use client";
 
+import { SearchSelect } from "@/components/ui/search-select";
 import { useState } from "react";
 import { Factory, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -49,30 +50,22 @@ function OutputRow({
 
   return (
     <li className="flex flex-wrap items-center gap-2 py-1.5">
-      <select
-        className={`${SELECT} min-w-0 flex-1 basis-40`}
-        value={item ? item.key : ""}
-        onChange={(e) => {
-          const next = items.find((x) => x.key === e.target.value);
-          if (next) set({ itemId: next.id, kind: next.kind });
-        }}
-      >
-        {!item && <option value="">Pick what it makes…</option>}
-        <optgroup label="Products">
-          {items.filter((x) => x.kind === "product").map((x) => (
-            <option key={x.key} value={x.key}>
-              {x.name}
-            </option>
-          ))}
-        </optgroup>
-        <optgroup label="Raw materials">
-          {items.filter((x) => x.kind === "material").map((x) => (
-            <option key={x.key} value={x.key}>
-              {x.name}
-            </option>
-          ))}
-        </optgroup>
-      </select>
+      <div className="min-w-0 flex-1 basis-40">
+        <SearchSelect
+          className="h-8 rounded-md px-2 text-sm"
+          value={item ? item.key : ""}
+          onChange={(key) => {
+            const next = items.find((x) => x.key === key);
+            if (next) set({ itemId: next.id, kind: next.kind });
+          }}
+          placeholder="Pick what it makes…"
+          ariaLabel="What it makes"
+          options={[
+            ...items.filter((x) => x.kind === "product").map((x) => ({ value: x.key, label: x.name, group: "Products" })),
+            ...items.filter((x) => x.kind === "material").map((x) => ({ value: x.key, label: x.name, group: "Raw materials" })),
+          ]}
+        />
+      </div>
       <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
         <SettingNumberInput className="h-8 w-20" value={output.qty} onCommit={(n) => set({ qty: Math.max(0, n) })} />
         <span className="max-w-[5rem] truncate">{item?.unit ?? "units"}</span>

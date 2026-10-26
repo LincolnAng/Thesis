@@ -9,7 +9,8 @@ import { addEntry, addTingiMove } from "@/lib/store/store";
 import { blankEntryDraft } from "@/lib/store/blank-draft";
 import { fullName } from "@/lib/summary/product-sizes";
 import { PackagingEditor, ProductPicker, TINGI_UNITS, fieldCls, labelCls, packagingUsed, recipePackaging, type PackagingLine } from "@/components/production/add-batch-dialog";
-import { ProductSearch } from "@/components/production/product-search";
+import { SearchSelect } from "@/components/ui/search-select";
+import { newestFirst } from "@/lib/production/runs";
 import type { Product, TingiMove } from "@/lib/store/types";
 
 /** One bucket: a product's loose leftovers in one unit, with every time some went in or came out. */
@@ -47,7 +48,7 @@ export function bucketsOf(moves: TingiMove[]): Bucket[] {
  * Inventory and on Production.
  */
 export function TingiBuckets() {
-  const { tingi, products } = useStore();
+  const { tingi, products, productionRuns } = useStore();
   const [using, setUsing] = useState<string | null>(null);
   const [putting, setPutting] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
@@ -105,6 +106,7 @@ export function TingiBuckets() {
                           : t.usedForProductId
                             ? `into ${nameOf(t.usedForProductId)}`
                             : t.note || "used"}
+                        {t.direction === "out" && t.lotId ? ` · batch ${productionRuns.find((r) => r.lotId === t.lotId)?.name || t.lotId}` : ""}
                         {t.loggedByName ? ` · ${t.loggedByName}` : ""}
                       </span>
                     </li>
@@ -152,7 +154,7 @@ function PutInDialog({ onClose }: { onClose: () => void }) {
         <div className="flex flex-col gap-3">
           <div className={labelCls}>
             What product
-            <ProductSearch value={productId} onChange={setProductId} />
+            <ProductPicker value={productId} onChange={setProductId} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <label className={labelCls}>
@@ -188,9 +190,25 @@ function PutInDialog({ onClose }: { onClose: () => void }) {
 
 /** Taking some out of a bucket: repacked into finished jars, used in another product, or other. */
 function UseTingiDialog({ buckets, initial, onClose }: { buckets: Bucket[]; initial: string; onClose: () => void }) {
-  const { products, rawMaterials } = useStore();
+  const { products, rawMaterials, productionRuns } = useStore();
   const [key, setKey] = useState(initial);
   const bucket = buckets.find((b) => b.key === key) ?? buckets[0];
+  // The batch it came out of: by default the most recent one that left tingi here, else the most
+  // recent batch of all. Null until picked by hand.
+  const [batch, setBatch] = useState<string | null>(null);
+  const runs = newestFirst(productionRuns);
+  const fedIds = new Set((bucket?.moves ?? []).filter((m) => m.direction === "in" && m.runId).map((m) => m.runId));
+  const fed = runs.filter((r) => fedIds.has(r.id));
+  const batchId = batch ?? fed[0]?.id ?? runs[0]?.id ?? "";
+  const batchOptions = [
+    { value: "", label: "No batch" },
+    ...[...fed, ...runs.filter((r) => !fedIds.has(r.id))].map((r) => ({
+      value: r.id,
+      label: r.name || r.lotId,
+      hint: `${r.lotId} · ${dayLabel(r.date)}`,
+      group: fedIds.has(r.id) ? "Left tingi here" : "Other batches",
+    })),
+  ];
   const [qty, setQty] = useState("");
   const [use, setUse] = useState<"repack" | "ingredient" | "other">("repack");
   const [into, setInto] = useState(bucket?.productId ?? products[0]?.id ?? "");
@@ -218,7 +236,7 @@ function UseTingiDialog({ buckets, initial, onClose }: { buckets: Bucket[]; init
       qty: n,
       unit: bucket.unit,
       date,
-      lotId: "",
+      lotId: runs.find((r) => r.id === batchId)?.lotId ?? "",
       usedForProductId: use === "other" ? null : into,
       note: use === "other" ? note.trim() : use === "repack" ? "Repacked" : "Used as an ingredient",
     });
@@ -245,16 +263,22 @@ function UseTingiDialog({ buckets, initial, onClose }: { buckets: Bucket[]; init
           <DialogDescription>Take some out of a bucket — repacked into jars, or used to make something else.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
-          <label className={labelCls}>
+          <div className={labelCls}>
             From the bucket
-            <select value={bucket?.key} onChange={(e) => setKey(e.target.value)} className={fieldCls}>
-              {buckets.map((b) => (
-                <option key={b.key} value={b.key}>
-                  {nameOf(b.productId)} — {b.balance} {b.unit}
-                </option>
-              ))}
-            </select>
-          </label>
+            <SearchSelect
+              value={bucket?.key ?? ""}
+              onChange={(k) => {
+                setKey(k);
+                setBatch(null);
+              }}
+              options={buckets.map((b) => ({ value: b.key, label: nameOf(b.productId), hint: `${b.balance} ${b.unit}` }))}
+              ariaLabel="Which tingi"
+            />
+          </div>
+          <div className={labelCls}>
+            Batch
+            <SearchSelect value={batchId} onChange={setBatch} options={batchOptions} placeholder="No batch" ariaLabel="Batch" />
+          </div>
           <label className={labelCls}>
             How much ({bucket?.unit})
             <input autoFocus inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value.replace(/[^0-9.]/g, ""))} className={fieldCls} />
@@ -280,10 +304,10 @@ function UseTingiDialog({ buckets, initial, onClose }: { buckets: Bucket[]; init
             ))}
           </div>
           {use !== "other" && (
-            <label className={labelCls}>
+            <div className={labelCls}>
               {use === "repack" ? "Repacked as" : "Used in"}
               <ProductPicker value={into} onChange={(id) => { setInto(id); setPackaging(null); }} />
-            </label>
+            </div>
           )}
           {use === "repack" && (
             <>

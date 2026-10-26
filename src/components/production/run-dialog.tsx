@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Search } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { QuantityStepper } from "@/components/ui/quantity-stepper";
 import { useStore } from "@/lib/store/use-store";
@@ -12,8 +12,9 @@ import { findProduct } from "@/lib/summary/product-match";
 import { shelfLifeDays } from "@/lib/summary/business-config";
 import { MATERIAL_USE } from "@/lib/transactions/waste";
 import { batchesOf, cacaoMaterials, cacaoPerUnit, tingiBalance } from "@/lib/production/runs";
-import { ProductSearch } from "@/components/production/product-search";
-import { PackagingEditor, fieldCls, labelCls, packagingUsed, recipePackaging, type PackagingLine } from "@/components/production/add-batch-dialog";
+import { SearchSelect } from "@/components/ui/search-select";
+import { materialOptions } from "@/lib/summary/search-options";
+import { PackagingEditor, ProductPicker, fieldCls, labelCls, packagingUsed, recipePackaging, type PackagingLine } from "@/components/production/add-batch-dialog";
 import type { Entry, Product, ProductionRun } from "@/lib/store/types";
 
 const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -45,7 +46,13 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function ProductsDropdown({ made, onChange }: { made: Record<string, Made>; onChange: (id: string, qty: number) => void }) {
   const { products } = useStore();
   const [open, setOpen] = useState(false);
-  const families = familiesOf(products).sort((a, b) => a.head.name.localeCompare(b.head.name));
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  // Typing narrows the list to the families or sizes that match.
+  const families = familiesOf(products)
+    .sort((a, b) => a.head.name.localeCompare(b.head.name))
+    .map((f) => ({ ...f, all: f.all.filter((p) => !q || fullName(p, products).toLowerCase().includes(q)) }))
+    .filter((f) => f.all.length > 0);
   const chosen = products.filter((p) => (made[p.id]?.qty ?? 0) > 0);
   const row = (p: Product, label: string) => (
     <div key={p.id} className="flex items-center gap-2 px-3 py-1.5">
@@ -64,10 +71,16 @@ function ProductsDropdown({ made, onChange }: { made: Record<string, Made>; onCh
         <ChevronDown className={`h-4 w-4 shrink-0 transition ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
-        <div className="max-h-80 overflow-y-auto rounded-lg border border-line/20 bg-card py-1 shadow-sm">
-          {families.length === 0 && <p className="px-3 py-2 text-[13px] text-muted-foreground">No products in Inventory yet.</p>}
+        <div className="max-h-80 overflow-y-auto rounded-lg border border-line/20 bg-card pb-1 shadow-sm">
+          <div className="sticky top-0 z-10 border-b border-line/10 bg-card">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search products" aria-label="Search products" className="h-10 w-full bg-transparent pl-9 pr-3 text-[14px] outline-none" />
+          </div>
+          {families.length === 0 && (
+            <p className="px-3 py-2 text-[13px] text-muted-foreground">{products.length === 0 ? "No products in Inventory yet." : `Nothing matches “${query.trim()}”.`}</p>
+          )}
           {families.map(({ head, all }) =>
-            all.length === 1 ? (
+            all.length === 1 && all[0].id === head.id ? (
               row(head, fullName(head, products))
             ) : (
               <div key={head.id} className="border-b border-line/10 py-1 last:border-0">
@@ -265,16 +278,10 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
               <div className={materials.length > 1 ? "grid grid-cols-[1fr_7rem] gap-2" : ""}>
                 {/* Only when there's more than one kind of cacao to say which. */}
                 {materials.length > 1 && (
-                  <label className={labelCls}>
+                  <div className={labelCls}>
                     Which cacao
-                    <select value={materialId} onChange={(e) => setMaterialId(e.target.value)} className={fieldCls}>
-                      {materials.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                    <SearchSelect value={materialId} onChange={setMaterialId} options={materialOptions(materials)} ariaLabel="Which cacao" />
+                  </div>
                 )}
                 <label className={labelCls}>
                   Cacao ({unit})
@@ -311,16 +318,15 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
             )}
             {tingiChoices.length > 0 && (
               <div className="grid grid-cols-[1fr_7rem] gap-2">
-                <label className={labelCls}>
+                <div className={labelCls}>
                   Also from tingi
-                  <select value={fromChoice?.p.id} onChange={(e) => setFromTingiId(e.target.value)} className={fieldCls}>
-                    {tingiChoices.map((c) => (
-                      <option key={c.p.id} value={c.p.id}>
-                        {fullName(c.p, products)} — {c.qty} {unit}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                  <SearchSelect
+                    value={fromChoice?.p.id ?? ""}
+                    onChange={setFromTingiId}
+                    options={tingiChoices.map((c) => ({ value: c.p.id, label: fullName(c.p, products), hint: `${c.qty} ${unit}` }))}
+                    ariaLabel="Whose tingi"
+                  />
+                </div>
                 <label className={labelCls}>
                   How much ({unit})
                   <input inputMode="decimal" value={fromBucket} onChange={(e) => setFromBucket(decimal(e.target.value))} placeholder="0" className={fieldCls} />
@@ -365,7 +371,7 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
             {leftover > 0 && (
               <div className={labelCls}>
                 Into the tingi of
-                <ProductSearch value={leftoverTo} onChange={setTingiId} />
+                <ProductPicker value={leftoverTo} onChange={setTingiId} />
               </div>
             )}
           </Section>

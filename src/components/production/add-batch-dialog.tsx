@@ -6,7 +6,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useStore } from "@/lib/store/use-store";
 import { addEntry, addTingiMove } from "@/lib/store/store";
 import { blankEntryDraft } from "@/lib/store/blank-draft";
-import { familiesOf, fullName, sizeName } from "@/lib/summary/product-sizes";
+import { fullName } from "@/lib/summary/product-sizes";
+import { SearchSelect } from "@/components/ui/search-select";
+import { materialOptions, productOptions } from "@/lib/summary/search-options";
 import { shelfLifeDays } from "@/lib/summary/business-config";
 import { branchesOf, mainBranch } from "@/lib/inventory/branches";
 import { unitsPerBatch } from "@/lib/costing/per-unit";
@@ -20,29 +22,10 @@ const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padSt
 const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 const num = (s: string) => Number(s) || 0;
 
-/** A product and its sizes, one dropdown. */
-export function ProductPicker({ value, onChange, className = fieldCls }: { value: string; onChange: (id: string) => void; className?: string }) {
+/** A product and its sizes, one searchable dropdown — every product as Inventory lists it. */
+export function ProductPicker({ value, onChange, placeholder = "Choose a product" }: { value: string; onChange: (id: string) => void; placeholder?: string }) {
   const { products } = useStore();
-  const families = familiesOf(products).sort((a, b) => a.head.name.localeCompare(b.head.name));
-  return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} className={className}>
-      {families.map(({ head, all }) =>
-        all.length === 1 ? (
-          <option key={head.id} value={head.id}>
-            {fullName(head, products)}
-          </option>
-        ) : (
-          <optgroup key={head.id} label={head.name}>
-            {all.map((p) => (
-              <option key={p.id} value={p.id}>
-                {head.name} · {sizeName(p)}
-              </option>
-            ))}
-          </optgroup>
-        ),
-      )}
-    </select>
-  );
+  return <SearchSelect value={value} onChange={onChange} options={productOptions(products)} placeholder={placeholder} ariaLabel="Product" />;
 }
 
 export interface PackagingLine {
@@ -68,13 +51,9 @@ export function PackagingEditor({ lines, onChange }: { lines: PackagingLine[]; o
     <div className="flex flex-col gap-1.5">
       {lines.map((l, i) => (
         <div key={i} className="flex items-center gap-2">
-          <select value={l.materialId} onChange={(e) => set(i, { materialId: e.target.value })} className={`${fieldCls} min-w-0 flex-1`}>
-            {packaging.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
+          <div className="min-w-0 flex-1">
+            <SearchSelect value={l.materialId} onChange={(id) => set(i, { materialId: id })} options={materialOptions(packaging)} ariaLabel="Packaging" />
+          </div>
           <input inputMode="decimal" value={l.qty} onChange={(e) => set(i, { qty: e.target.value.replace(/[^0-9.]/g, "") })} className={`${fieldCls} w-20`} aria-label="How many" />
           <span className="w-12 truncate text-[12.5px] text-muted-foreground">{packaging.find((m) => m.id === l.materialId)?.unit}</span>
           <button type="button" aria-label="Remove" onClick={() => onChange(lines.filter((_, j) => j !== i))} className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary">
@@ -165,10 +144,10 @@ export function AddBatchDialog({ onClose }: { onClose: () => void }) {
           <p className="text-sm text-muted-foreground">Add a product first, in Costing.</p>
         ) : (
           <div className="flex flex-col gap-3">
-            <label className={labelCls}>
+            <div className={labelCls}>
               Product
               <ProductPicker value={productId} onChange={pickProduct} />
-            </label>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <label className={labelCls}>
                 Finished ({unit})

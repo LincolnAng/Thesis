@@ -3,6 +3,7 @@
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from "@/lib/format";
 import { useState } from "react";
 import { ChevronDown, Search, SlidersHorizontal, X } from "lucide-react";
+import { SearchSelect } from "@/components/ui/search-select";
 
 export interface TransactionFilters {
   text: string;
@@ -183,21 +184,16 @@ function Segment({
   stacked?: boolean;
 }) {
   return (
-    <label className={`${cell} flex-1 border-t ${stacked ? "min-[700px]:border-l" : "min-[1000px]:border-l min-[1000px]:border-t-0"}`}>
+    <div className={`${cell} flex-1 border-t ${stacked ? "min-[700px]:border-l" : "min-[1000px]:border-l min-[1000px]:border-t-0"}`}>
       <span className="text-[11px] font-semibold text-muted-foreground">{label}</span>
-      <select
+      <SearchSelect
         value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={`-ml-1 w-full bg-transparent text-[13.5px] outline-none ${value ? "font-semibold text-foreground" : "text-muted-foreground"}`}
-      >
-        <option value="">Any</option>
-        {options.map(([v, l]) => (
-          <option key={v} value={v}>
-            {l}
-          </option>
-        ))}
-      </select>
-    </label>
+        onChange={onChange}
+        options={[{ value: "", label: "Any" }, ...options.map(([v, l]) => ({ value: v, label: l }))]}
+        ariaLabel={label}
+        className={`h-auto rounded-none border-0 px-0 py-0 text-[13.5px] ${value ? "font-semibold text-foreground" : "text-muted-foreground"}`}
+      />
+    </div>
   );
 }
 

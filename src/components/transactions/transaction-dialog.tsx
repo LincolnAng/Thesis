@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { MapPin, Trash2, Banknote, Check, CircleCheck, Clock, FileText, Smartphone, CalendarRange, CalendarCheck, HandCoins, Heart, Boxes, Landmark, Minus, PackageX, Plus, Receipt, Search, ShoppingBag, Tag, Wrench, X, type LucideIcon } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Segmented, type Choice } from "@/components/ui/segmented";
+import { SearchSelect } from "@/components/ui/search-select";
 import { CustomerNameInput } from "@/components/customers/customer-name-input";
 import { SupplierNameInput } from "@/components/suppliers/supplier-name-input";
 import { ConfirmDeleteButton } from "@/components/data-table/confirm-delete-button";
@@ -801,19 +802,18 @@ export function TransactionDialog({
                 <input value={what} onChange={(ev) => setWhat(ev.target.value)} placeholder="e.g. Electricity bill" className={field} />
               </label>
               <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
-                <label className="flex flex-col gap-1">
+                <div className="flex flex-col gap-1">
                   <span className={label}>Category</span>
-                  <select value={category} onChange={(ev) => setCategory(ev.target.value)} className={field}>
-                    {allExpenseCategories(categoryBudgets)
+                  <SearchSelect
+                    value={category}
+                    onChange={setCategory}
+                    ariaLabel="Category"
+                    options={allExpenseCategories(categoryBudgets)
                       // Salaries are the owners' to record.
                       .filter((c) => exec || !PAYROLL_CATEGORIES.has(c.toLowerCase()))
-                      .map((c) => (
-                      <option key={c} value={c}>
-                        {EXPENSE_CATEGORY_LABELS[c] ?? c}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                      .map((c) => ({ value: c, label: EXPENSE_CATEGORY_LABELS[c] ?? c }))}
+                  />
+                </div>
                 <label className="flex flex-col gap-1">
                   <span className={label}>Amount (₱)</span>
                   <input inputMode="decimal" value={amount} onChange={(ev) => setAmount(ev.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" className={field} />
@@ -863,47 +863,26 @@ export function TransactionDialog({
           {/* Spoilage */}
           {kind === "spoilage" && (
             <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-[1fr_120px]">
-              <label className="flex flex-col gap-1">
+              <div className="flex flex-col gap-1">
                 <span className={label}>What was lost?</span>
-                <select
+                <SearchSelect
                   value={lostProduct}
-                  onChange={(ev) => {
+                  onChange={(v) => {
                     // A raw material or packaging picked here is waste, recorded under Waste.
-                    if (ev.target.value.startsWith("m:")) {
-                      setLostMaterial(ev.target.value.slice(2));
+                    if (v.startsWith("m:")) {
+                      setLostMaterial(v.slice(2));
                       setKind("waste");
-                    } else setLostProduct(ev.target.value);
+                    } else setLostProduct(v);
                   }}
-                  className={field}
-                >
-                  <option value="">Pick a product</option>
-                  <optgroup label="Products">
-                    {catalog.map(({ product: p, name }) => (
-                      <option key={p.id} value={p.id}>
-                        {name}
-                      </option>
-                    ))}
-                  </optgroup>
-                  {materialGroups.ingredient.length > 0 && (
-                    <optgroup label="Raw materials (recorded as waste)">
-                      {materialGroups.ingredient.map((m) => (
-                        <option key={m.id} value={`m:${m.id}`}>
-                          {m.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {materialGroups.supply.length > 0 && (
-                    <optgroup label="Packaging (recorded as waste)">
-                      {materialGroups.supply.map((m) => (
-                        <option key={m.id} value={`m:${m.id}`}>
-                          {m.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                </select>
-              </label>
+                  placeholder="Pick a product"
+                  ariaLabel="What was lost"
+                  options={[
+                    ...catalog.map(({ product: p, name }) => ({ value: p.id, label: name, group: "Products" })),
+                    ...materialGroups.ingredient.map((m) => ({ value: `m:${m.id}`, label: m.name, group: "Raw materials (recorded as waste)" })),
+                    ...materialGroups.supply.map((m) => ({ value: `m:${m.id}`, label: m.name, group: "Packaging (recorded as waste)" })),
+                  ]}
+                />
+              </div>
               <label className="flex flex-col gap-1">
                 <span className={label}>How many?</span>
                 <input inputMode="decimal" value={lostQty} onChange={(ev) => setLostQty(ev.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" className={field} />
@@ -919,30 +898,19 @@ export function TransactionDialog({
           {/* Waste: raw materials and packaging */}
           {kind === "waste" && (
             <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-[1fr_140px]">
-              <label className="flex flex-col gap-1">
+              <div className="flex flex-col gap-1">
                 <span className={label}>What was lost?</span>
-                <select value={lostMaterial} onChange={(ev) => setLostMaterial(ev.target.value)} className={field}>
-                  <option value="">Pick a raw material or packaging</option>
-                  {materialGroups.ingredient.length > 0 && (
-                    <optgroup label="Raw materials">
-                      {materialGroups.ingredient.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {materialGroups.supply.length > 0 && (
-                    <optgroup label="Packaging">
-                      {materialGroups.supply.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                </select>
-              </label>
+                <SearchSelect
+                  value={lostMaterial}
+                  onChange={setLostMaterial}
+                  placeholder="Pick a raw material or packaging"
+                  ariaLabel="What was lost"
+                  options={[
+                    ...materialGroups.ingredient.map((m) => ({ value: m.id, label: m.name, group: "Raw materials" })),
+                    ...materialGroups.supply.map((m) => ({ value: m.id, label: m.name, group: "Packaging" })),
+                  ]}
+                />
+              </div>
               <label className="flex flex-col gap-1">
                 <span className={label}>How much?{material ? ` (${material.unit})` : ""}</span>
                 <input inputMode="decimal" value={lostQty} onChange={(ev) => setLostQty(ev.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" className={field} />

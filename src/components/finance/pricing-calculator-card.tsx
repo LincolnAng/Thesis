@@ -1,5 +1,7 @@
 "use client";
 
+import { SearchSelect } from "@/components/ui/search-select";
+import { materialOptions } from "@/lib/summary/search-options";
 import { useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronUp, Minus, Plus, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -114,18 +116,15 @@ function IngredientRowEditor({
     // One line per ingredient: what, how much, in what, what it costs. Splitting the name and
     // the quantity over two lines made a five-ingredient recipe read like ten loose fields.
     <div className="flex items-center gap-2">
-      <select
-        value={row.materialId}
-        onChange={(e) => onUpdate(row.id, { materialId: e.target.value })}
-        aria-label="Ingredient"
-        className="h-11 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2 text-sm"
-      >
-        {rawMaterials.map((m) => (
-          <option key={m.id} value={m.id}>
-            {m.name}
-          </option>
-        ))}
-      </select>
+      <div className="min-w-0 flex-1">
+        <SearchSelect
+          value={row.materialId}
+          onChange={(id) => onUpdate(row.id, { materialId: id })}
+          options={materialOptions(rawMaterials, true)}
+          ariaLabel="Ingredient"
+          className="rounded-md px-2 text-sm"
+        />
+      </div>
       <Input
         type="number"
         inputMode="decimal"
@@ -167,18 +166,15 @@ function ComponentRowEditor({
   const unitCost = component ? productCostPerJar(component, costCtx).costPerJar : 0;
   return (
     <div className="flex items-center gap-2">
-      <select
-        value={row.productId}
-        onChange={(e) => onUpdate(row.id, { productId: e.target.value })}
-        aria-label="In-house ingredient"
-        className="h-11 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2 text-sm"
-      >
-        {options.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.name}
-          </option>
-        ))}
-      </select>
+      <div className="min-w-0 flex-1">
+        <SearchSelect
+          value={row.productId}
+          onChange={(id) => onUpdate(row.id, { productId: id })}
+          options={options.map((p) => ({ value: p.id, label: p.name }))}
+          ariaLabel="In-house ingredient"
+          className="rounded-md px-2 text-sm"
+        />
+      </div>
       <Input
         type="number"
         inputMode="decimal"
