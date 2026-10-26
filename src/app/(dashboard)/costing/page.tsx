@@ -1,7 +1,7 @@
 "use client";
 
-import { Suspense } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import { PageTabs } from "@/components/layout/page";
 import { ProductsScreen, type CostingList } from "@/components/costing/products-screen";
 import { ProductDetail } from "@/components/costing/product-detail";
@@ -25,24 +25,56 @@ const LIST_FOR_VIEW: Record<View, CostingList> = {
   packaging: "supply",
 };
 
+interface Place {
+  view: View;
+  productId: string | null;
+}
+
+function parse(params: URLSearchParams): Place {
+  const raw = params.get("view");
+  return {
+    view: raw === "materials" || raw === "packaging" ? raw : "products",
+    // ?view=pricing&product=… is the old price calculator's address; it now means the product.
+    productId: params.get("product"),
+  };
+}
+
 function CostingPageInner() {
   const me = useCurrentUser();
   const searchParams = useSearchParams();
-  const router = useRouter();
   const pathname = usePathname();
+
+  // Which list or product is showing is kept here and written to the address bar, rather than
+  // asking the router to navigate. Opening Costing at an address with a query (a refresh on a
+  // product, a link from another tab) left the router unable to navigate at all, so every tab
+  // and the back link went dead. Links from elsewhere still land on the right place, and the
+  // browser's back button still steps through the tabs.
+  const key = searchParams.toString();
+  const [place, setPlace] = useState<Place>(() => parse(new URLSearchParams(key)));
+  // Arriving from a link elsewhere in the app: follow the new address.
+  const [seenKey, setSeenKey] = useState(key);
+  if (key !== seenKey) {
+    setSeenKey(key);
+    setPlace(parse(new URLSearchParams(key)));
+  }
+  useEffect(() => {
+    const onPop = () => setPlace(parse(new URLSearchParams(window.location.search)));
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
   // Costing is Executives'; anyone else who lands here (an old link) gets Inventory.
   if (!isExecutive(me)) return <InventoryScreen />;
 
-  const raw = searchParams.get("view");
-  const view: View = raw === "materials" || raw === "packaging" ? raw : "products";
-  // ?view=pricing&product=… is the old price calculator's address; it now means the product.
-  const productId = searchParams.get("product");
+  const { view, productId } = place;
   const go = (next: View, product?: string) => {
     const params = new URLSearchParams();
     if (next !== "products") params.set("view", next);
     if (product) params.set("product", product);
     const query = params.toString();
-    router.push(query ? `${pathname}?${query}` : pathname, { scroll: true });
+    setPlace({ view: next, productId: product ?? null });
+    window.history.pushState(null, "", query ? `${pathname}?${query}` : pathname);
+    window.scrollTo({ top: 0 });
   };
 
   const subnav = (
