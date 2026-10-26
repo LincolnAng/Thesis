@@ -109,7 +109,7 @@ export function productExpiry(
   let out = entries
     .filter(
       (e) =>
-        (e.type === "SALE" || (e.type === "WASTE" && e.category !== "material_waste") || e.type === "INVENTORY_OUT") &&
+        (e.type === "SALE" || (e.type === "WASTE" && e.category !== "material_waste") || (e.type === "INVENTORY_OUT" && e.category !== "material_use")) &&
         e.quantity &&
         e.quantity > 0 &&
         matches(e, product),

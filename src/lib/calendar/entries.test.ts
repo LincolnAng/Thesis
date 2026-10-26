@@ -121,7 +121,7 @@ test("day-offs and shipments come straight from their records", () => {
   assert.match(ship.title, /Sent: 12 packs/);
 });
 
-test("event products link to their card in Costing, and alerts to the right Production table", () => {
+test("event products link to their card in Costing, and alerts to the right Forecast table", () => {
   const out = buildCalendarEntries(
     input({
       products: [product({ stockQty: 2 })],
@@ -133,8 +133,8 @@ test("event products link to their card in Costing, and alerts to the right Prod
   const ev = out.find((e) => e.category === "events")!;
   assert.equal(ev.details.find((d) => d.value === "30 packs")?.href, "/costing?product=p1");
   assert.equal(ev.details.find((d) => d.value === "5 jars")?.href, "/costing");
-  assert.equal(out.find((e) => e.id === "alert:short:Jars")?.href, "/production#what-to-buy");
-  assert.equal(out.find((e) => e.id === "alert:low:p1")?.href, "/production#what-to-make");
+  assert.equal(out.find((e) => e.id === "alert:short:Jars")?.href, "/forecast#what-to-buy");
+  assert.equal(out.find((e) => e.id === "alert:low:p1")?.href, "/forecast#what-to-make");
 });
 
 test("leave days in a row show as one leave on the calendar", async () => {

@@ -161,8 +161,8 @@ export function buildCalendarEntries(input: CalendarInput): CalendarEntry[] {
           { label: "Status", value: "Suggested by the production plan — not yet scheduled" },
         ],
         tone: "neutral",
-        href: "/production#what-to-make",
-        hrefLabel: "See what to make in Production",
+        href: "/forecast#what-to-make",
+        hrefLabel: "See what to make in Forecast",
       });
     }
   }
@@ -341,8 +341,8 @@ export function buildCalendarEntries(input: CalendarInput): CalendarEntry[] {
           { label: "Warning level", value: String(p.lowStockThreshold) },
         ],
         tone: p.stockQty <= 0 ? "bad" : "warn",
-        href: "/production#what-to-make",
-        hrefLabel: "See what to make in Production",
+        href: "/forecast#what-to-make",
+        hrefLabel: "See what to make in Forecast",
       });
     }
     for (const lot of input.lotsByProduct[p.id] ?? []) {
@@ -376,8 +376,8 @@ export function buildCalendarEntries(input: CalendarInput): CalendarEntry[] {
       subtitle: `${s.short} ${s.unit} short for the plan`,
       details: [{ label: "Short by", value: `${s.short} ${s.unit}` }],
       tone: "warn",
-      href: "/production#what-to-buy",
-      hrefLabel: "See what to buy in Production",
+      href: "/forecast#what-to-buy",
+      hrefLabel: "See what to buy in Forecast",
     });
   }
   for (const late of input.late) {
@@ -390,8 +390,8 @@ export function buildCalendarEntries(input: CalendarInput): CalendarEntry[] {
       subtitle: `${late.qty} ${late.unit} late`,
       details: [{ label: "Why", value: "Not enough production days before it's needed. Free up days or add a machine." }],
       tone: "bad",
-      href: "/production#what-to-make",
-      hrefLabel: "See what to make in Production",
+      href: "/forecast#what-to-make",
+      hrefLabel: "See what to make in Forecast",
     });
   }
 

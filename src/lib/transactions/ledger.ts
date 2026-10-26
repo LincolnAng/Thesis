@@ -727,7 +727,7 @@ export function entryIntegrityProblem(e: Partial<Entry>): string | null {
   if (e.paymentTerm === "payable" && e.type !== "EXPENSE" && e.type !== "ASSET") return "payable_must_be_an_expense";
 
   if (e.dueDate && !DAY_RE.test(e.dueDate)) return "invalid_due_date";
-  if (e.paymentMethod && e.paymentMethod !== "cash" && e.paymentMethod !== "bank_transfer" && e.paymentMethod !== "check") return "invalid_payment_method";
+  if (e.paymentMethod && !(PAYMENT_METHODS as readonly string[]).includes(e.paymentMethod)) return "invalid_payment_method";
   if (e.installments) {
     const p = e.installments;
     if (!["weekly", "monthly", "quarterly", "yearly"].includes(p.frequency) || !(p.count >= 1 && p.count <= 240) || !DAY_RE.test(p.firstDue)) return "invalid_installments";

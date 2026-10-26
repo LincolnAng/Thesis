@@ -161,6 +161,11 @@ export interface Entry {
   packagingUsed?: { materialId: string; qty: number }[] | null;
   /** Repacked from the tingi bucket: already-made product, so it draws no ingredients. */
   fromTingi?: boolean | null;
+  /**
+   * The production run (ProductionRun) this belongs to: the roast that took the raw cacao off
+   * the shelf, or a batch made from that roast — which then draws no raw cacao of its own.
+   */
+  runId?: string | null;
 }
 
 export interface RecipeIngredientRow {
@@ -540,6 +545,59 @@ export interface TingiMove {
   /** What it was used for, for what's taken out. */
   usedForProductId: string | null;
   note: string;
+  loggedByName?: string | null;
+  createdAt: string;
+}
+
+/**
+ * One production run, as logged in Production: raw cacao fed into the roaster, the usable
+ * cacao that came out, how much of it went into finished products, and what was left over
+ * (into the cacao bucket). The roast and the batches are entries carrying this run's id;
+ * the bucket moves carry it too. Quantities are in the cacao material's own unit.
+ */
+export interface ProductionRun {
+  id: string;
+  /** "YYYY-MM-DD" */
+  date: string;
+  lotId: string;
+  /** The raw cacao material roasted. */
+  materialId: string;
+  unit: string;
+  /** Raw cacao fed into the roaster. 0 when nothing was roasted (cacao from the bucket only). */
+  rawQty: number;
+  /** Usable cacao that came out of the roast. */
+  usableQty: number;
+  /** Usable cacao taken from the leftover bucket for this run. */
+  fromBucketQty: number;
+  /** Usable cacao that went into the finished products. */
+  intoProductsQty: number;
+  /** What was left over, put into the bucket. */
+  leftoverQty: number;
+  /** "Tablea · 100g × 40; Spread × 12" — for whoever reads the sheet; the batches are the record. */
+  made: string;
+  notes: string;
+  loggedByName?: string | null;
+  createdAt: string;
+}
+
+/**
+ * One movement in the leftover cacao bucket: usable cacao put in (left over from a run, or
+ * found and added by hand) or taken out — and for what. The bucket is what's been put in minus
+ * what's been taken out, never a stored total.
+ */
+export interface CacaoMove {
+  id: string;
+  /** The cacao material it is. */
+  materialId: string;
+  direction: "in" | "out";
+  qty: number;
+  unit: string;
+  /** "YYYY-MM-DD" */
+  date: string;
+  /** The run it came from or went into, when there was one. */
+  runId: string | null;
+  /** Why it went in or what it was used for: "Left over from LOT-…", "Samples"… */
+  purpose: string;
   loggedByName?: string | null;
   createdAt: string;
 }

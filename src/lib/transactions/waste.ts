@@ -20,3 +20,14 @@ export function isMaterialWaste(e: Pick<Entry, "type" | "category">): boolean {
 export function isProductSpoilage(e: Pick<Entry, "type" | "category">): boolean {
   return e.type === "WASTE" && e.category !== MATERIAL_WASTE;
 }
+
+/**
+ * Raw material used up in production outside a batch's recipe — raw cacao fed into the roaster
+ * in a production run. A stock-out of the material (never of a product): it comes off the
+ * material's shelf and counts as consumed, like a batch's draw.
+ */
+export const MATERIAL_USE = "material_use";
+
+export function isMaterialUse(e: Pick<Entry, "type" | "category">): boolean {
+  return e.type === "INVENTORY_OUT" && e.category === MATERIAL_USE;
+}

@@ -1,4 +1,4 @@
-import type { ActivityEvent, CalendarItem, Entry, EntryType, PayrollRecord, RawMaterialStock, Role, StaffMember, StockTransfer, TimeRecord, TingiMove } from "@/lib/store/types";
+import type { ActivityEvent, CalendarItem, Entry, EntryType, PayrollRecord, RawMaterialStock, Role, StaffMember, StockTransfer, TimeRecord, TingiMove, ProductionRun, CacaoMove } from "@/lib/store/types";
 import type { ProductRow, RecipeRow } from "@/lib/store/sheet-shapes";
 import { entryIntegrityProblem } from "@/lib/transactions/ledger";
 import { daysIn, periodFor } from "@/lib/payroll/pay";
@@ -37,7 +37,9 @@ export type CollectionName =
   | "payroll"
   | "calendarItems"
   | "stockTransfers"
-  | "tingi";
+  | "tingi"
+  | "productionRuns"
+  | "cacaoBucket";
 
 export type WriteOp = "append" | "update" | "delete" | "migrate";
 
@@ -112,6 +114,8 @@ export interface BusinessData {
   calendarItems: CalendarItem[];
   stockTransfers: StockTransfer[];
   tingi: TingiMove[];
+  productionRuns: ProductionRun[];
+  cacaoBucket: CacaoMove[];
 }
 
 /**
@@ -287,8 +291,10 @@ export function decideWrite(req: WriteRequest): WriteDecision {
       return { allow: true };
     case "tingi":
     case "stockTransfers":
-      // Moving stock between branches, or in and out of a tingi bucket, is everyday work;
-      // taking a move back is an Executive's.
+    case "productionRuns":
+    case "cacaoBucket":
+      // Moving stock between branches, in and out of a tingi or cacao bucket, and logging a
+      // production run are everyday work; taking one back is an Executive's.
       return op === "append" && item ? { allow: true, item: { ...item, loggedByName: req.user.name } } : deny("forbidden");
     case "businessSettings":
       return op === "update" && item && EMPLOYEE_WRITABLE_SETTING_KEYS.has(String(item.key))

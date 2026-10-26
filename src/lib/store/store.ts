@@ -19,7 +19,7 @@ import {
 import { findProduct } from "@/lib/summary/product-match";
 import { componentDraws, drawOf } from "@/lib/production/batch-draws";
 import { ENTRY_TYPE_LABELS, formatPeso } from "@/lib/format";
-import { isMaterialWaste } from "@/lib/transactions/waste";
+import { isMaterialUse, isMaterialWaste } from "@/lib/transactions/waste";
 import { currentUser, signOut } from "@/lib/auth/current-user";
 import type { BusinessSettingRow } from "@/lib/sheets/business-settings";
 import type {
@@ -45,6 +45,8 @@ import type {
   CalendarItem,
   StockTransfer,
   TingiMove,
+  ProductionRun,
+  CacaoMove,
 } from "./types";
 
 export interface StoreState {
@@ -69,6 +71,9 @@ export interface StoreState {
   /** Stock moved between branches. */
   stockTransfers: StockTransfer[];
   tingi: TingiMove[];
+  /** Production runs, and the leftover cacao bucket they fill. */
+  productionRuns: ProductionRun[];
+  cacaoBucket: CacaoMove[];
   /** Business-level numbers the owner sets once — hourly labor rate today. */
   businessSettings: Record<string, string>;
   tokenUsage: TokenUsage;
@@ -124,6 +129,8 @@ function defaultState(): StoreState {
     calendarItems: [],
     stockTransfers: [],
     tingi: [],
+    productionRuns: [],
+    cacaoBucket: [],
     businessSettings: {},
     tokenUsage: {
       totalInputTokens: 0,
@@ -307,6 +314,8 @@ const COLLECTION_NOUNS: Record<string, string> = {
   calendarItems: "calendar item",
   stockTransfers: "stock transfer",
   tingi: "tingi",
+  productionRuns: "production run",
+  cacaoBucket: "cacao bucket",
 };
 
 const OP_VERBS: Record<string, string> = { append: "added", update: "changed", delete: "deleted" };
@@ -674,6 +683,8 @@ async function loadAllFromServer() {
         calendarItems: Array.isArray(json.calendarItems) ? mergePending(json.calendarItems as CalendarItem[], prev.calendarItems) : prev.calendarItems,
         stockTransfers: Array.isArray(json.stockTransfers) ? mergePending(json.stockTransfers as StockTransfer[], prev.stockTransfers) : prev.stockTransfers,
         tingi: Array.isArray(json.tingi) ? mergePending(json.tingi as TingiMove[], prev.tingi) : prev.tingi,
+        productionRuns: Array.isArray(json.productionRuns) ? mergePending(json.productionRuns as ProductionRun[], prev.productionRuns) : prev.productionRuns,
+        cacaoBucket: Array.isArray(json.cacaoBucket) ? mergePending(json.cacaoBucket as CacaoMove[], prev.cacaoBucket) : prev.cacaoBucket,
         businessSettings: businessSettingRowsToRecord(businessSettingsMigration.items),
         loadedFromServer: true,
       };
@@ -804,8 +815,9 @@ function applyEntrySideEffects(
     return { products, rawMaterials, touchedProductIds, touchedMaterialIds };
   }
 
-  // Raw materials or packaging thrown away come off their own stock, never a product's.
-  if (isMaterialWaste(entry)) {
+  // Raw materials or packaging thrown away — or raw cacao fed into the roaster in a production
+  // run — come off their own stock, never a product's.
+  if (isMaterialWaste(entry) || isMaterialUse(entry)) {
     const material = findRawMaterialByName(rawMaterials, entry.sku);
     if (material) {
       rawMaterials = rawMaterials.map((m) => (m.id === material.id ? { ...m, qty: Math.max(0, m.qty - delta) } : m));
@@ -1385,7 +1397,7 @@ function mergePending<T extends { id: string }>(server: T[], local: T[]): T[] {
   return [...server.filter((r) => !pendingIds.has(r.id)), ...pending];
 }
 
-async function saveSalaryRow(collection: "staff" | "timeRecords" | "payroll" | "calendarItems" | "stockTransfers" | "tingi", op: "append" | "update", item: { id: string }): Promise<boolean> {
+async function saveSalaryRow(collection: "staff" | "timeRecords" | "payroll" | "calendarItems" | "stockTransfers" | "tingi" | "productionRuns" | "cacaoBucket", op: "append" | "update", item: { id: string }): Promise<boolean> {
   pendingSalaryIds.add(item.id);
   const ok = await mirrorOp(collection, op, { id: op === "update" ? item.id : undefined, item });
   // Once the server has it, the next poll will return it; until then keep showing ours.
@@ -1577,6 +1589,47 @@ export function addTingiMove(input: Omit<TingiMove, "id" | "createdAt" | "logged
 export function deleteTingiMove(id: string) {
   setState((prev) => ({ ...prev, tingi: prev.tingi.filter((t) => t.id !== id) }));
   void mirrorOp("tingi", "delete", { id });
+}
+
+// --- Production runs -------------------------------------------------------------------------
+
+/**
+ * Saves a production run with everything it moved: the run itself, the entries (the raw cacao
+ * roasted, the batches made — each carrying the run's id) and the cacao bucket moves.
+ */
+export function addProductionRun(
+  run: Omit<ProductionRun, "id" | "createdAt" | "loggedByName">,
+  entries: (Omit<Entry, "id" | "runId">)[],
+  moves: Omit<CacaoMove, "id" | "createdAt" | "loggedByName" | "runId">[],
+): ProductionRun {
+  const who = currentUser()?.name ?? null;
+  const saved: ProductionRun = { ...run, id: genId("run"), loggedByName: who, createdAt: new Date().toISOString() };
+  setState((prev) => ({ ...prev, productionRuns: [...prev.productionRuns, saved] }));
+  void saveSalaryRow("productionRuns", "append", saved);
+  for (const e of entries) addEntry({ ...e, runId: saved.id });
+  for (const m of moves) addCacaoMove({ ...m, runId: saved.id });
+  return saved;
+}
+
+/** Takes a run back: its entries (stock goes back) and its bucket moves go with it. */
+export function deleteProductionRun(id: string) {
+  for (const e of state.entries.filter((x) => x.runId === id)) deleteEntry(e.id);
+  for (const m of state.cacaoBucket.filter((x) => x.runId === id)) deleteCacaoMove(m.id);
+  setState((prev) => ({ ...prev, productionRuns: prev.productionRuns.filter((r) => r.id !== id) }));
+  void mirrorOp("productionRuns", "delete", { id });
+}
+
+/** Usable cacao into or out of the leftover bucket. */
+export function addCacaoMove(input: Omit<CacaoMove, "id" | "createdAt" | "loggedByName">): CacaoMove {
+  const m: CacaoMove = { ...input, id: genId("cacao"), loggedByName: currentUser()?.name ?? null, createdAt: new Date().toISOString() };
+  setState((prev) => ({ ...prev, cacaoBucket: [...prev.cacaoBucket, m] }));
+  void saveSalaryRow("cacaoBucket", "append", m);
+  return m;
+}
+
+export function deleteCacaoMove(id: string) {
+  setState((prev) => ({ ...prev, cacaoBucket: prev.cacaoBucket.filter((m) => m.id !== id) }));
+  void mirrorOp("cacaoBucket", "delete", { id });
 }
 
 export function deleteStockTransfer(id: string) {

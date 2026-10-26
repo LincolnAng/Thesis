@@ -1,7 +1,7 @@
 "use client";
 
-import { ProductionScreen } from "@/components/production/production-screen";
+import { ProductionLogScreen } from "@/components/production/production-log-screen";
 
 export default function ProductionPage() {
-  return <ProductionScreen section="production" />;
+  return <ProductionLogScreen />;
 }

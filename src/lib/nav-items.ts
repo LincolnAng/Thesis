@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Boxes, CalendarDays, Clock, Factory, Home, Settings, Tag, Wallet, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, Boxes, CalendarDays, Clock, Factory, Home, Settings, Tag, TrendingUp, Wallet, type LucideIcon } from "lucide-react";
 import type { Role } from "@/lib/store/types";
 
 export interface NavItem {
@@ -10,7 +10,8 @@ export interface NavItem {
 /**
  * The main tabs. Ask AI lives on Home.
  *
- * Inventory is everyone's: what's on the shelf, at each branch. Costing (what things cost and
+ * Inventory is everyone's: what's on the shelf, at each branch. Production is what was made
+ * (roasts, batches, leftover cacao); Forecast is what to make and buy next. Costing (what things cost and
  * what they sell for) and Salaries are Executives'. Time in is the Admin's alone (the profile
  * on the main computer), so there is one place anyone is timed in or out.
  *
@@ -23,6 +24,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/inventory", label: "Inventory", icon: Boxes },
   { href: "/costing", label: "Costing", icon: Tag },
   { href: "/production", label: "Production", icon: Factory },
+  { href: "/forecast", label: "Forecast", icon: TrendingUp },
   { href: "/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/salaries", label: "Salaries", icon: Wallet },
 ];

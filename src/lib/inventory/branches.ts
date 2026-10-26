@@ -57,7 +57,7 @@ function movement(e: Entry, product: Product, products: Product[]): number {
   const isThis = findProduct(products, e.sku)?.id === product.id;
   if (!isThis) return 0;
   if (e.type === "INVENTORY_IN") return e.quantity;
-  if (e.type === "SALE" || e.type === "INVENTORY_OUT" || (e.type === "WASTE" && e.category !== "material_waste")) return -e.quantity;
+  if (e.type === "SALE" || (e.type === "INVENTORY_OUT" && e.category !== "material_use") || (e.type === "WASTE" && e.category !== "material_waste")) return -e.quantity;
   return 0;
 }
 

@@ -190,7 +190,7 @@ function stockHeadliners(input: TodayInputs): Headliner[] {
               .slice(0, 3)
               .map((m) => `${m.name} (${m.onHand} ${m.unit})`)
               .join(", ")}${input.lowMaterials.length > 3 ? ` and ${input.lowMaterials.length - 3} more` : ""}.`,
-      href: "/production",
+      href: "/forecast",
       linkLabel: "See stock",
     });
   }
@@ -212,7 +212,7 @@ function stockHeadliners(input: TodayInputs): Headliner[] {
         expected > 0
           ? `Only ${p.stockQty} left, while about ${Math.round(expected)} are expected to sell next month. Check ingredients and schedule the next batch.`
           : `Only ${p.stockQty} left — at or below its low-stock level of ${p.lowStockThreshold}. Schedule the next batch.`,
-      href: "/production",
+      href: "/forecast",
       linkLabel: "Plan a batch",
     });
   }
@@ -225,8 +225,8 @@ function stockHeadliners(input: TodayInputs): Headliner[] {
         .slice(2, 5)
         .map(({ p }) => `${p.name} (${p.stockQty} left)`)
         .join(", "),
-      href: "/production",
-      linkLabel: "See production",
+      href: "/forecast",
+      linkLabel: "See forecast",
     });
   }
   return out;

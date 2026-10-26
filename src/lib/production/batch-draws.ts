@@ -1,4 +1,4 @@
-import { rawQuantityNeeded } from "@/lib/summary/cacao";
+import { isRawCacao, rawQuantityNeeded } from "@/lib/summary/cacao";
 import { unitsPerBatch } from "@/lib/costing/per-unit";
 import type { Entry, Product, RawMaterialStock } from "@/lib/store/types";
 
@@ -12,11 +12,13 @@ import type { Entry, Product, RawMaterialStock } from "@/lib/store/types";
  *   - Packaging picked in the Add form replaces the recipe's packaging for that batch.
  *   - Tingi repacked into jars is product that was already made: it draws no ingredients, only
  *     the packaging it went into.
+ *   - A batch made in a production run draws no raw cacao: the run's roast already took what
+ *     was roasted off the shelf (and leftover cacao from the bucket was taken off long before).
  *
  * Pure: no store, no React.
  */
 
-type Batch = Pick<Entry, "quantity" | "packagingUsed" | "fromTingi">;
+type Batch = Pick<Entry, "quantity" | "packagingUsed" | "fromTingi"> & Partial<Pick<Entry, "runId">>;
 
 export function drawOf(entry: Batch, product: Product, material: Pick<RawMaterialStock, "id" | "name" | "kind">, cacaoUtilization: number): number {
   const qty = entry.quantity ?? 0;
@@ -26,6 +28,7 @@ export function drawOf(entry: Batch, product: Product, material: Pick<RawMateria
     return picked.filter((p) => p.materialId === material.id).reduce((t, p) => t + Math.max(0, p.qty), 0);
   }
   if (entry.fromTingi) return 0;
+  if (entry.runId && isRawCacao(material.name)) return 0;
   const row = product.recipeIngredients.find((r) => r.materialId === material.id);
   if (!row) return 0;
   return rawQuantityNeeded(material.name, row.quantity, cacaoUtilization) * (qty / unitsPerBatch(product));

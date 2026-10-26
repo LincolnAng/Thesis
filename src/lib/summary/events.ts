@@ -88,7 +88,7 @@ export function summarizeEvent(
         row.revenue += e.amount ?? 0;
       }
       noteActivity(e.timestamp);
-    } else if (e.type === "WASTE" || e.type === "INVENTORY_OUT") {
+    } else if (e.type === "WASTE" || (e.type === "INVENTORY_OUT" && e.category !== "material_use")) {
       if (productId) slot(productId).lost += e.quantity ?? 0;
       noteActivity(e.timestamp);
     }

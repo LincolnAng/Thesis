@@ -65,7 +65,7 @@ export function TingiBuckets() {
       </div>
       {buckets.length === 0 ? (
         <p className="rounded-2xl border border-line/15 bg-card px-4 py-3 text-[13.5px] text-muted-foreground">
-          Nothing loose yet. When a batch leaves some that doesn&apos;t fill a jar, put it under Tingi in Production → Add.
+          Nothing loose yet. When a batch leaves some that doesn&apos;t fill a jar, put it under Tingi in Production → Add batch.
         </p>
       ) : (
         <ul className="flex flex-col divide-y divide-line/10 overflow-hidden rounded-2xl border border-line/15 bg-card">

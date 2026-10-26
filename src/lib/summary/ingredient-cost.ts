@@ -23,6 +23,7 @@
 
 import { convertQuantity } from "@/lib/units";
 import { drawOf } from "@/lib/production/batch-draws";
+import { isMaterialUse } from "@/lib/transactions/waste";
 import type { Entry, Product, RawMaterialStock } from "@/lib/store/types";
 
 /** One purchase, in the material's own unit. */
@@ -102,6 +103,11 @@ export function consumedQty(
 ): number {
   let used = 0;
   for (const entry of entries) {
+    // Raw cacao fed into the roaster in a production run.
+    if (isMaterialUse(entry) && entry.quantity && entry.quantity > 0 && normalise(entry.sku) === normalise(material.name)) {
+      used += convertQuantity(entry.quantity, entry.unit ?? material.unit, material.unit) ?? 0;
+      continue;
+    }
     if (entry.type !== "INVENTORY_IN" || !entry.quantity || entry.quantity <= 0) continue;
     const product = products.find((p) => normalise(p.name) === normalise(entry.sku));
     if (!product) continue;

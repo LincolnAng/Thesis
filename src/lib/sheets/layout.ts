@@ -39,6 +39,11 @@ export const SHARED_TABS: Record<string, string[]> = {
     "id", "name", "kind", "startDate", "endDate", "status", "notes", "createdAt", "deletedAt",
     // Event stock
     "eventId", "productId", "type", "quantity",
+    // Production run
+    "date", "lotId", "materialId", "unit", "rawQty", "usableQty", "fromBucketQty", "intoProductsQty", "leftoverQty", "made",
+    "loggedByName",
+    // Cacao bucket
+    "direction", "runId", "purpose",
   ],
   "People & Payroll": [
     "section",

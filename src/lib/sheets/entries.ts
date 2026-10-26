@@ -49,6 +49,8 @@ const HEADER = [
   "expiresOn",
   "packagingUsed",
   "fromTingi",
+  // The production run a roast or batch belongs to.
+  "runId",
 ];
 
 function json<T>(raw: string | undefined): T | null {
@@ -113,12 +115,13 @@ function toRow(e: Entry): string[] {
     e.expiresOn ?? "",
     e.packagingUsed ? JSON.stringify(e.packagingUsed) : "",
     e.fromTingi ? "yes" : "",
+    e.runId ?? "",
   ];
 }
 
 function fromRow(row: string[]): Entry | null {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [id, timestamp, type, amount, quantity, unit, sku, counterparty, location, priceType, category, rawText, confidence, notes, _deletedAt, eventId, loggedById, loggedByName, paymentTerm, dueDate, amountPaid, paymentStatus, settledAt, lineItems, paymentMethod, bankName, payments, paymentTerms, dueDateHistory, defaultedAt, installments, branch, lotId, expiresOn, packagingUsed, fromTingi] =
+  const [id, timestamp, type, amount, quantity, unit, sku, counterparty, location, priceType, category, rawText, confidence, notes, _deletedAt, eventId, loggedById, loggedByName, paymentTerm, dueDate, amountPaid, paymentStatus, settledAt, lineItems, paymentMethod, bankName, payments, paymentTerms, dueDateHistory, defaultedAt, installments, branch, lotId, expiresOn, packagingUsed, fromTingi, runId] =
     row;
   if (!id) return null;
   return {
@@ -157,6 +160,7 @@ function fromRow(row: string[]): Entry | null {
     expiresOn: expiresOn || null,
     packagingUsed: json<{ materialId: string; qty: number }[]>(packagingUsed),
     fromTingi: fromTingi === "yes" || null,
+    runId: runId || null,
   };
 }
 

@@ -147,12 +147,13 @@ function Calendar({
 }
 
 /**
- * Production and Calendar are one screen's two halves, split into their own tabs: Production
- * is stock, what to make and the forecast; Calendar is the production plan laid out by day.
+ * Forecast and Calendar are one screen's two halves, split into their own tabs: Forecast is
+ * what's short, what to make and what to expect each month; Calendar is the production plan
+ * laid out by day. What was actually made is logged in Production (production-log-screen).
  * Both read the same plan (useProductionPlan) so they can never disagree. The calendar used
  * to sit behind Advanced; as its own tab it shows for everyone.
  */
-export function ProductionScreen({ section }: { section: "production" | "calendar" }) {
+export function ProductionScreen({ section }: { section: "forecast" | "calendar" }) {
   const { products, events, businessSettings, loadedFromServer } = useStore();
   const [strategy, setStrategy] = useState<ScheduleStrategy>("fastest");
   const tab = section === "calendar" ? "plan" : "stock";
@@ -233,15 +234,17 @@ export function ProductionScreen({ section }: { section: "production" | "calenda
 
   return (
     <Page
-      title={section === "calendar" ? "Calendar" : "Production"}
+      title={section === "calendar" ? "Calendar" : "Forecast"}
       right={
         <>
           <button type="button" onClick={() => setShowSettings(true)} className={BUTTON.secondary}>
             Settings
           </button>
-          <button type="button" onClick={() => setAddOpen(true)} className={BUTTON.primary}>
-            + Add
-          </button>
+          {section === "calendar" && (
+            <button type="button" onClick={() => setAddOpen(true)} className={BUTTON.primary}>
+              + Add
+            </button>
+          )}
         </>
       }
     >
@@ -271,7 +274,7 @@ export function ProductionScreen({ section }: { section: "production" | "calenda
             the button. Everything else that can stop the plan is spelled out here. */}
         <PlanFixes fixes={fixes.filter((f) => f.id !== "no-equipment" && (section === "calendar" || !f.id.startsWith("short-")))} />
 
-        {/* Production answers "is anything short?" itself, from the demand down; the calendar view
+        {/* Forecast answers "is anything short?" itself, from the demand down; the calendar view
             keeps the three quick tiles. */}
         {section === "calendar" && (
         <div className="grid grid-cols-1 gap-4 min-[1000px]:grid-cols-3">
@@ -300,8 +303,8 @@ export function ProductionScreen({ section }: { section: "production" | "calenda
                   </div>
                 ))}
                 {low.length > 4 && (
-                  <Link href="/production" className="mt-0.5 self-start text-xs font-semibold text-cacao">
-                    +{low.length - 4} more — see Production
+                  <Link href="/forecast" className="mt-0.5 self-start text-xs font-semibold text-cacao">
+                    +{low.length - 4} more — see Forecast
                   </Link>
                 )}
               </div>
@@ -371,7 +374,7 @@ export function ProductionScreen({ section }: { section: "production" | "calenda
         </div>
         )}
 
-        {section === "production" && <ProcessPlan
+        {section === "forecast" && <ProcessPlan
             details={
               <div className="flex flex-col gap-6">
                 <SeasonalBreakdown forecasts={plan.forecasts} embedded skipMonth={toIsoDate(new Date(now.getFullYear(), now.getMonth() + 1, 1)).slice(0, 7)} />

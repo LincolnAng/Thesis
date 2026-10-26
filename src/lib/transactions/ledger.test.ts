@@ -392,4 +392,6 @@ test("instalments: equal parts on a schedule, paid earliest first, the next unpa
   assert.equal(installmentSchedule({ ...e, installments: { frequency: "yearly", count: 2, firstDue: "2026-06-15" } })[1].date, "2027-06-15");
   assert.equal(entryIntegrityProblem({ type: "SALE", paymentTerm: "spot", installments: e.installments }), "installments_need_a_receivable_or_payable");
   assert.equal(entryIntegrityProblem({ type: "SALE", paymentTerm: "receivable", paymentMethod: "check", installments: e.installments }), null);
+  assert.equal(entryIntegrityProblem({ type: "SALE", paymentMethod: "ewallet", bankName: "GCash" }), null);
+  assert.equal(entryIntegrityProblem({ type: "SALE", paymentMethod: "crypto" as never }), "invalid_payment_method");
 });
