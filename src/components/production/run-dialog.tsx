@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRight, ChevronDown } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { QuantityStepper } from "@/components/ui/quantity-stepper";
 import { useStore } from "@/lib/store/use-store";
@@ -11,7 +11,7 @@ import { familiesOf, fullName, sizeName } from "@/lib/summary/product-sizes";
 import { findProduct } from "@/lib/summary/product-match";
 import { shelfLifeDays } from "@/lib/summary/business-config";
 import { MATERIAL_USE } from "@/lib/transactions/waste";
-import { PELLETS, batchesOf, bucketBalance, cacaoPerUnit, runMaterials } from "@/lib/production/runs";
+import { PELLETS, batchesOf, bucketBalance, cacaoMaterials, cacaoPerUnit } from "@/lib/production/runs";
 import { PackagingEditor, fieldCls, labelCls, packagingUsed, recipePackaging, type PackagingLine } from "@/components/production/add-batch-dialog";
 import type { Entry, Product, ProductionRun } from "@/lib/store/types";
 
@@ -97,7 +97,8 @@ function ProductsDropdown({ made, onChange }: { made: Record<string, Made>; onCh
  */
 export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onClose: () => void }) {
   const { products, rawMaterials, entries, businessSettings, cacaoBucket } = useStore();
-  const materials = runMaterials(rawMaterials);
+  // What goes in is cacao — the raw cacao material(s) in Inventory.
+  const materials = cacaoMaterials(rawMaterials);
   const today = new Date();
   const madeToday = entries.filter((e) => e.type === "INVENTORY_IN" && e.timestamp.slice(0, 10) === isoDay(today)).length;
 
@@ -149,18 +150,18 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
 
   function save() {
     if (!name.trim()) return setError("Give the batch a name.");
-    if (!(num(raw) > 0) && !(num(fromBucket) > 0) && lines.length === 0) return setError("Fill in the raw materials, or what was made.");
-    if (num(raw) > 0 && !(num(usable) > 0)) return setError("How much was usable from the raw materials?");
-    if (num(usable) > 0 && !(num(raw) > 0)) return setError("How much raw material went in?");
+    if (!(num(raw) > 0) && !(num(fromBucket) > 0) && lines.length === 0) return setError("Fill in the cacao, or what was made.");
+    if (num(raw) > 0 && !(num(usable) > 0)) return setError("How much usable cacao came out?");
+    if (num(usable) > 0 && !(num(raw) > 0)) return setError("How much cacao went in?");
     if (num(usable) > num(raw)) return setError("More usable than raw went in — check the two amounts.");
     if (pelletsQty > num(usable) + 1e-9) return setError("More tablea pellets than usable cacao — check the two amounts.");
     if (num(fromBucket) > inBucket) return setError(`Only ${inBucket} ${unit} of pellets in the bucket.`);
     if (intoQty > available + 1e-9) return setError(`Only ${available} ${unit} of pellets to work with — what was made plus what came from the bucket.`);
     if (lines.length > 0 && byRecipe > 0 && available <= 0) {
-      return setError("How many pellets went in? Fill in the raw materials or take some from the bucket — or log it with Add batch instead.");
+      return setError("How many pellets went in? Fill in the cacao or take some from the bucket — or log it with Add batch instead.");
     }
     if (!lotId.trim()) return setError("Give it a lot number.");
-    if (num(raw) > 0 && !material) return setError("Add your raw materials under Inventory first.");
+    if (num(raw) > 0 && !material) return setError("Add your cacao under Inventory first.");
 
     // The time of day now, on the day picked — so a run logged late still sorts by when it was made.
     const stamp = new Date(`${date}T${today.toTimeString().slice(0, 8)}`).toISOString();
@@ -228,7 +229,7 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
       <DialogContent className="max-h-[90vh] overflow-y-auto rounded-2xl sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{existing ? "Change production" : "Log production"}</DialogTitle>
-          <DialogDescription>Raw materials in → usable → tablea pellets → finished products. Pellets left over go in the bucket.</DialogDescription>
+          <DialogDescription>Cacao in → usable cacao → tablea pellets → finished products. Pellets left over go in the bucket.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
           <label className={labelCls}>
@@ -248,21 +249,24 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
 
           <Section title="1 · Raw materials in">
             {materials.length === 0 ? (
-              <p className="text-[13px] text-muted-foreground">No raw materials set up yet — add them under Inventory. You can still log what was made below.</p>
+              <p className="text-[13px] text-muted-foreground">No cacao set up yet — add it under Inventory (e.g. &quot;Cacao beans&quot;). You can still log what was made below.</p>
             ) : (
-              <div className="grid grid-cols-[1fr_7rem] gap-2">
+              <div className={materials.length > 1 ? "grid grid-cols-[1fr_7rem] gap-2" : ""}>
+                {/* Only when there's more than one kind of cacao to say which. */}
+                {materials.length > 1 && (
+                  <label className={labelCls}>
+                    Which cacao
+                    <select value={materialId} onChange={(e) => setMaterialId(e.target.value)} className={fieldCls}>
+                      {materials.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 <label className={labelCls}>
-                  Raw material
-                  <select value={materialId} onChange={(e) => setMaterialId(e.target.value)} className={fieldCls}>
-                    {materials.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className={labelCls}>
-                  How much ({unit})
+                  Cacao ({unit})
                   <input inputMode="decimal" value={raw} onChange={(e) => setRaw(decimal(e.target.value))} placeholder="e.g. 10" className={fieldCls} />
                 </label>
               </div>
@@ -270,14 +274,11 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
           </Section>
 
           {materials.length > 0 && (
-            <Section title="2 · Usable from it">
-              <div className="grid grid-cols-[auto_1fr] items-end gap-2">
-                <ArrowRight className="mb-3 h-4 w-4 text-muted-foreground" />
-                <label className={labelCls}>
-                  Usable ({unit})
-                  <input inputMode="decimal" value={usable} onChange={(e) => setUsable(decimal(e.target.value))} placeholder="e.g. 7" className={fieldCls} />
-                </label>
-              </div>
+            <Section title="2 · Usable Cacao">
+              <label className={labelCls}>
+                Usable cacao ({unit})
+                <input inputMode="decimal" value={usable} onChange={(e) => setUsable(decimal(e.target.value))} placeholder="e.g. 7" className={fieldCls} />
+              </label>
               {yieldPct !== null && (
                 <p className="text-[13px]">
                   <span className="font-semibold">{yieldPct}% usable</span>
@@ -288,19 +289,10 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
           )}
 
           <Section title={materials.length > 0 ? "3 · Tablea pellets" : "Tablea pellets"}>
-            <div className="grid grid-cols-[auto_1fr] items-end gap-2">
-              <ArrowRight className="mb-3 h-4 w-4 text-muted-foreground" />
-              <label className={labelCls}>
-                Pellets made ({unit})
-                <input
-                  inputMode="decimal"
-                  value={pellets ?? usable}
-                  onChange={(e) => setPellets(decimal(e.target.value))}
-                  placeholder="e.g. 7"
-                  className={fieldCls}
-                />
-              </label>
-            </div>
+            <label className={labelCls}>
+              Pellets made ({unit})
+              <input inputMode="decimal" value={pellets ?? usable} onChange={(e) => setPellets(decimal(e.target.value))} placeholder="e.g. 7" className={fieldCls} />
+            </label>
             {num(usable) > 0 && pelletsQty < num(usable) && (
               <p className="text-[13px] text-muted-foreground">
                 {round(num(usable) - pelletsQty)} {unit} of the usable cacao didn&apos;t become pellets

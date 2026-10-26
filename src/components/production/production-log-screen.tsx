@@ -103,7 +103,7 @@ export function ProductionLogScreen() {
         <section className="grid grid-cols-2 gap-3 min-[1100px]:flex min-[900px]:items-stretch min-[900px]:gap-2" aria-label="Production summary">
           <Step label="Raw materials in" value={totals.raw} unit={unit} note={`${totals.runs} ${totals.runs === 1 ? "batch" : "batches"}`} />
           <ArrowRight className="hidden h-5 w-5 shrink-0 self-center text-muted-foreground min-[1100px]:block" />
-          <Step label="Usable from it" value={totals.usable} unit={unit} note={totals.yield === null ? "Nothing put in" : `${Math.round(totals.yield * 100)}% of the raw`} />
+          <Step label="Usable Cacao" value={totals.usable} unit={unit} note={totals.yield === null ? "Nothing put in" : `${Math.round(totals.yield * 100)}% of the raw`} />
           <ArrowRight className="hidden h-5 w-5 shrink-0 self-center text-muted-foreground min-[1100px]:block" />
           <Step label="Tablea pellets" value={totals.pellets} unit={unit} note={totals.usable > 0 ? `${Math.round((totals.pellets / totals.usable) * 100)}% of the usable` : "Made from the usable"} />
           <ArrowRight className="hidden h-5 w-5 shrink-0 self-center text-muted-foreground min-[1100px]:block" />
@@ -161,7 +161,7 @@ export function ProductionLogScreen() {
 /**
  * One row per batch, in fixed columns like the Transactions table:
  *
- *   Date · Batch name · Lot · Raw materials in · Usable · Tablea pellets · Finished products · Pellets left over · Packaging · Recorded by · Actions
+ *   Date · Batch name · Lot · Raw materials in · Usable cacao · Tablea pellets · Finished products · Pellets left over · Packaging · Recorded by · Actions
  */
 function RunTable({ runs, canChange, onEdit }: { runs: ProductionRun[]; canChange: boolean; onEdit: (r: ProductionRun) => void }) {
   const { entries, products, rawMaterials, businessSettings } = useStore();
@@ -185,7 +185,7 @@ function RunTable({ runs, canChange, onEdit }: { runs: ProductionRun[]; canChang
         </colgroup>
         <thead className="border-b border-line/15 bg-secondary">
           <tr>
-            {["Date", "Batch name", "Lot", "Raw materials in", "Usable", "Tablea pellets", "Finished products", "Pellets left over", "Packaging", "Recorded by", "Actions"].map((h) => (
+            {["Date", "Batch name", "Lot", "Raw materials in", "Usable cacao", "Tablea pellets", "Finished products", "Pellets left over", "Packaging", "Recorded by", "Actions"].map((h) => (
               <th key={h} scope="col" className={th}>
                 {h}
               </th>
