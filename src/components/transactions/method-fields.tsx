@@ -3,29 +3,31 @@
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Banknote, Landmark } from "lucide-react";
+import { Banknote, FileText, Landmark, Smartphone } from "lucide-react";
 import { Segmented, type Choice } from "@/components/ui/segmented";
+import { COMMON_EWALLETS, PAYMENT_METHOD_LABELS, describePaymentMethod, namesProvider } from "@/lib/format";
+import type { PaymentMethod } from "@/lib/store/types";
 
 /** Banks named most often here. Anything else can be typed — only the name is kept, never an account. */
 export const COMMON_BANKS = ["BDO", "BPI", "Metrobank", "Landbank", "PNB", "Security Bank", "UnionBank", "RCBC", "China Bank"];
 
-export const METHOD_LABELS: Record<string, string> = { cash: "Cash", bank_transfer: "Bank transfer" };
+export const METHOD_LABELS = PAYMENT_METHOD_LABELS;
 
-const METHOD_CHOICES: Choice<"cash" | "bank_transfer">[] = [
+const METHOD_CHOICES: Choice<PaymentMethod>[] = [
   { value: "cash", label: "Cash", icon: Banknote },
   { value: "bank_transfer", label: "Bank transfer", icon: Landmark },
+  { value: "ewallet", label: "E-wallet", icon: Smartphone },
+  { value: "check", label: "Cheque", icon: FileText },
 ];
 
-/** "Cash", or "Bank transfer · BDO". Older payments without a method read "Not recorded". */
+/** "Cash", "Bank transfer · BDO", "E-wallet · GCash". Older payments without a method read "Not recorded". */
 export function methodText(method: string | null | undefined, bankName: string | null | undefined): string {
-  if (!method) return "Not recorded";
-  if (method === "bank_transfer") return bankName ? `Bank transfer · ${bankName}` : "Bank transfer";
-  return METHOD_LABELS[method] ?? method;
+  return describePaymentMethod(method, bankName) || "Not recorded";
 }
 
 /**
- * How the money moved: Cash or Bank transfer, and — only for a transfer — which bank. The bank
- * is picked from the common ones or typed; no account number, nickname or balance is asked for.
+ * How the money moved: cash, bank transfer, e-wallet or cheque — and which bank or wallet. It's
+ * picked from the common ones or typed; no account number, nickname or balance is asked for.
  */
 export function MethodFields({
   method,
@@ -38,7 +40,9 @@ export function MethodFields({
   onChange: (next: { method: string | null; bankName: string | null }) => void;
   label?: string;
 }) {
-  const known = bankName != null && COMMON_BANKS.includes(bankName);
+  const wallet = method === "ewallet";
+  const names: readonly string[] = wallet ? COMMON_EWALLETS : COMMON_BANKS;
+  const known = bankName != null && names.includes(bankName);
   const [other, setOther] = useState(Boolean(bankName) && !known);
 
   return (
@@ -46,18 +50,18 @@ export function MethodFields({
       {label && <Label className="text-[13px] font-semibold text-foreground">{label}</Label>}
       <Segmented
         ariaLabel={label || "How it was paid"}
-        value={(method as "cash" | "bank_transfer" | null) ?? "cash"}
+        value={(method as PaymentMethod | null) ?? "cash"}
         choices={METHOD_CHOICES}
-        onChange={(v) => onChange({ method: v, bankName: v === "bank_transfer" ? bankName : null })}
+        onChange={(v) => onChange({ method: v, bankName: namesProvider(v) && namesProvider(method) && (v === "ewallet") === (method === "ewallet") ? bankName : null })}
       />
-      {method === "bank_transfer" && (
+      {namesProvider(method) && (
         <div className="space-y-2 rounded-xl border border-line/15 p-2.5">
           <Label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Landmark className="h-3.5 w-3.5" />
-            Which bank?
+            {wallet ? <Smartphone className="h-3.5 w-3.5" /> : <Landmark className="h-3.5 w-3.5" />}
+            {wallet ? "Which e-wallet?" : "Which bank?"}
           </Label>
           <div className="flex flex-wrap gap-1.5">
-            {COMMON_BANKS.map((b) => (
+            {names.map((b) => (
               <button
                 key={b}
                 type="button"
@@ -84,19 +88,19 @@ export function MethodFields({
                 other ? "border-cacao bg-cacao font-semibold text-ivory" : "border-line/20 bg-card"
               }`}
             >
-              Another bank
+              {wallet ? "Another e-wallet" : "Another bank"}
             </button>
           </div>
           {other && (
             <Input
               value={bankName ?? ""}
-              placeholder="Type the bank's name"
-              aria-label="Bank name"
+              placeholder={wallet ? "Type the e-wallet's name" : "Type the bank's name"}
+              aria-label={wallet ? "E-wallet name" : "Bank name"}
               onChange={(e) => onChange({ method, bankName: e.target.value || null })}
               className="h-10"
             />
           )}
-          {!bankName?.trim() && <p className="text-xs text-danger">Pick or type the bank so this can be saved.</p>}
+          {method === "bank_transfer" && !bankName?.trim() && <p className="text-xs text-danger">Pick or type the bank so this can be saved.</p>}
         </div>
       )}
     </div>

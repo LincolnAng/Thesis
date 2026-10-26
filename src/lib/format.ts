@@ -162,12 +162,21 @@ export function previousMonthShortLabel(now: Date = new Date()): string {
 /** Banks offered when a payment is a bank transfer. Any other bank can be typed in. */
 export const COMMON_BANKS = ["BDO", "BPI", "Metrobank", "Landbank", "PNB", "Security Bank", "UnionBank", "RCBC", "China Bank", "EastWest"] as const;
 
-export const PAYMENT_METHOD_LABELS: Record<string, string> = { cash: "Cash", bank_transfer: "Bank transfer" };
+/** E-wallets offered when a payment is by e-wallet. Any other can be typed in. */
+export const COMMON_EWALLETS = ["GCash", "Maya", "ShopeePay", "GrabPay"] as const;
 
-/** "Bank transfer · BDO", "Cash", or "" when not recorded. */
+/** Every way money moves, in the order they're offered. */
+export const PAYMENT_METHODS = ["cash", "bank_transfer", "ewallet", "check"] as const;
+export const PAYMENT_METHOD_LABELS: Record<string, string> = { cash: "Cash", bank_transfer: "Bank transfer", ewallet: "E-wallet", check: "Cheque" };
+
+/** A bank transfer and a cheque name their bank; an e-wallet names the wallet (GCash, Maya). */
+export const namesProvider = (method: string | null | undefined) => method === "bank_transfer" || method === "check" || method === "ewallet";
+/** A bank transfer can't be saved without its bank; a cheque or e-wallet can. */
+export const requiresProvider = (method: string | null | undefined) => method === "bank_transfer";
+
+/** "Bank transfer · BDO", "E-wallet · GCash", "Cash", or "" when not recorded. */
 export function describePaymentMethod(method: string | null | undefined, bank: string | null | undefined): string {
   if (!method) return "";
-  if (method === "bank_transfer") return `Bank transfer${bank ? ` · ${bank}` : ""}`;
-  if (method === "check") return `Check${bank ? ` · ${bank}` : ""}`;
-  return "Cash";
+  const label = PAYMENT_METHOD_LABELS[method] ?? "Cash";
+  return namesProvider(method) && bank ? `${label} · ${bank}` : label;
 }

@@ -1,3 +1,4 @@
+import { PAYMENT_METHODS, namesProvider } from "@/lib/format";
 import type { DueDateChange, Entry, InstallmentFrequency, InstallmentPlan, PaymentRecord, PaymentStatus } from "@/lib/store/types";
 
 /**
@@ -586,8 +587,8 @@ export function addPayment(e: Entry, input: PaymentInput, who: { id?: string | n
   if (!DAY_RE.test(input.date)) return fail("Pick the day the money changed hands.");
   if (input.date > todayOf(now)) return fail("The payment date can't be in the future.");
   if (input.date < dayOf(e.timestamp)) return fail("The payment can't be dated before the transaction it pays.");
-  if (input.method !== "cash" && input.method !== "bank_transfer") return fail("Say whether it was cash or a bank transfer.");
-  const bankName = input.method === "bank_transfer" ? input.bankName?.trim() || null : null;
+  if (!(PAYMENT_METHODS as readonly string[]).includes(input.method)) return fail("Say how it was paid: cash, bank transfer, e-wallet or cheque.");
+  const bankName = namesProvider(input.method) ? input.bankName?.trim() || null : null;
   if (input.method === "bank_transfer" && !bankName) return fail("Name the bank the transfer went through.");
   const amount = cents(input.amount);
   if (amount > remaining + 0.005) return fail(`That is more than the ${formatAmount(remaining)} still owed.`);

@@ -8,10 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ChipGroup } from "@/components/ui/chip-group";
 import { COMMON_BANKS } from "@/components/transactions/method-fields";
-import { formatPeso } from "@/lib/format";
+import { COMMON_EWALLETS, PAYMENT_METHODS, PAYMENT_METHOD_LABELS, describePaymentMethod, formatPeso, namesProvider } from "@/lib/format";
 import { editPaymentOn, markDefaulted, moveDueDate, recordPaymentOn, removePaymentOn } from "@/lib/transactions/actions";
 import { PAYMENT_TERMS, dayOf, dueFromTerms, obligationInfo, termsLabel, todayOf, type ObligationKind } from "@/lib/transactions/ledger";
-import type { Entry, PaymentRecord } from "@/lib/store/types";
+import type { Entry, PaymentMethod, PaymentRecord } from "@/lib/store/types";
 
 const WORDS: Record<ObligationKind, { who: string; money: string; verb: string; done: string }> = {
   receivable: { who: "Customer", money: "received", verb: "Record money received", done: "Received" },
@@ -33,7 +33,7 @@ export const PAYMENT_GRID = "grid grid-cols-[136px_minmax(0,1fr)_108px_72px] ite
 interface PaymentValues {
   date: string;
   amount: number;
-  method: "cash" | "bank_transfer";
+  method: PaymentMethod;
   bankName: string | null;
   note: string;
 }
@@ -51,7 +51,7 @@ function PaymentForm({
   onSave,
   onCancel,
 }: {
-  initial: { date: string; amount: string; method: "cash" | "bank_transfer"; bank: string; note: string };
+  initial: { date: string; amount: string; method: PaymentMethod; bank: string; note: string };
   minDate: string;
   /** Anything wrong with the amount before it's even tried (more than is owed). */
   check?: (amount: number) => string | null;
@@ -88,12 +88,11 @@ function PaymentForm({
     if (!ready || saving) return;
     setError(null);
     setSaving(true);
-    const err = await onSave({ date, amount: typed, method, bankName: method === "bank_transfer" ? bank.trim() : null, note: note.trim() });
+    const err = await onSave({ date, amount: typed, method, bankName: namesProvider(method) ? bank.trim() || null : null, note: note.trim() });
     setSaving(false);
     if (err) setError(err);
   }
   const enter = (e: React.KeyboardEvent) => e.key === "Enter" && void save();
-  const seg = (on: boolean) => `h-8 rounded-md px-2.5 text-[12.5px] font-semibold transition ${on ? "bg-cacao text-ivory" : "text-muted-foreground hover:bg-card"}`;
   const line = problem ?? (valid && hint ? hint(typed) : "");
 
   return (
@@ -101,20 +100,37 @@ function PaymentForm({
       <div className={PAYMENT_GRID}>
         <Input type="date" value={date} max={today} min={minDate} onChange={(e) => setDate(e.target.value)} aria-label="Day it was paid" className="h-8 w-full px-2 text-[12.5px]" />
         <div className="flex min-w-0 items-center gap-1.5">
-          <div className="flex shrink-0 gap-0.5 rounded-lg bg-card p-0.5" role="radiogroup" aria-label="How it was paid">
-            <button type="button" role="radio" aria-checked={method === "cash"} onClick={() => setMethod("cash")} className={seg(method === "cash")}>
-              Cash
-            </button>
-            <button type="button" role="radio" aria-checked={method === "bank_transfer"} onClick={() => setMethod("bank_transfer")} className={seg(method === "bank_transfer")}>
-              Bank
-            </button>
-          </div>
-          {method === "bank_transfer" && (
+          <select
+            value={method}
+            onChange={(e) => setMethod(e.target.value as PaymentMethod)}
+            aria-label="How it was paid"
+            className="h-8 shrink-0 rounded-md border border-input bg-card px-1.5 text-[12.5px] font-semibold"
+          >
+            {PAYMENT_METHODS.map((m) => (
+              <option key={m} value={m}>
+                {PAYMENT_METHOD_LABELS[m]}
+              </option>
+            ))}
+          </select>
+          {namesProvider(method) && (
             <>
-              <Input list="payment-banks" value={bank} onChange={(e) => setBank(e.target.value)} onKeyDown={enter} placeholder="Which bank?" aria-label="Bank" className="h-8 min-w-0 flex-1 text-[12.5px]" />
+              <Input
+                list={method === "ewallet" ? "payment-ewallets" : "payment-banks"}
+                value={bank}
+                onChange={(e) => setBank(e.target.value)}
+                onKeyDown={enter}
+                placeholder={method === "ewallet" ? "Which e-wallet?" : "Which bank?"}
+                aria-label={method === "ewallet" ? "E-wallet" : "Bank"}
+                className="h-8 min-w-0 flex-1 text-[12.5px]"
+              />
               <datalist id="payment-banks">
                 {COMMON_BANKS.map((b) => (
                   <option key={b} value={b} />
+                ))}
+              </datalist>
+              <datalist id="payment-ewallets">
+                {COMMON_EWALLETS.map((w) => (
+                  <option key={w} value={w} />
                 ))}
               </datalist>
             </>
@@ -238,7 +254,7 @@ export function PaymentLine({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const how = payment.method === "bank_transfer" ? `Bank transfer${payment.bankName ? ` · ${payment.bankName}` : ""}` : payment.method === "cash" ? "Cash" : "Not recorded";
+  const how = describePaymentMethod(payment.method, payment.bankName) || "Not recorded";
   const day = new Date(`${payment.date}T00:00:00`).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" });
   const iconBtn = "flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-cacao";
 
@@ -248,7 +264,7 @@ export function PaymentLine({
         initial={{
           date: payment.date,
           amount: String(payment.amount),
-          method: payment.method === "bank_transfer" ? "bank_transfer" : "cash",
+          method: (PAYMENT_METHODS as readonly string[]).includes(payment.method ?? "") ? (payment.method as PaymentMethod) : "cash",
           bank: payment.bankName ?? "",
           note: payment.note ?? "",
         }}

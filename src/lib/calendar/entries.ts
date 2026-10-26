@@ -1,4 +1,5 @@
 import { installmentSchedule, outstanding, termOf } from "@/lib/transactions/ledger";
+import { describePaymentMethod } from "@/lib/format";
 import type { AgendaKind, BusinessEvent, CalendarItem, Entry, EventStockMovement, Product, TimeRecord } from "@/lib/store/types";
 import type { Holiday } from "@/lib/calendar/holidays";
 import type { PlanDay } from "@/lib/summary/production-schedule";
@@ -257,8 +258,8 @@ export function buildCalendarEntries(input: CalendarInput): CalendarEntry[] {
           { label: due.label ? "This instalment" : "Still owed", value: peso(due.amount) },
           ...(due.label ? [{ label: "Still owed in all", value: peso(owed) }] : []),
           ...(e.amount != null ? [{ label: "Original amount", value: peso(e.amount) }] : []),
-          { label: "Due", value: due.date },
-          ...(e.paymentMethod === "check" ? [{ label: "Paid by", value: `Check${e.bankName ? ` · ${e.bankName}` : ""}` }] : []),
+          { label: "Deadline", value: due.date },
+          ...(e.paymentMethod ? [{ label: "Paid by", value: describePaymentMethod(e.paymentMethod, e.bankName) }] : []),
           ...(e.sku ? [{ label: "For", value: e.sku }] : []),
         ],
         tone: daysLate > 0 ? "bad" : "warn",

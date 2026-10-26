@@ -1,5 +1,7 @@
 "use client";
 
+import { PAYMENT_METHODS, namesProvider } from "@/lib/format";
+import type { PaymentMethod } from "@/lib/store/types";
 import { EMPLOYEE_ENTRY_TYPES, PAYROLL_CATEGORIES } from "@/lib/auth/permissions";
 import { useState } from "react";
 import { addProduct, addSupplier } from "@/lib/store/store";
@@ -648,7 +650,7 @@ function PaymentFields({
           date: todayOf(new Date()) < baseDay ? baseDay : todayOf(new Date()),
           amount: n,
           method,
-          bankName: method === "bank_transfer" ? bankName : null,
+          bankName: namesProvider(method) ? bankName : null,
           note: null,
         },
       ],
@@ -679,7 +681,7 @@ function PaymentFields({
         <MethodFields
           method={draft.paymentMethod ?? "cash"}
           bankName={draft.bankName ?? null}
-          onChange={(n) => onChange({ paymentMethod: n.method === "bank_transfer" ? "bank_transfer" : "cash", bankName: n.method === "bank_transfer" ? n.bankName : null })}
+          onChange={(n) => onChange({ paymentMethod: ((PAYMENT_METHODS as readonly string[]).includes(n.method ?? "") ? (n.method as PaymentMethod) : null) ?? "cash", bankName: namesProvider(n.method) ? n.bankName : null })}
         />
       )}
 

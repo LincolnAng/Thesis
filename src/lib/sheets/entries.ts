@@ -145,7 +145,7 @@ function fromRow(row: string[]): Entry | null {
     paymentStatus: (["pending", "partial", "settled", "defaulted"].includes(paymentStatus) ? paymentStatus : null) as Entry["paymentStatus"],
     settledAt: settledAt || null,
     lineItems: json<Entry["lineItems"]>(lineItems),
-    paymentMethod: (["cash", "bank_transfer", "check"].includes(paymentMethod) ? paymentMethod : null) as Entry["paymentMethod"],
+    paymentMethod: (["cash", "bank_transfer", "ewallet", "check"].includes(paymentMethod) ? paymentMethod : null) as Entry["paymentMethod"],
     bankName: bankName || null,
     payments: normalizePayments(id, json<Partial<PaymentRecord>[]>(payments)),
     paymentTerms: paymentTerms || null,

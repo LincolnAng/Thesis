@@ -1,5 +1,6 @@
 "use client";
 
+import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from "@/lib/format";
 import { useState } from "react";
 import { ChevronDown, Search, SlidersHorizontal, X } from "lucide-react";
 
@@ -55,11 +56,7 @@ export const STATUS_FILTERS: [string, string][] = [
   ["defaulted", "Defaulted"],
 ];
 
-const METHOD_FILTERS: [string, string][] = [
-  ["cash", "Cash"],
-  ["bank_transfer", "Bank transfer"],
-  ["check", "Check"],
-];
+const METHOD_FILTERS: [string, string][] = PAYMENT_METHODS.map((m) => [m, PAYMENT_METHOD_LABELS[m]]);
 
 const PRICE_TYPE_FILTERS: [string, string][] = [
   ["standard", "Regular price"],

@@ -44,7 +44,7 @@ export interface OrderLine {
 
 /** How money changed hands. The bank is named, never an account number or balance. A check
  *  (often post-dated, one per instalment) names the bank it's drawn on. */
-export type PaymentMethod = "cash" | "bank_transfer" | "check";
+export type PaymentMethod = "cash" | "bank_transfer" | "ewallet" | "check";
 
 export type InstallmentFrequency = "weekly" | "monthly" | "quarterly" | "yearly";
 

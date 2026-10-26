@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo, useState } from "react";
 import { ArrowDownLeft, ArrowUpRight, HandCoins, History as HistoryIcon, Pencil, Trash2 } from "lucide-react";
-import { ENTRY_TYPE_LABELS, EXPENSE_CATEGORY_LABELS, PRICE_TYPE_LABELS, formatDate, formatPeso } from "@/lib/format";
+import { ENTRY_TYPE_LABELS, EXPENSE_CATEGORY_LABELS, PRICE_TYPE_LABELS, describePaymentMethod, formatDate, formatPeso } from "@/lib/format";
 import { currentDueDate, dueInfo, FREQUENCY_LABELS, installmentSchedule, methodOf, obligationInfo, obligationKind, outstanding, paymentsOf } from "@/lib/transactions/ledger";
 import { isMaterialWaste } from "@/lib/transactions/waste";
 import { fullName } from "@/lib/summary/product-sizes";
@@ -237,7 +237,7 @@ function Details({
           {plan.length > 0 && (
             <div className="flex flex-col gap-0.5 py-1">
               <span className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-                {plan.length} {FREQUENCY_LABELS[e.installments!.frequency].toLowerCase()} instalments{e.paymentMethod === "check" ? " · post-dated checks" : ""}
+                {plan.length} {FREQUENCY_LABELS[e.installments!.frequency].toLowerCase()} instalments{e.paymentMethod === "check" ? " · post-dated cheques" : ""}
               </span>
               {plan.map((i) => (
                 <span key={i.n} className={`flex justify-between gap-3 tabular-nums ${i.paid ? "text-muted-foreground line-through" : ""}`}>
@@ -284,7 +284,7 @@ function Details({
       ) : spot?.method ? (
         <Block title="Payment">
           <p className="py-1">
-            Paid on the spot · {spot.method === "bank_transfer" ? `Bank transfer${spot.bank ? ` · ${spot.bank}` : ""}` : spot.method === "check" ? `Check${spot.bank ? ` · ${spot.bank}` : ""}` : "Cash"}
+            Paid on the spot · {describePaymentMethod(spot.method, spot.bank)}
           </p>
         </Block>
       ) : null}
@@ -444,7 +444,7 @@ export function TransactionTable({
             const items = productLines(e, products);
             const status = statusOf(e, showPayment);
             const canPay = !!owed && !!kind && !!status && status.left > 0;
-            const payTip = method === "bank_transfer" ? `Bank transfer${bank ? ` · ${bank}` : ""}` : method ? "Cash" : undefined;
+            const payTip = describePaymentMethod(method, bank) || undefined;
             const toggle = () =>
               setOpen((prev) => {
                 const next = new Set(prev);
@@ -490,8 +490,8 @@ export function TransactionTable({
                   {showPayment && (
                     <td className={td}>
                       {paidBy(e, showPayment).map((m) => (
-                        <span key={`${m.method}${m.bank}`} className="block truncate leading-6" title={m.method === "bank_transfer" ? `Bank transfer${m.bank ? ` · ${m.bank}` : ""}` : undefined}>
-                          {m.method === "bank_transfer" ? (m.bank ?? "Bank transfer") : m.method === "check" ? `Check${m.bank ? ` · ${m.bank}` : ""}` : "Cash"}
+                        <span key={`${m.method}${m.bank}`} className="block truncate leading-6" title={describePaymentMethod(m.method, m.bank)}>
+                          {m.method === "bank_transfer" ? (m.bank ?? "Bank transfer") : describePaymentMethod(m.method, m.bank)}
                         </span>
                       ))}
                     </td>

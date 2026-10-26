@@ -15,7 +15,7 @@ const STATED_FIELDS = [
   "paymentTerm", "dueDate", "paymentMethod", "bankName", "paymentTerms",
 ];
 const VALID_PAYMENT_TERMS = ["spot", "receivable", "payable"];
-const VALID_METHODS = ["cash", "bank_transfer"];
+const VALID_METHODS = ["cash", "bank_transfer", "ewallet", "check"];
 const VALID_AGREEMENTS = ["immediate", "net_7", "net_15", "net_30", "date", "custom"];
 
 const DEFAULT_VALID_CATEGORIES = ["raw_materials", "labor", "utilities", "packaging", "transport", "misc"];
@@ -36,7 +36,7 @@ export interface AssistantEntryResult {
   /** Spot unless she said it is owed: a sale on credit (utang) or a purchase paid later. */
   paymentTerm: Entry["paymentTerm"];
   dueDate: string | null;
-  /** "cash" or "bank_transfer" when she said how it was paid; otherwise null — never guessed. */
+  /** "cash", "bank_transfer", "ewallet" or "check" when she said how it was paid; otherwise null — never guessed. */
   paymentMethod: string | null;
   bankName: string | null;
   /** The agreement behind the due date: immediate, net_7, net_15, net_30, date or custom. */

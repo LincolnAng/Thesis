@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { MapPin, Trash2, Banknote, Check, CircleCheck, Clock, FileText, CalendarRange, CalendarCheck, HandCoins, Heart, Boxes, Landmark, Minus, PackageX, Plus, Receipt, Search, ShoppingBag, Tag, Wrench, X, type LucideIcon } from "lucide-react";
+import { MapPin, Trash2, Banknote, Check, CircleCheck, Clock, FileText, Smartphone, CalendarRange, CalendarCheck, HandCoins, Heart, Boxes, Landmark, Minus, PackageX, Plus, Receipt, Search, ShoppingBag, Tag, Wrench, X, type LucideIcon } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Segmented, type Choice } from "@/components/ui/segmented";
 import { CustomerNameInput } from "@/components/customers/customer-name-input";
@@ -16,7 +16,7 @@ import { familiesOf, fullName, sizeName } from "@/lib/summary/product-sizes";
 import { findProduct } from "@/lib/summary/product-match";
 import { addPayment, FREQUENCY_LABELS, installmentSchedule, outstanding, paidSoFar } from "@/lib/transactions/ledger";
 import { describeOrder, lineSubtotal, orderQuantity, orderTotal } from "@/lib/transactions/order-lines";
-import { COMMON_BANKS, EXPENSE_CATEGORY_LABELS, describePaymentMethod, formatDate, formatPeso } from "@/lib/format";
+import { COMMON_BANKS, COMMON_EWALLETS, EXPENSE_CATEGORY_LABELS, describePaymentMethod, formatDate, formatPeso, namesProvider } from "@/lib/format";
 import { PAYROLL_CATEGORIES } from "@/lib/auth/permissions";
 import { isMaterialWaste, MATERIAL_WASTE } from "@/lib/transactions/waste";
 import { groupOf, materialStanding } from "@/lib/summary/material-stock";
@@ -62,7 +62,8 @@ const PRICE_CHOICES: Choice<Exclude<PriceType, null>>[] = [
 const METHOD_CHOICES: Choice<PaymentMethod>[] = [
   { value: "cash", label: "Cash", icon: Banknote },
   { value: "bank_transfer", label: "Bank transfer", icon: Landmark },
-  { value: "check", label: "Check", icon: FileText },
+  { value: "ewallet", label: "E-wallet", icon: Smartphone },
+  { value: "check", label: "Cheque", icon: FileText },
 ];
 const FREQUENCIES: InstallmentFrequency[] = ["weekly", "monthly", "quarterly", "yearly"];
 const PERIOD_WORD: Record<InstallmentFrequency, [string, string]> = { weekly: ["week", "weeks"], monthly: ["month", "months"], quarterly: ["quarter", "quarters"], yearly: ["year", "years"] };
@@ -478,7 +479,7 @@ export function TransactionDialog({
       return d;
     }
 
-    const bankName = method === "bank_transfer" || method === "check" ? bank.trim() || null : null;
+    const bankName = namesProvider(method) ? bank.trim() || null : null;
     if (kind === "investment" && invKind === "capital") {
       // Capital is recorded when the money arrives, so it is always received in full.
       Object.assign(d, { paymentTerm: null, dueDate: null, amountPaid: null, paymentStatus: null, settledAt: null, paymentMethod: method, bankName, payments: null });
@@ -506,7 +507,7 @@ export function TransactionDialog({
         const who = currentUser();
         const r = addPayment(
           { ...(d as Entry), id: e?.id ?? "new" },
-          { date: payDate || today(), amount: pay, method: effPayMethod, bankName: effPayMethod === "bank_transfer" ? effPayBank.trim() || null : null },
+          { date: payDate || today(), amount: pay, method: effPayMethod, bankName: namesProvider(effPayMethod) ? effPayBank.trim() || null : null },
           { id: who?.id, name: who?.name },
           new Date(),
         );
@@ -557,6 +558,16 @@ export function TransactionDialog({
     </label>
   );
 
+  const walletPicker = (value: string, onChange: (v: string) => void) => (
+    <label className="flex flex-col gap-1">
+      <span className={label}>Which e-wallet</span>
+      <input list="transaction-ewallets" value={value} onChange={(ev) => onChange(ev.target.value)} placeholder="e.g. GCash or Maya" className={field} />
+    </label>
+  );
+  /** The bank, wallet or nothing a method asks for. */
+  const providerPicker = (m: PaymentMethod, value: string, onChange: (v: string) => void) =>
+    m === "bank_transfer" || m === "check" ? bankPicker(value, onChange) : m === "ewallet" ? walletPicker(value, onChange) : null;
+
   const methodPicker = (value: PaymentMethod, onChange: (m: PaymentMethod) => void) => (
     <Segmented ariaLabel="How it was paid" value={value} onChange={onChange} choices={METHOD_CHOICES} />
   );
@@ -574,6 +585,11 @@ export function TransactionDialog({
         <datalist id="transaction-banks">
           {COMMON_BANKS.map((b) => (
             <option key={b} value={b} />
+          ))}
+        </datalist>
+        <datalist id="transaction-ewallets">
+          {COMMON_EWALLETS.map((w) => (
+            <option key={w} value={w} />
           ))}
         </datalist>
 
@@ -951,7 +967,7 @@ export function TransactionDialog({
                   onChange={setWhen}
                   choices={[
                     { value: "now", label: "Paid now", icon: CircleCheck },
-                    { value: "later", label: kind === "sale" ? "Customer pays later" : "We pay later", icon: Clock },
+                    { value: "later", label: kind === "sale" ? "Receivable — pays later" : "Payable — we pay later", icon: Clock },
                   ]}
                 />
               )}
@@ -959,14 +975,11 @@ export function TransactionDialog({
                 <span className={label}>{when === "later" && owedKind ? "Will be paid by" : "Paid by"}</span>
                 {methodPicker(method, setMethod)}
               </div>
-              {method === "bank_transfer" && bankPicker(bank, setBank)}
+              {providerPicker(method, bank, setBank)}
               {method === "check" && (
-                <>
-                  {bankPicker(bank, setBank)}
-                  <p className="-mt-1 text-[12.5px] text-muted-foreground">
-                    {when === "later" ? "Post-dated checks: one per payment below, each dated for its due date." : "The bank the check is drawn on."}
-                  </p>
-                </>
+                <p className="-mt-1 text-[12.5px] text-muted-foreground">
+                  {when === "later" ? "Post-dated cheques: one per payment below, each dated for its deadline." : "The bank the cheque is drawn on."}
+                </p>
               )}
 
               {when === "later" && owedKind && (
@@ -985,7 +998,7 @@ export function TransactionDialog({
                   </div>
                   {schedule === "once" ? (
                     <label className="flex flex-col gap-1">
-                      <span className={label}>Due on</span>
+                      <span className={label}>Deadline</span>
                       <input type="date" value={dueDate} onChange={(ev) => setDueDate(ev.target.value)} className={field} />
                     </label>
                   ) : (
@@ -1006,7 +1019,7 @@ export function TransactionDialog({
                           <input inputMode="numeric" value={instCount} onChange={(ev) => setInstCount(ev.target.value.replace(/[^0-9]/g, ""))} className={field} />
                         </label>
                         <label className="col-span-2 flex flex-col gap-1">
-                          <span className={label}>First payment due</span>
+                          <span className={label}>First deadline</span>
                           <input type="date" value={firstDue} onChange={(ev) => setFirstDue(ev.target.value)} className={field} />
                         </label>
                       </div>
@@ -1089,12 +1102,11 @@ export function TransactionDialog({
                             choices={METHOD_CHOICES}
                           />
                         </div>
-                        {effPayMethod === "bank_transfer" &&
-                          bankPicker(effPayBank, (b) => {
-                            setPayBank(b);
-                            setPayMethod(effPayMethod);
-                            setPayMethodPicked(true);
-                          })}
+                        {providerPicker(effPayMethod, effPayBank, (b) => {
+                          setPayBank(b);
+                          setPayMethod(effPayMethod);
+                          setPayMethodPicked(true);
+                        })}
                         {total > 0 && (
                           <p className={`text-[13px] ${payNum > leftBefore + 0.005 ? "font-semibold text-danger" : ""}`}>
                             {payNum > leftBefore + 0.005

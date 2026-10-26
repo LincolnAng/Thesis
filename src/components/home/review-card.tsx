@@ -1,5 +1,7 @@
 "use client";
 
+import { PAYMENT_METHODS, namesProvider } from "@/lib/format";
+import type { PaymentMethod } from "@/lib/store/types";
 import { CircleAlert, PencilLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatPeso } from "@/lib/format";
@@ -132,8 +134,8 @@ export function ReviewCard({
             onChange={(n) =>
               onPatch({
                 paymentTerm: draft.paymentTerm ?? "spot",
-                paymentMethod: n.method === "bank_transfer" ? "bank_transfer" : n.method === "cash" ? "cash" : null,
-                bankName: n.method === "bank_transfer" ? n.bankName : null,
+                paymentMethod: (PAYMENT_METHODS as readonly string[]).includes(n.method ?? "") ? (n.method as PaymentMethod) : null,
+                bankName: namesProvider(n.method) ? n.bankName : null,
               })
             }
           />
