@@ -1,4 +1,5 @@
 import { addTokenUsage, setApiKeyMissing } from "@/lib/store/store";
+import { LIMIT_MESSAGE, LIMIT_REACHED } from "@/lib/ai/limit";
 import type { AssistantClarifyOption, AssistantEntryResult } from "@/app/api/assistant/route";
 
 export type AssistantOutcome =
@@ -47,6 +48,8 @@ export async function requestAssistant(
         clarifyOptions: (json.clarifyOptions as AssistantClarifyOption[] | null) ?? null,
       };
     }
+
+    if (json.detail === LIMIT_REACHED) return { status: "chat", reply: LIMIT_MESSAGE, needsLookup: false };
 
     if (json.reason === "missing_api_key") {
       setApiKeyMissing(true);

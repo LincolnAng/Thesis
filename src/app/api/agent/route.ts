@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { LIMIT_MESSAGE, aiBudgetOpen, recordAiUsage, type Usage } from "@/lib/ai/spend";
 import Anthropic from "@anthropic-ai/sdk";
 import { requireSession } from "@/lib/auth/session";
 import { costContextOf, loadBusinessDataFor } from "@/lib/auth/load-business-data";
@@ -133,6 +134,11 @@ export async function POST(req: NextRequest) {
   const settings = await getAiSettings();
   const apiKey = settings.apiKey || process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return NextResponse.json({ success: false, reason: "no_api_key" }, { status: 503 });
+  // The month's AI limit (lib/ai/spend): once it's reached, BAi says so instead of answering.
+  if (!(await aiBudgetOpen())) {
+    const paused: AgentReply = { success: true, reply: LIMIT_MESSAGE, sources: [], usedWeb: false, proposal: null };
+    return NextResponse.json(paused);
+  }
 
   let view: AgentView;
   try {
@@ -203,6 +209,7 @@ export async function POST(req: NextRequest) {
         ...(FALLBACK_MODELS.test(model) ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" } : {}),
       } as Anthropic.Beta.MessageCreateParamsNonStreaming);
 
+      await recordAiUsage(response.model ?? model, response.usage as Usage);
       collectSources(response.content, sources);
       if (response.content.some((b) => b.type === "server_tool_use")) usedWeb = true;
       const text = response.content

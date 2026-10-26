@@ -1,3 +1,4 @@
+import { LIMIT_REACHED, aiBudgetOpen, recordAiUsage, type Usage } from "@/lib/ai/spend";
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 export const CLAUDE_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
 /** Advice is the one genuinely hard reasoning job here, so it gets the stronger model.
@@ -68,6 +69,11 @@ export async function callClaude(params: {
     };
   }
 
+  // The month's AI limit (lib/ai/spend): once it's reached, nothing more goes out.
+  if (!(await aiBudgetOpen())) {
+    return { ok: false, text: "", usage: { input_tokens: 0, output_tokens: 0 }, error: LIMIT_REACHED };
+  }
+
   // Without this a hung Anthropic response leaves the request (and the chat UI's typing
   // indicator) spinning indefinitely, with no way back to the manual-entry fallback.
   const controller = new AbortController();
@@ -136,6 +142,7 @@ export async function callClaude(params: {
       collectSources(content, sources);
 
       const u = (json?.usage ?? {}) as Record<string, number>;
+      await recordAiUsage(model, json?.usage as Usage);
       usage.input_tokens +=
         (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0);
       usage.output_tokens += u.output_tokens ?? 0;

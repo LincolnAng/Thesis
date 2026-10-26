@@ -108,3 +108,19 @@ test("a machine that makes two things splits its day between them", () => {
   const first = plan.days.find((d) => d.date === "2026-10-14");
   assert.deepEqual(first?.runs.map((r) => [r.itemId, r.qty]).sort(), [["bar", 50], ["spread", 20]]);
 });
+
+test("roasting and making products never land on the same day", () => {
+  const plan = buildProductionPlan(
+    input({
+      machines: [
+        machine("mixer", [{ itemId: "spread", kind: "product", qty: 100, per: "day" }]),
+        machine("mill", [{ itemId: "cacao", kind: "material", qty: 1, per: "hour" }]),
+      ],
+    }),
+  );
+  for (const d of plan.days) assert.ok(new Set(d.runs.map((r) => r.kind)).size <= 1, d.date);
+  const productDays = plan.days.filter((d) => d.runs.some((r) => r.kind === "product")).map((d) => d.date);
+  const materialDays = plan.days.filter((d) => d.runs.some((r) => r.kind === "material")).map((d) => d.date);
+  assert.ok(productDays.length > 0 && materialDays.length > 0);
+  assert.ok(materialDays[0] < productDays[0], "roasting comes first");
+});

@@ -1,5 +1,6 @@
 "use client";
 
+import { LIMIT_MESSAGE, LIMIT_REACHED } from "@/lib/ai/limit";
 import { useEffect, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { ChatThread } from "@/components/home/chat-thread";
@@ -150,7 +151,9 @@ export function HomeChat() {
     // Same rule as the assistant: when the AI never ran, say so. An answer assembled locally
     // would sound just as confident and be worth nothing.
     const text =
-      outcome.status === "unavailable"
+      outcome.status === "unreachable" && outcome.detail === LIMIT_REACHED
+        ? LIMIT_MESSAGE
+        : outcome.status === "unavailable"
         ? "I can't reach the AI right now, so I won't guess at business advice. Check the API key under Settings → AI assistant."
         : outcome.status === "unreachable"
           ? "I couldn't reach the AI just now, so I won't guess at an answer. Check the API key under Settings → AI assistant."

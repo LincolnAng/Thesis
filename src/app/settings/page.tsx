@@ -1,5 +1,6 @@
 "use client";
 
+import { AiLimitCard } from "@/components/settings/ai-limit-card";
 import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 import { useEffect, useState, type ChangeEvent } from "react";
 import { useTheme } from "next-themes";
@@ -473,6 +474,7 @@ export default function SettingsPageInner() {
         </CardContent>
       </Card>
 
+      <AiLimitCard />
         </div>
       )}
 

@@ -14,6 +14,7 @@
  * Pure: no store, no React.
  */
 
+import { componentDraws } from "@/lib/production/batch-draws";
 import { expandOrderLines } from "@/lib/transactions/order-lines";
 import type { Entry, Product } from "@/lib/store/types";
 
@@ -25,6 +26,8 @@ export interface StockLot {
   qty: number;
   /** Negative once past. */
   daysLeft: number;
+  /** The lot number on the label, when one was given. */
+  lotId?: string | null;
 }
 
 export type LotState = "expired" | "expiring" | "fresh";
@@ -88,7 +91,7 @@ export function productExpiry(
 
   const made = entries
     .filter((e) => e.type === "INVENTORY_IN" && e.quantity && e.quantity > 0 && matches(e, product))
-    .map((e) => ({ day: dayOf(e.timestamp), qty: e.quantity as number }))
+    .map((e) => ({ day: dayOf(e.timestamp), qty: e.quantity as number, expiresOn: e.expiresOn ?? null, lotId: e.lotId ?? null }))
     .sort((a, b) => a.day.localeCompare(b.day));
 
   if (made.length === 0) {
@@ -114,11 +117,10 @@ export function productExpiry(
     .reduce((sum, e) => sum + (e.quantity as number), 0);
   // Used as an in-house component: each batch of a product that contains this one took some.
   for (const parent of allProducts) {
-    const row = (parent.recipeComponents ?? []).find((c) => c.productId === product.id);
-    if (!row || parent.id === product.id || parent.batchYield <= 0) continue;
+    if (parent.id === product.id || !(parent.recipeComponents ?? []).some((c) => c.productId === product.id)) continue;
     for (const e of entries) {
       if (e.type !== "INVENTORY_IN" || !e.quantity || e.quantity <= 0 || !matches(e, parent)) continue;
-      out += (e.quantity / parent.batchYield) * row.quantity;
+      out += componentDraws(e, parent).filter((c) => c.productId === product.id).reduce((t, c) => t + c.qty, 0);
     }
   }
 
@@ -131,8 +133,9 @@ export function productExpiry(
       left -= taken;
     }
     if (left <= 0) continue;
-    const expiresOn = addDays(batch.day, Math.max(0, shelfLifeDays));
-    lots.push({ madeOn: batch.day, expiresOn, qty: left, daysLeft: daysBetween(todayDay, expiresOn) });
+    // The date on the label when one was set; otherwise made + shelf life.
+    const expiresOn = batch.expiresOn ?? addDays(batch.day, Math.max(0, shelfLifeDays));
+    lots.push({ madeOn: batch.day, expiresOn, qty: left, daysLeft: daysBetween(todayDay, expiresOn), lotId: batch.lotId });
   }
 
   const window = Math.max(0, expiringWithinDays);

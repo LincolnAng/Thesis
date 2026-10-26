@@ -153,6 +153,14 @@ export interface Entry {
   installments?: InstallmentPlan | null;
   /** The branch it happened at (lib/inventory/locations). Empty means the main branch. */
   branch?: string | null;
+  /** A batch's lot number, as written on the label. */
+  lotId?: string | null;
+  /** "YYYY-MM-DD" a batch is good until, when set at the time — otherwise made + shelf life. */
+  expiresOn?: string | null;
+  /** The packaging a batch actually used, taken off its stock in place of the recipe's. */
+  packagingUsed?: { materialId: string; qty: number }[] | null;
+  /** Repacked from the tingi bucket: already-made product, so it draws no ingredients. */
+  fromTingi?: boolean | null;
 }
 
 export interface RecipeIngredientRow {
@@ -511,6 +519,28 @@ export interface CalendarItem {
   sharedWith: string[];
   /** For tasks and deadlines: ticked off. */
   done: boolean;
+  createdAt: string;
+}
+
+/**
+ * One movement in a product's tingi bucket — the loose amount left over from a batch that
+ * doesn't fill a jar. Put in when a batch is made; taken out when it's repacked or used in
+ * another product. The bucket is what's been put in minus what's been taken out.
+ */
+export interface TingiMove {
+  id: string;
+  productId: string;
+  direction: "in" | "out";
+  qty: number;
+  unit: string;
+  /** "YYYY-MM-DD" */
+  date: string;
+  /** The batch it came from, for what's put in. */
+  lotId: string;
+  /** What it was used for, for what's taken out. */
+  usedForProductId: string | null;
+  note: string;
+  loggedByName?: string | null;
   createdAt: string;
 }
 

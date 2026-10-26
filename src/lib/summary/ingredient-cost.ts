@@ -22,7 +22,7 @@
  */
 
 import { convertQuantity } from "@/lib/units";
-import { rawQuantityNeeded } from "@/lib/summary/cacao";
+import { drawOf } from "@/lib/production/batch-draws";
 import type { Entry, Product, RawMaterialStock } from "@/lib/store/types";
 
 /** One purchase, in the material's own unit. */
@@ -104,11 +104,8 @@ export function consumedQty(
   for (const entry of entries) {
     if (entry.type !== "INVENTORY_IN" || !entry.quantity || entry.quantity <= 0) continue;
     const product = products.find((p) => normalise(p.name) === normalise(entry.sku));
-    if (!product || product.batchYield <= 0) continue;
-    const row = product.recipeIngredients.find((r) => r.materialId === material.id);
-    if (!row) continue;
-    const batches = entry.quantity / product.batchYield;
-    used += rawQuantityNeeded(material.name, row.quantity, cacaoUtilization) * batches;
+    if (!product) continue;
+    used += drawOf(entry, product, material, cacaoUtilization);
   }
   return used;
 }

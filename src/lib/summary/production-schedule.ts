@@ -12,7 +12,8 @@ import type { BusinessEvent, Entry, Machine, Product, RawMaterialStock } from "@
  * makes in an hour or a day. A machine that makes several things splits its day between them.
  * Everything to make carries a deadline — the end of this month for forecast demand, the day
  * before the event for event stock — and the chosen strategy decides which days it lands on.
- * Raw materials a machine makes (nibs from a grinder) are scheduled too when they're short.
+ * Raw materials a machine makes (nibs from a grinder) are scheduled too when they're short, on
+ * days of their own: a day is either a roasting/grinding day or a production day, never both.
  */
 
 export type ScheduleStrategy = "fastest" | "balanced" | "min_expiry";
@@ -245,9 +246,10 @@ export function buildProductionPlan(input: PlanInput): ProductionPlan {
       };
     })
     .sort((a, b) => b.short - a.short || a.name.localeCompare(b.name));
-  // What a machine here makes is made, not bought — before the products that use it.
+  // What a machine here makes is made, not bought — and ready before the first product needs it.
+  const firstNeed = jobs.reduce((min, j) => (j.deadline < min ? j.deadline : min), endOfMonth);
   for (const n of ingredientNeeds.filter((x) => x.madeInHouse && x.short > 0)) {
-    jobs.push({ itemId: n.materialId, kind: "material", name: n.name, unit: n.unit, qty: n.short, deadline: endOfMonth, shelfLife: Infinity });
+    jobs.push({ itemId: n.materialId, kind: "material", name: n.name, unit: n.unit, qty: n.short, deadline: firstNeed, shelfLife: Infinity });
   }
 
   // --- Calendar ---------------------------------------------------------------------------
@@ -277,10 +279,14 @@ export function buildProductionPlan(input: PlanInput): ProductionPlan {
   const expiring = new Map<string, number>();
   const unplaced = new Map<string, number>();
   const jobById = new Map<string, Job>();
+  // Roasting and grinding (raw materials) and making products never share a day.
+  const kindOn = new Map<string, Job["kind"]>();
   const add = (m: Map<string, number>, id: string, qty: number) => m.set(id, (m.get(id) ?? 0) + qty);
 
   /** Makes as much of `job` as fits on `day`, each machine up to `cap` of its day. */
   const fill = (day: PlanDay, job: Job, wanted: number, cap: number): number => {
+    const claimed = kindOn.get(day.date);
+    if (claimed && claimed !== job.kind) return 0;
     let done = 0;
     for (const { machine, perDay } of makersOf(input.machines, job.itemId)) {
       if (wanted - done <= EPS) break;
@@ -296,6 +302,7 @@ export function buildProductionPlan(input: PlanInput): ProductionPlan {
       done += qty;
     }
     if (done > EPS) {
+      kindOn.set(day.date, job.kind);
       const forDay = made.get(day.date) ?? new Map<string, number>();
       add(forDay, job.itemId, done);
       made.set(day.date, forDay);
@@ -323,7 +330,8 @@ export function buildProductionPlan(input: PlanInput): ProductionPlan {
     // Shortest shelf life claims the latest slots before its deadline; longer-lasting goods fill in earlier.
     ordered = [...placeable].sort((a, b) => kindRank(b) - kindRank(a) || a.shelfLife - b.shelfLife || b.deadline.localeCompare(a.deadline));
   } else {
-    ordered = [...placeable].sort((a, b) => a.deadline.localeCompare(b.deadline) || kindRank(a) - kindRank(b));
+    // Raw materials first — the products are made from them — then earliest deadline first.
+    ordered = [...placeable].sort((a, b) => kindRank(a) - kindRank(b) || a.deadline.localeCompare(b.deadline));
     if (input.strategy === "balanced") {
       // Every machine gets the same share of each day — the work spread evenly up to the last
       // deadline. A deadline always beats evenness: what doesn't fit under the cap goes uncapped.

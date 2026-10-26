@@ -17,7 +17,7 @@ import {
   type SupplierRow,
 } from "./sheet-shapes";
 import { findProduct } from "@/lib/summary/product-match";
-import { rawQuantityNeeded } from "@/lib/summary/cacao";
+import { componentDraws, drawOf } from "@/lib/production/batch-draws";
 import { ENTRY_TYPE_LABELS, formatPeso } from "@/lib/format";
 import { isMaterialWaste } from "@/lib/transactions/waste";
 import { currentUser, signOut } from "@/lib/auth/current-user";
@@ -44,6 +44,7 @@ import type {
   PayrollRecord,
   CalendarItem,
   StockTransfer,
+  TingiMove,
 } from "./types";
 
 export interface StoreState {
@@ -67,6 +68,7 @@ export interface StoreState {
   calendarItems: CalendarItem[];
   /** Stock moved between branches. */
   stockTransfers: StockTransfer[];
+  tingi: TingiMove[];
   /** Business-level numbers the owner sets once — hourly labor rate today. */
   businessSettings: Record<string, string>;
   tokenUsage: TokenUsage;
@@ -121,6 +123,7 @@ function defaultState(): StoreState {
     payroll: [],
     calendarItems: [],
     stockTransfers: [],
+    tingi: [],
     businessSettings: {},
     tokenUsage: {
       totalInputTokens: 0,
@@ -303,6 +306,7 @@ const COLLECTION_NOUNS: Record<string, string> = {
   payroll: "salary payment",
   calendarItems: "calendar item",
   stockTransfers: "stock transfer",
+  tingi: "tingi",
 };
 
 const OP_VERBS: Record<string, string> = { append: "added", update: "changed", delete: "deleted" };
@@ -669,6 +673,7 @@ async function loadAllFromServer() {
         payroll: Array.isArray(json.payroll) ? mergePending(json.payroll as PayrollRecord[], prev.payroll) : prev.payroll,
         calendarItems: Array.isArray(json.calendarItems) ? mergePending(json.calendarItems as CalendarItem[], prev.calendarItems) : prev.calendarItems,
         stockTransfers: Array.isArray(json.stockTransfers) ? mergePending(json.stockTransfers as StockTransfer[], prev.stockTransfers) : prev.stockTransfers,
+        tingi: Array.isArray(json.tingi) ? mergePending(json.tingi as TingiMove[], prev.tingi) : prev.tingi,
         businessSettings: businessSettingRowsToRecord(businessSettingsMigration.items),
         loadedFromServer: true,
       };
@@ -830,26 +835,19 @@ function applyEntrySideEffects(
       //
       // It belongs here because this is the one place every entry passes through, including
       // edits and deletions — `direction` puts the ingredients back when a batch is undone.
-      const batches = product.batchYield > 0 ? delta / product.batchYield : 0;
-      if (batches !== 0) {
-        for (const row of product.recipeIngredients) {
-          const material = rawMaterials.find((m) => m.id === row.materialId);
-          if (!material) continue;
-          // Recipes are written in USABLE cacao; the shelf holds raw. Deducting the recipe
-          // figure would leave phantom beans that cannot be roasted into anything.
-          const used = rawQuantityNeeded(material.name, row.quantity, cacaoUtilization) * batches;
-          rawMaterials = rawMaterials.map((m) =>
-            m.id === material.id ? { ...m, qty: Math.max(0, m.qty - used) } : m,
-          );
-          touchedMaterialIds.push(material.id);
-        }
-        // In-house components (tablea in ice cream) come off their own shelf the same way.
-        for (const row of product.recipeComponents ?? []) {
-          if (row.productId === product.id) continue;
-          const used = row.quantity * batches;
-          products = products.map((p) => (p.id === row.productId ? { ...p, stockQty: Math.max(0, p.stockQty - used) } : p));
-          touchedProductIds.push(row.productId);
-        }
+      // What it draws — recipe per unit, the packaging picked in the Add form in place of the
+      // recipe's, nothing but packaging for repacked tingi — is lib/production/batch-draws.
+      for (const material of rawMaterials) {
+        const used = drawOf(entry, product, material, cacaoUtilization) * direction;
+        if (used === 0) continue;
+        rawMaterials = rawMaterials.map((m) => (m.id === material.id ? { ...m, qty: Math.max(0, m.qty - used) } : m));
+        touchedMaterialIds.push(material.id);
+      }
+      // In-house components (tablea in ice cream) come off their own shelf the same way.
+      for (const c of componentDraws(entry, product)) {
+        const used = c.qty * direction;
+        products = products.map((p) => (p.id === c.productId ? { ...p, stockQty: Math.max(0, p.stockQty - used) } : p));
+        touchedProductIds.push(c.productId);
       }
     }
   } else if (entry.type === "EXPENSE" && (entry.category === "raw_materials" || entry.category === "packaging")) {
@@ -1387,7 +1385,7 @@ function mergePending<T extends { id: string }>(server: T[], local: T[]): T[] {
   return [...server.filter((r) => !pendingIds.has(r.id)), ...pending];
 }
 
-async function saveSalaryRow(collection: "staff" | "timeRecords" | "payroll" | "calendarItems" | "stockTransfers", op: "append" | "update", item: { id: string }): Promise<boolean> {
+async function saveSalaryRow(collection: "staff" | "timeRecords" | "payroll" | "calendarItems" | "stockTransfers" | "tingi", op: "append" | "update", item: { id: string }): Promise<boolean> {
   pendingSalaryIds.add(item.id);
   const ok = await mirrorOp(collection, op, { id: op === "update" ? item.id : undefined, item });
   // Once the server has it, the next poll will return it; until then keep showing ours.
@@ -1566,6 +1564,19 @@ export function addStockTransfer(input: Omit<StockTransfer, "id" | "createdAt" |
   setState((prev) => ({ ...prev, stockTransfers: [...prev.stockTransfers, t] }));
   void saveSalaryRow("stockTransfers", "append", t);
   return t;
+}
+
+/** Loose product into or out of a tingi bucket. */
+export function addTingiMove(input: Omit<TingiMove, "id" | "createdAt" | "loggedByName">): TingiMove {
+  const t: TingiMove = { ...input, id: genId("tingi"), loggedByName: currentUser()?.name ?? null, createdAt: new Date().toISOString() };
+  setState((prev) => ({ ...prev, tingi: [...prev.tingi, t] }));
+  void saveSalaryRow("tingi", "append", t);
+  return t;
+}
+
+export function deleteTingiMove(id: string) {
+  setState((prev) => ({ ...prev, tingi: prev.tingi.filter((t) => t.id !== id) }));
+  void mirrorOp("tingi", "delete", { id });
 }
 
 export function deleteStockTransfer(id: string) {

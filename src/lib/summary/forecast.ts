@@ -52,6 +52,8 @@ export interface ProductForecast {
   /** The fitted level and trend, for the same reason. */
   level: number;
   trendPerMonth: number;
+  /** Share the forecast was lowered by because product spoiled unsold lately, 0–0.5. */
+  spoilageTrim: number;
 }
 
 export interface ForecastReliability {
@@ -146,6 +148,39 @@ export function monthlyDemand(productId: string, entries: Entry[], products: Pro
     points.push({ month: key, label: monthLabel(key), qty: byMonth.get(key) ?? 0 });
   }
   return points;
+}
+
+/**
+ * How much of a product spoiled unsold over the last three full months, as a share of what
+ * left the shelf (sold + spoiled). Sales alone said "this many will sell", and when part of
+ * what was made for that went in the bin, the forecast was too high by about that share — so
+ * it's lowered by it. Capped at half, so one bad month can't wipe a product's forecast out.
+ */
+export const SPOILAGE_WINDOW_MONTHS = 3;
+const MAX_SPOILAGE_TRIM = 0.5;
+
+export function spoilageTrim(productId: string, entries: Entry[], products: Product[], now = new Date()): { trim: number; spoiled: number; sold: number } {
+  const thisMonth = currentMonthKey(now);
+  let from = thisMonth;
+  for (let i = 0; i < SPOILAGE_WINDOW_MONTHS; i++) from = previousMonthKey(from);
+  let sold = 0;
+  let spoiled = 0;
+  for (const entry of expandOrderLines(entries)) {
+    if (!entry.quantity || entry.quantity <= 0) continue;
+    const key = monthKey(entry.timestamp);
+    if (key < from || key >= thisMonth) continue;
+    if (resolveProductId(products, entry.sku) !== productId) continue;
+    if (entry.type === "SALE") sold += entry.quantity;
+    else if (entry.type === "WASTE" && entry.category !== "material_waste") spoiled += entry.quantity;
+  }
+  const out = sold + spoiled;
+  return { trim: out > 0 ? Math.min(MAX_SPOILAGE_TRIM, spoiled / out) : 0, spoiled, sold };
+}
+
+function previousMonthKey(key: string): string {
+  const [y, m] = key.split("-").map(Number);
+  const d = new Date(y, m - 2, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
 /** No pattern set: the same maths with nothing applied. */
@@ -330,6 +365,9 @@ export function forecastProduct(
         ? measured.months
         : FLAT_MULTIPLIERS;
 
+  const spoilage = spoilageTrim(product.id, entries, products, now);
+  const trim = spoilage.trim;
+
   let qty = 0;
   let method: ForecastMethod = "no_history";
   let monthly: ForecastMonth[] = [];
@@ -344,7 +382,9 @@ export function forecastProduct(
     // observation, so this month sits at index (gap - 1).
     const offset = Math.max(0, monthsBetweenKeys(lastHistoryMonth, thisMonth) - 1);
 
-    const { series, fit } = projectHoltWinters(history, season, offset + 13);
+    const fitted = projectHoltWinters(history, season, offset + 13);
+    const { fit } = fitted;
+    const series = fitted.series.map((u) => u * (1 - trim));
     level = fit.level;
     trendPerMonth = fit.trend;
     qty = series[offset + 1] ?? 0;
@@ -385,7 +425,14 @@ export function forecastProduct(
   const forecastQty = Math.round(qty);
   // `measured.usable` is the honest test of whether the season rests on her sales: a stored
   // "measured" pattern came from this same data, and a stored suggestion did not.
-  const reliability = reliabilityOf(history, season, forecastQty, measured.usable);
+  const base = reliabilityOf(history, season, forecastQty, measured.usable);
+  const reliability =
+    trim > 0
+      ? {
+          ...base,
+          reason: `${base.reason} Lowered ${Math.round(trim * 100)}% because ${Math.round(spoilage.spoiled)} spoiled unsold in the last ${SPOILAGE_WINDOW_MONTHS} months.`,
+        }
+      : base;
   return {
     productId: product.id,
     productName: product.name,
@@ -401,6 +448,7 @@ export function forecastProduct(
     monthly,
     level,
     trendPerMonth,
+    spoilageTrim: trim,
   };
 }
 
@@ -505,5 +553,6 @@ export function aggregateForecast(forecasts: ProductForecast[]): ProductForecast
     monthly,
     level: usable.reduce((sum, f) => sum + f.level, 0),
     trendPerMonth: usable.reduce((sum, f) => sum + f.trendPerMonth, 0),
+    spoilageTrim: Math.max(...usable.map((f) => f.spoilageTrim)),
   };
 }

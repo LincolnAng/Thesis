@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth/session";
-import { getAiSettings, maskApiKey, saveAiSettings, type BotLanguage } from "@/lib/sheets/settings";
+import { getAiSettings, getMonthSpendUsd, maskApiKey, saveAiSettings, type BotLanguage } from "@/lib/sheets/settings";
+import { PHP_PER_USD } from "@/lib/ai/spend";
 
 const VALID_BOT_LANGUAGES: BotLanguage[] = ["english", "filipino", "cebuano"];
 
@@ -16,6 +17,8 @@ export async function GET() {
       keyPreview: settings.apiKey ? maskApiKey(settings.apiKey) : null,
       model: settings.model,
       botLanguage: settings.botLanguage,
+      monthlyLimitPhp: settings.monthlyLimitPhp,
+      spentThisMonthPhp: Math.round((await getMonthSpendUsd()) * PHP_PER_USD * 100) / 100,
       spreadsheetUrl: spreadsheetId ? `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit` : null,
     });
   } catch (err) {
@@ -30,7 +33,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const auth = await requireSession(["executive"]);
   if (auth.denied) return auth.denied;
-  let body: { apiKey?: string; model?: string; botLanguage?: string };
+  let body: { apiKey?: string; model?: string; botLanguage?: string; monthlyLimitPhp?: number | null };
   try {
     body = await req.json();
   } catch {
@@ -40,7 +43,9 @@ export async function POST(req: NextRequest) {
   const apiKey = body.apiKey?.trim();
   const model = body.model?.trim();
   const botLanguage = body.botLanguage?.trim();
-  if (apiKey === undefined && model === undefined && botLanguage === undefined) {
+  // A number of pesos, or null / 0 for no limit.
+  const limit = body.monthlyLimitPhp === undefined ? undefined : Number(body.monthlyLimitPhp) > 0 ? Math.round(Number(body.monthlyLimitPhp)) : null;
+  if (apiKey === undefined && model === undefined && botLanguage === undefined && limit === undefined) {
     return NextResponse.json({ success: false, reason: "nothing_to_save" }, { status: 400 });
   }
   if (apiKey === "" || model === "") {
@@ -51,7 +56,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    await saveAiSettings({ apiKey, model, botLanguage: botLanguage as BotLanguage | undefined });
+    await saveAiSettings({ apiKey, model, botLanguage: botLanguage as BotLanguage | undefined, monthlyLimitPhp: limit });
     return NextResponse.json({ success: true });
   } catch (err) {
     return NextResponse.json(

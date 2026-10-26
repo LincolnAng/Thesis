@@ -17,6 +17,7 @@ import { cacaoUtilizationPct, expiringWithinDays, shelfLifeDays } from "@/lib/su
 import { allStandings, groupOf } from "@/lib/summary/material-stock";
 import { BRANCHES_KEY, branchesOf, mainBranch, newBranchId, stockByBranch, type Branch } from "@/lib/inventory/branches";
 import { pluralize } from "@/lib/format";
+import { TingiBuckets } from "@/components/stock/tingi-buckets";
 import type { Product, RawMaterialStock } from "@/lib/store/types";
 
 /**
@@ -234,6 +235,8 @@ export function InventoryScreen() {
             </ul>
           )}
         </section>
+
+        <TingiBuckets />
 
         {(["ingredient", "supply"] as const).map((group) => {
           const list = materials(group);
