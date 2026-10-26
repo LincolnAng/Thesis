@@ -44,7 +44,7 @@ export function bucketsOf(moves: TingiMove[]): Bucket[] {
  * Tingi: the loose product left over from a batch that doesn't fill a pack — the tablea pellets
  * a production run doesn't use, mostly — kept in a bucket per product. Each bucket shows how much
  * is in it, and every time some went in (left over from which batch, or put in by hand) or came
- * out (repacked, used in another product or a production run). The same buckets show on
+ * out (repacked into a finished product, or used in a production run). The same buckets show on
  * Inventory and on Production.
  */
 export function TingiBuckets() {
@@ -68,7 +68,7 @@ export function TingiBuckets() {
           </button>
           {buckets.some((b) => b.balance > 0) && (
             <button type="button" onClick={() => setUsing(buckets.find((b) => b.balance > 0)!.key)} className={BUTTON.secondary}>
-              <ArrowUpFromLine className="h-4 w-4" /> Use tingi
+              <ArrowUpFromLine className="h-4 w-4" /> Repack
             </button>
           )}
         </div>
@@ -104,7 +104,7 @@ export function TingiBuckets() {
                         {t.direction === "in"
                           ? t.note || (t.lotId ? `from lot ${t.lotId}` : "put in")
                           : t.usedForProductId
-                            ? `into ${nameOf(t.usedForProductId)}`
+                            ? `repacked as ${nameOf(t.usedForProductId)}`
                             : t.note || "used"}
                         {t.direction === "out" && t.lotId ? ` · batch ${productionRuns.find((r) => r.lotId === t.lotId)?.name || t.lotId}` : ""}
                         {t.loggedByName ? ` · ${t.loggedByName}` : ""}
@@ -188,7 +188,7 @@ function PutInDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-/** Taking some out of a bucket: repacked into finished jars, used in another product, or other. */
+/** Taking some out of a bucket: repacked into a finished product, which goes on the shelf. */
 function UseTingiDialog({ buckets, initial, onClose }: { buckets: Bucket[]; initial: string; onClose: () => void }) {
   const { products, rawMaterials, productionRuns } = useStore();
   const [key, setKey] = useState(initial);
@@ -210,10 +210,8 @@ function UseTingiDialog({ buckets, initial, onClose }: { buckets: Bucket[]; init
     })),
   ];
   const [qty, setQty] = useState("");
-  const [use, setUse] = useState<"repack" | "ingredient" | "other">("repack");
   const [into, setInto] = useState(bucket?.productId ?? products[0]?.id ?? "");
   const [made, setMade] = useState("");
-  const [note, setNote] = useState("");
   const [packaging, setPackaging] = useState<PackagingLine[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const target: Product | undefined = products.find((p) => p.id === into);
@@ -226,8 +224,11 @@ function UseTingiDialog({ buckets, initial, onClose }: { buckets: Bucket[]; init
   function save() {
     const n = Number(qty);
     if (!bucket) return;
-    if (!(n > 0)) return setError("How much was used?");
-    if (n > bucket.balance) return setError(`Only ${bucket.balance} ${bucket.unit} in the bucket.`);
+    const finished = Number(made);
+    if (!(n > 0)) return setError("How much tingi was repacked?");
+    if (n > bucket.balance) return setError(`Only ${bucket.balance} ${bucket.unit} in this tingi.`);
+    if (!target) return setError("What was it repacked as?");
+    if (!(finished > 0)) return setError(`How many ${target.unit || "jars"} came out?`);
     const d = new Date();
     const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     addTingiMove({
@@ -237,21 +238,18 @@ function UseTingiDialog({ buckets, initial, onClose }: { buckets: Bucket[]; init
       unit: bucket.unit,
       date,
       lotId: runs.find((r) => r.id === batchId)?.lotId ?? "",
-      usedForProductId: use === "other" ? null : into,
-      note: use === "other" ? note.trim() : use === "repack" ? "Repacked" : "Used as an ingredient",
+      usedForProductId: into,
+      note: "Repacked",
     });
-    // Repacked into finished jars: they go on the shelf, drawing only the packaging they went into.
-    const finished = Number(made);
-    if (use === "repack" && target && finished > 0) {
-      addEntry({
-        ...blankEntryDraft("INVENTORY_IN", `Repacked ${finished} ${target.unit || "jars"} of ${fullName(target, products)} from tingi`),
-        sku: target.name,
-        quantity: finished,
-        unit: target.unit || "jars",
-        fromTingi: true,
-        packagingUsed: packagingUsed(shownPackaging),
-      });
-    }
+    // The finished product goes on the shelf, drawing only the packaging it went into.
+    addEntry({
+      ...blankEntryDraft("INVENTORY_IN", `Repacked ${finished} ${target.unit || "jars"} of ${fullName(target, products)} from tingi`),
+      sku: target.name,
+      quantity: finished,
+      unit: target.unit || "jars",
+      fromTingi: true,
+      packagingUsed: packagingUsed(shownPackaging),
+    });
     onClose();
   }
 
@@ -259,8 +257,8 @@ function UseTingiDialog({ buckets, initial, onClose }: { buckets: Bucket[]; init
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto rounded-2xl sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Use tingi</DialogTitle>
-          <DialogDescription>Take some out of a bucket — repacked into jars, or used to make something else.</DialogDescription>
+          <DialogTitle>Repack tingi</DialogTitle>
+          <DialogDescription>Tingi repacked into a finished product — it goes on the shelf, with the packaging it used.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
           <div className={labelCls}>
@@ -280,53 +278,21 @@ function UseTingiDialog({ buckets, initial, onClose }: { buckets: Bucket[]; init
             <SearchSelect value={batchId} onChange={setBatch} options={batchOptions} placeholder="No batch" ariaLabel="Batch" />
           </div>
           <label className={labelCls}>
-            How much ({bucket?.unit})
+            How much tingi ({bucket?.unit})
             <input autoFocus inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value.replace(/[^0-9.]/g, ""))} className={fieldCls} />
           </label>
-          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="What it was used for">
-            {(
-              [
-                ["repack", "Repacked into jars"],
-                ["ingredient", "Used in another product"],
-                ["other", "Other"],
-              ] as const
-            ).map(([v, label]) => (
-              <button
-                key={v}
-                type="button"
-                role="radio"
-                aria-checked={use === v}
-                onClick={() => setUse(v)}
-                className={`min-h-10 rounded-full border px-3.5 text-[13px] font-semibold ${use === v ? "border-cacao bg-cacao text-ivory" : "border-line/20 bg-card"}`}
-              >
-                {label}
-              </button>
-            ))}
+          <div className={labelCls}>
+            Repacked as
+            <ProductPicker value={into} onChange={(id) => { setInto(id); setPackaging(null); }} />
           </div>
-          {use !== "other" && (
-            <div className={labelCls}>
-              {use === "repack" ? "Repacked as" : "Used in"}
-              <ProductPicker value={into} onChange={(id) => { setInto(id); setPackaging(null); }} />
-            </div>
-          )}
-          {use === "repack" && (
-            <>
-              <label className={labelCls}>
-                How many finished ({target?.unit || "jars"})
-                <input inputMode="decimal" value={made} onChange={(e) => setMade(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="e.g. 4" className={fieldCls} />
-              </label>
-              <div className={labelCls}>
-                Packaging used
-                <PackagingEditor lines={shownPackaging} onChange={setPackaging} />
-              </div>
-            </>
-          )}
-          {use === "other" && (
-            <label className={labelCls}>
-              What for
-              <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Samples, tasting…" className={fieldCls} />
-            </label>
-          )}
+          <label className={labelCls}>
+            How many finished ({target?.unit || "jars"})
+            <input inputMode="decimal" value={made} onChange={(e) => setMade(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="e.g. 4" className={fieldCls} />
+          </label>
+          <div className={labelCls}>
+            Packaging used
+            <PackagingEditor lines={shownPackaging} onChange={setPackaging} />
+          </div>
           {error && <p className="text-[13px] font-semibold text-danger">{error}</p>}
           <div className="flex gap-2">
             <button type="button" onClick={save} className="min-h-11 flex-1 rounded-[10px] bg-cacao text-[14px] font-semibold text-ivory">
