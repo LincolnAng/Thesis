@@ -547,6 +547,8 @@ export interface TingiMove {
   /** What it was used for, for what's taken out. */
   usedForProductId: string | null;
   note: string;
+  /** The production run it was left over from or went into, when there was one. */
+  runId?: string | null;
   loggedByName?: string | null;
   createdAt: string;
 }
@@ -554,8 +556,8 @@ export interface TingiMove {
 /**
  * One production run, as logged in Production: raw cacao fed into the roaster, the usable
  * cacao that came out, the tablea pellets made from it, how many of those went into finished
- * products, and what was left over (into the leftover bucket). The roast and the batches are entries carrying this run's id;
- * the bucket moves carry it too. Quantities are in the cacao material's own unit.
+ * products, and what was left over (into a product's tingi). The roast and the batches are entries carrying this run's id;
+ * the tingi moves carry it too. Quantities are in the cacao material's own unit.
  */
 export interface ProductionRun {
   id: string;
@@ -573,37 +575,15 @@ export interface ProductionRun {
   usableQty: number;
   /** Tablea pellets made from the usable cacao — the step between roasting and the packs. */
   pelletsQty: number;
-  /** Tablea pellets taken from the leftover bucket for this run. */
+  /** Tingi (pellets left over from earlier runs) taken for this run. */
   fromBucketQty: number;
   /** Tablea pellets that went into the finished products. */
   intoProductsQty: number;
-  /** What was left over, put into the bucket. */
+  /** Pellets left over, put into a product's tingi. */
   leftoverQty: number;
   /** "Tablea · 100g × 40; Spread × 12" — for whoever reads the sheet; the batches are the record. */
   made: string;
   notes: string;
-  loggedByName?: string | null;
-  createdAt: string;
-}
-
-/**
- * One movement in the leftover cacao bucket: usable cacao put in (left over from a run, or
- * found and added by hand) or taken out — and for what. The bucket is what's been put in minus
- * what's been taken out, never a stored total.
- */
-export interface CacaoMove {
-  id: string;
-  /** The cacao material it is. */
-  materialId: string;
-  direction: "in" | "out";
-  qty: number;
-  unit: string;
-  /** "YYYY-MM-DD" */
-  date: string;
-  /** The run it came from or went into, when there was one. */
-  runId: string | null;
-  /** Why it went in or what it was used for: "Left over from LOT-…", "Samples"… */
-  purpose: string;
   loggedByName?: string | null;
   createdAt: string;
 }

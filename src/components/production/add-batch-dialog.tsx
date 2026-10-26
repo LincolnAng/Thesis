@@ -14,7 +14,7 @@ import type { Product, RawMaterialStock } from "@/lib/store/types";
 
 export const fieldCls = "h-11 w-full rounded-lg border border-input bg-transparent px-3 text-[15px] outline-none focus:border-cacao";
 export const labelCls = "flex flex-col gap-1 text-[13px] font-semibold";
-const TINGI_UNITS = ["g", "kg", "pcs", "mL", "L"];
+export const TINGI_UNITS = ["g", "kg", "pcs", "mL", "L"];
 
 const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);

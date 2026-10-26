@@ -11,7 +11,8 @@ import { familiesOf, fullName, sizeName } from "@/lib/summary/product-sizes";
 import { findProduct } from "@/lib/summary/product-match";
 import { shelfLifeDays } from "@/lib/summary/business-config";
 import { MATERIAL_USE } from "@/lib/transactions/waste";
-import { PELLETS, batchesOf, bucketBalance, cacaoMaterials, cacaoPerUnit } from "@/lib/production/runs";
+import { batchesOf, cacaoMaterials, cacaoPerUnit, tingiBalance } from "@/lib/production/runs";
+import { ProductSearch } from "@/components/production/product-search";
 import { PackagingEditor, fieldCls, labelCls, packagingUsed, recipePackaging, type PackagingLine } from "@/components/production/add-batch-dialog";
 import type { Entry, Product, ProductionRun } from "@/lib/store/types";
 
@@ -96,7 +97,7 @@ function ProductsDropdown({ made, onChange }: { made: Record<string, Made>; onCh
  * Given a run, it changes that run: the old one is taken back whole and this saved in its place.
  */
 export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onClose: () => void }) {
-  const { products, rawMaterials, entries, businessSettings, cacaoBucket } = useStore();
+  const { products, rawMaterials, entries, businessSettings, tingi } = useStore();
   // What goes in is cacao — the raw cacao material(s) in Inventory.
   const materials = cacaoMaterials(rawMaterials);
   const today = new Date();
@@ -113,6 +114,10 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
   // Null until typed: then it follows what was usable, which is usually all of it.
   const [pellets, setPellets] = useState<string | null>(existing ? text(existing.pelletsQty) : null);
   const [fromBucket, setFromBucket] = useState(text(existing?.fromBucketQty ?? 0));
+  const ownMoves = existing ? tingi.filter((m) => m.runId === existing.id) : [];
+  // Whose tingi the pellets came from, and whose the leftover goes into.
+  const [fromTingiId, setFromTingiId] = useState(ownMoves.find((m) => m.direction === "out")?.productId ?? "");
+  const [tingiId, setTingiId] = useState<string | null>(ownMoves.find((m) => m.direction === "in")?.productId ?? null);
   const [made, setMade] = useState<Record<string, Made>>(() => {
     const out: Record<string, Made> = {};
     for (const b of existing ? batchesOf(entries, new Set([existing.id])) : []) {
@@ -127,9 +132,12 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
   const [notes, setNotes] = useState(existing?.notes ?? "");
   const [error, setError] = useState<string | null>(null);
 
-  // When changing a run, what it took from and put into the bucket goes back first.
-  const otherMoves = existing ? cacaoBucket.filter((m) => m.runId !== existing.id) : cacaoBucket;
-  const inBucket = bucketBalance(otherMoves, PELLETS.id);
+  // When changing a run, what it took from and put into tingi goes back first.
+  const otherMoves = existing ? tingi.filter((m) => m.runId !== existing.id) : tingi;
+  // Tingi in the same unit as the pellets (kg), with some in it.
+  const tingiChoices = products.map((p) => ({ p, qty: tingiBalance(otherMoves, p.id, unit) })).filter((c) => c.qty > 0);
+  const fromChoice = tingiChoices.find((c) => c.p.id === fromTingiId) ?? tingiChoices[0];
+  const inBucket = fromChoice?.qty ?? 0;
   // In Inventory's order, so the list below reads like the dropdown.
   const lines = familiesOf(products)
     .sort((a, b) => a.head.name.localeCompare(b.head.name))
@@ -142,6 +150,8 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
   const available = round(pelletsQty + num(fromBucket));
   const intoQty = into === null ? Math.min(byRecipe, available) : num(into);
   const leftover = round(available - intoQty);
+  // Until picked, the leftover goes into the tingi of the first product made.
+  const leftoverTo = tingiId ?? lines[0]?.product.id ?? "";
   const yieldPct = num(raw) > 0 && num(usable) > 0 ? Math.round((num(usable) / num(raw)) * 100) : null;
 
   function setQty(id: string, qty: number) {
@@ -155,11 +165,12 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
     if (num(usable) > 0 && !(num(raw) > 0)) return setError("How much cacao went in?");
     if (num(usable) > num(raw)) return setError("More usable than raw went in — check the two amounts.");
     if (pelletsQty > num(usable) + 1e-9) return setError("More tablea pellets than usable cacao — check the two amounts.");
-    if (num(fromBucket) > inBucket) return setError(`Only ${inBucket} ${unit} of pellets in Leftover.`);
-    if (intoQty > available + 1e-9) return setError(`Only ${available} ${unit} of pellets to work with — what was made plus what came from Leftover.`);
+    if (num(fromBucket) > inBucket) return setError(`Only ${inBucket} ${unit} in that tingi.`);
+    if (intoQty > available + 1e-9) return setError(`Only ${available} ${unit} of pellets to work with — what was made plus what came from tingi.`);
     if (lines.length > 0 && byRecipe > 0 && available <= 0) {
-      return setError("How many pellets went in? Fill in the cacao, or take some from Leftover.");
+      return setError("How many pellets went in? Fill in the cacao, or take some from tingi.");
     }
+    if (leftover > 0 && !products.some((p) => p.id === leftoverTo)) return setError("Which product's tingi do the leftover pellets go into?");
     if (!lotId.trim()) return setError("Give it a lot number.");
     if (num(raw) > 0 && !material) return setError("Add your cacao under Inventory first.");
 
@@ -198,11 +209,11 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
       });
     }
     const moves = [];
-    if (num(fromBucket) > 0) {
-      moves.push({ materialId: PELLETS.id, direction: "out" as const, qty: num(fromBucket), unit, date, purpose: `Used in ${batchName} · lot ${lot}` });
+    if (num(fromBucket) > 0 && fromChoice) {
+      moves.push({ productId: fromChoice.p.id, direction: "out" as const, qty: num(fromBucket), unit, date, lotId: lot, usedForProductId: null, note: `Used in ${batchName} · lot ${lot}` });
     }
     if (leftover > 0) {
-      moves.push({ materialId: PELLETS.id, direction: "in" as const, qty: leftover, unit, date, purpose: `Left over from ${batchName} · lot ${lot}` });
+      moves.push({ productId: leftoverTo, direction: "in" as const, qty: leftover, unit, date, lotId: lot, usedForProductId: null, note: `Left over from ${batchName} · lot ${lot}` });
     }
     const run = {
       name: batchName,
@@ -229,7 +240,7 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
       <DialogContent className="max-h-[90vh] overflow-y-auto rounded-2xl sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{existing ? "Change production" : "Log production"}</DialogTitle>
-          <DialogDescription>Cacao in → usable cacao → tablea pellets → finished products. Pellets left over go into Leftover.</DialogDescription>
+          <DialogDescription>Cacao in → usable cacao → tablea pellets → finished products. Pellets left over go into tingi.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
           <label className={labelCls}>
@@ -298,11 +309,23 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
                 {round(num(usable) - pelletsQty)} {unit} of the usable cacao didn&apos;t become pellets
               </p>
             )}
-            {inBucket > 0 && (
-              <label className={labelCls}>
-                Also from Leftover ({unit}) — {inBucket} in it
-                <input inputMode="decimal" value={fromBucket} onChange={(e) => setFromBucket(decimal(e.target.value))} placeholder="0" className={fieldCls} />
-              </label>
+            {tingiChoices.length > 0 && (
+              <div className="grid grid-cols-[1fr_7rem] gap-2">
+                <label className={labelCls}>
+                  Also from tingi
+                  <select value={fromChoice?.p.id} onChange={(e) => setFromTingiId(e.target.value)} className={fieldCls}>
+                    {tingiChoices.map((c) => (
+                      <option key={c.p.id} value={c.p.id}>
+                        {fullName(c.p, products)} — {c.qty} {unit}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className={labelCls}>
+                  How much ({unit})
+                  <input inputMode="decimal" value={fromBucket} onChange={(e) => setFromBucket(decimal(e.target.value))} placeholder="0" className={fieldCls} />
+                </label>
+              </div>
             )}
           </Section>
 
@@ -322,14 +345,14 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
             ))}
           </Section>
 
-          <Section title="Left over">
+          <Section title="Tingi">
             <div className="grid grid-cols-2 gap-3">
               <label className={labelCls}>
                 Pellets that went in ({unit})
                 <input inputMode="decimal" value={into ?? (intoQty ? String(round(intoQty)) : "")} onChange={(e) => setInto(decimal(e.target.value))} placeholder="0" className={fieldCls} />
               </label>
               <div className={labelCls}>
-                Left over → Leftover
+                Left over → tingi
                 <div className={`flex h-11 items-center rounded-lg bg-oat px-3 text-[17px] font-bold tabular-nums ${leftover < 0 ? "text-danger" : ""}`}>
                   {Math.max(0, leftover)} {unit}
                 </div>
@@ -339,6 +362,12 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
               {available > 0 ? `${available} ${unit} of pellets to work with` : "No pellets yet"}
               {byRecipe > 0 ? ` · the recipes call for ${byRecipe} ${unit}` : ""}
             </p>
+            {leftover > 0 && (
+              <div className={labelCls}>
+                Into the tingi of
+                <ProductSearch value={leftoverTo} onChange={setTingiId} />
+              </div>
+            )}
           </Section>
 
           <label className={labelCls}>

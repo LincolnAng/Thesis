@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bucketBalance, cacaoMaterials, cacaoPerUnit, packagingUsed, runMaterials, runTotals } from "./runs.ts";
+import { tingiBalance, cacaoMaterials, cacaoPerUnit, packagingUsed, runMaterials, runTotals } from "./runs.ts";
 import { drawOf } from "./batch-draws.ts";
 import { consumedQty } from "../summary/ingredient-cost.ts";
 
@@ -46,14 +46,11 @@ test("cacao per unit comes from the recipe, per unit not per batch", () => {
   assert.equal(cacaoPerUnit(tablea, "sugar"), 0.05);
 });
 
-test("the bucket is what went in minus what came out, per material", () => {
-  const moves = [
-    { id: "a", materialId: "beans", direction: "in" as const, qty: 0.4, unit: "kg", date: "2026-10-01", runId: "r1", purpose: "", createdAt: "" },
-    { id: "b", materialId: "beans", direction: "in" as const, qty: 0.3, unit: "kg", date: "2026-10-02", runId: "r2", purpose: "", createdAt: "" },
-    { id: "c", materialId: "beans", direction: "out" as const, qty: 0.5, unit: "kg", date: "2026-10-03", runId: null, purpose: "Samples", createdAt: "" },
-    { id: "d", materialId: "other", direction: "in" as const, qty: 9, unit: "kg", date: "2026-10-03", runId: null, purpose: "", createdAt: "" },
-  ];
-  assert.equal(bucketBalance(moves, "beans"), 0.2);
+test("tingi is what went in minus what came out, per product and unit", () => {
+  const move = (id: string, productId: string, direction: "in" | "out", qty: number, unit = "kg") => ({ id, productId, direction, qty, unit, date: "2026-10-01", lotId: "", usedForProductId: null, note: "", createdAt: "" });
+  const moves = [move("a", "tablea", "in", 0.4), move("b", "tablea", "in", 0.3), move("c", "tablea", "out", 0.5), move("d", "tablea", "in", 9, "g"), move("e", "other", "in", 9)];
+  assert.equal(tingiBalance(moves, "tablea", "kg"), 0.2);
+  assert.equal(tingiBalance(moves, "tablea", "g"), 9);
 });
 
 test("a batch in a run draws no raw cacao — the roast already took it — but still its other ingredients", () => {

@@ -42,7 +42,7 @@ export const SHARED_TABS: Record<string, string[]> = {
     // Production run
     "date", "lotId", "materialId", "unit", "rawQty", "usableQty", "fromBucketQty", "intoProductsQty", "leftoverQty", "made",
     "loggedByName",
-    // Cacao bucket
+    // Cacao bucket — no longer used (leftovers go into tingi); kept so the columns after it stay put
     "direction", "runId", "purpose",
     // Production run, later
     "pelletsQty",

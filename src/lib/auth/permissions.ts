@@ -1,4 +1,4 @@
-import type { ActivityEvent, CalendarItem, Entry, EntryType, PayrollRecord, RawMaterialStock, Role, StaffMember, StockTransfer, TimeRecord, TingiMove, ProductionRun, CacaoMove } from "@/lib/store/types";
+import type { ActivityEvent, CalendarItem, Entry, EntryType, PayrollRecord, RawMaterialStock, Role, StaffMember, StockTransfer, TimeRecord, TingiMove, ProductionRun } from "@/lib/store/types";
 import type { ProductRow, RecipeRow } from "@/lib/store/sheet-shapes";
 import { entryIntegrityProblem } from "@/lib/transactions/ledger";
 import { daysIn, periodFor } from "@/lib/payroll/pay";
@@ -38,8 +38,7 @@ export type CollectionName =
   | "calendarItems"
   | "stockTransfers"
   | "tingi"
-  | "productionRuns"
-  | "cacaoBucket";
+  | "productionRuns";
 
 export type WriteOp = "append" | "update" | "delete" | "migrate";
 
@@ -115,7 +114,6 @@ export interface BusinessData {
   stockTransfers: StockTransfer[];
   tingi: TingiMove[];
   productionRuns: ProductionRun[];
-  cacaoBucket: CacaoMove[];
 }
 
 /**
@@ -292,8 +290,7 @@ export function decideWrite(req: WriteRequest): WriteDecision {
     case "tingi":
     case "stockTransfers":
     case "productionRuns":
-    case "cacaoBucket":
-      // Moving stock between branches, in and out of a tingi or cacao bucket, and logging a
+      // Moving stock between branches, in and out of a tingi bucket, and logging a
       // production run are everyday work; taking one back is an Executive's.
       return op === "append" && item ? { allow: true, item: { ...item, loggedByName: req.user.name } } : deny("forbidden");
     case "businessSettings":

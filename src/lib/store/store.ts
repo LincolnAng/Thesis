@@ -46,7 +46,6 @@ import type {
   StockTransfer,
   TingiMove,
   ProductionRun,
-  CacaoMove,
 } from "./types";
 
 export interface StoreState {
@@ -71,9 +70,8 @@ export interface StoreState {
   /** Stock moved between branches. */
   stockTransfers: StockTransfer[];
   tingi: TingiMove[];
-  /** Production runs, and the leftover cacao bucket they fill. */
+  /** Production runs; what they leave over goes into tingi. */
   productionRuns: ProductionRun[];
-  cacaoBucket: CacaoMove[];
   /** Business-level numbers the owner sets once — hourly labor rate today. */
   businessSettings: Record<string, string>;
   tokenUsage: TokenUsage;
@@ -130,7 +128,6 @@ function defaultState(): StoreState {
     stockTransfers: [],
     tingi: [],
     productionRuns: [],
-    cacaoBucket: [],
     businessSettings: {},
     tokenUsage: {
       totalInputTokens: 0,
@@ -315,7 +312,6 @@ const COLLECTION_NOUNS: Record<string, string> = {
   stockTransfers: "stock transfer",
   tingi: "tingi",
   productionRuns: "production run",
-  cacaoBucket: "cacao bucket",
 };
 
 const OP_VERBS: Record<string, string> = { append: "added", update: "changed", delete: "deleted" };
@@ -684,7 +680,6 @@ async function loadAllFromServer() {
         stockTransfers: Array.isArray(json.stockTransfers) ? mergePending(json.stockTransfers as StockTransfer[], prev.stockTransfers) : prev.stockTransfers,
         tingi: Array.isArray(json.tingi) ? mergePending(json.tingi as TingiMove[], prev.tingi) : prev.tingi,
         productionRuns: Array.isArray(json.productionRuns) ? mergePending(json.productionRuns as ProductionRun[], prev.productionRuns) : prev.productionRuns,
-        cacaoBucket: Array.isArray(json.cacaoBucket) ? mergePending(json.cacaoBucket as CacaoMove[], prev.cacaoBucket) : prev.cacaoBucket,
         businessSettings: businessSettingRowsToRecord(businessSettingsMigration.items),
         loadedFromServer: true,
       };
@@ -1397,7 +1392,7 @@ function mergePending<T extends { id: string }>(server: T[], local: T[]): T[] {
   return [...server.filter((r) => !pendingIds.has(r.id)), ...pending];
 }
 
-async function saveSalaryRow(collection: "staff" | "timeRecords" | "payroll" | "calendarItems" | "stockTransfers" | "tingi" | "productionRuns" | "cacaoBucket", op: "append" | "update", item: { id: string }): Promise<boolean> {
+async function saveSalaryRow(collection: "staff" | "timeRecords" | "payroll" | "calendarItems" | "stockTransfers" | "tingi" | "productionRuns", op: "append" | "update", item: { id: string }): Promise<boolean> {
   pendingSalaryIds.add(item.id);
   const ok = await mirrorOp(collection, op, { id: op === "update" ? item.id : undefined, item });
   // Once the server has it, the next poll will return it; until then keep showing ours.
@@ -1579,7 +1574,7 @@ export function addStockTransfer(input: Omit<StockTransfer, "id" | "createdAt" |
 }
 
 /** Loose product into or out of a tingi bucket. */
-export function addTingiMove(input: Omit<TingiMove, "id" | "createdAt" | "loggedByName">): TingiMove {
+export function addTingiMove(input: Omit<TingiMove, "id" | "createdAt" | "loggedByName" | "runId"> & { runId?: string | null }): TingiMove {
   const t: TingiMove = { ...input, id: genId("tingi"), loggedByName: currentUser()?.name ?? null, createdAt: new Date().toISOString() };
   setState((prev) => ({ ...prev, tingi: [...prev.tingi, t] }));
   void saveSalaryRow("tingi", "append", t);
@@ -1595,55 +1590,42 @@ export function deleteTingiMove(id: string) {
 
 /**
  * Saves a production run with everything it moved: the run itself, the entries (the raw cacao
- * roasted, the batches made — each carrying the run's id) and the cacao bucket moves.
+ * roasted, the batches made — each carrying the run's id) and the tingi moves.
  */
 export function addProductionRun(
   run: Omit<ProductionRun, "id" | "createdAt" | "loggedByName">,
   entries: (Omit<Entry, "id" | "runId">)[],
-  moves: Omit<CacaoMove, "id" | "createdAt" | "loggedByName" | "runId">[],
+  moves: Omit<TingiMove, "id" | "createdAt" | "loggedByName" | "runId">[],
 ): ProductionRun {
   const who = currentUser()?.name ?? null;
   const saved: ProductionRun = { ...run, id: genId("run"), loggedByName: who, createdAt: new Date().toISOString() };
   setState((prev) => ({ ...prev, productionRuns: [...prev.productionRuns, saved] }));
   void saveSalaryRow("productionRuns", "append", saved);
   for (const e of entries) addEntry({ ...e, runId: saved.id });
-  for (const m of moves) addCacaoMove({ ...m, runId: saved.id });
+  for (const m of moves) addTingiMove({ ...m, runId: saved.id });
   return saved;
 }
 
-/** Takes a run back: its entries (stock goes back) and its bucket moves go with it. */
+/** Takes a run back: its entries (stock goes back) and its tingi moves go with it. */
 export function deleteProductionRun(id: string) {
   for (const e of state.entries.filter((x) => x.runId === id)) deleteEntry(e.id);
-  for (const m of state.cacaoBucket.filter((x) => x.runId === id)) deleteCacaoMove(m.id);
+  for (const m of state.tingi.filter((x) => x.runId === id)) deleteTingiMove(m.id);
   setState((prev) => ({ ...prev, productionRuns: prev.productionRuns.filter((r) => r.id !== id) }));
   void mirrorOp("productionRuns", "delete", { id });
 }
 
 /**
- * Changes a run: the old one is taken back whole (its stock-out, batches and bucket moves) and
+ * Changes a run: the old one is taken back whole (its stock-out, batches and tingi moves) and
  * the new one saved in its place, so nothing it moved is left half-changed.
  */
 export function replaceProductionRun(
   id: string,
   run: Omit<ProductionRun, "id" | "createdAt" | "loggedByName">,
   entries: (Omit<Entry, "id" | "runId">)[],
-  moves: Omit<CacaoMove, "id" | "createdAt" | "loggedByName" | "runId">[],
+  moves: Omit<TingiMove, "id" | "createdAt" | "loggedByName" | "runId">[],
 ): ProductionRun {
   deleteProductionRun(id);
   return addProductionRun(run, entries, moves);
-}
-
-/** Usable cacao into or out of the leftover bucket. */
-export function addCacaoMove(input: Omit<CacaoMove, "id" | "createdAt" | "loggedByName">): CacaoMove {
-  const m: CacaoMove = { ...input, id: genId("cacao"), loggedByName: currentUser()?.name ?? null, createdAt: new Date().toISOString() };
-  setState((prev) => ({ ...prev, cacaoBucket: [...prev.cacaoBucket, m] }));
-  void saveSalaryRow("cacaoBucket", "append", m);
-  return m;
-}
-
-export function deleteCacaoMove(id: string) {
-  setState((prev) => ({ ...prev, cacaoBucket: prev.cacaoBucket.filter((m) => m.id !== id) }));
-  void mirrorOp("cacaoBucket", "delete", { id });
 }
 
 export function deleteStockTransfer(id: string) {

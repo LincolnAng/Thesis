@@ -8,7 +8,8 @@ import { useStore } from "@/lib/store/use-store";
 import { addEntry, addTingiMove } from "@/lib/store/store";
 import { blankEntryDraft } from "@/lib/store/blank-draft";
 import { fullName } from "@/lib/summary/product-sizes";
-import { PackagingEditor, ProductPicker, fieldCls, labelCls, packagingUsed, recipePackaging, type PackagingLine } from "@/components/production/add-batch-dialog";
+import { PackagingEditor, ProductPicker, TINGI_UNITS, fieldCls, labelCls, packagingUsed, recipePackaging, type PackagingLine } from "@/components/production/add-batch-dialog";
+import { ProductSearch } from "@/components/production/product-search";
 import type { Product, TingiMove } from "@/lib/store/types";
 
 /** One bucket: a product's loose leftovers in one unit, with every time some went in or came out. */
@@ -39,13 +40,16 @@ export function bucketsOf(moves: TingiMove[]): Bucket[] {
 }
 
 /**
- * Tingi: the loose product left over from a batch that doesn't fill a jar, kept in a bucket per
- * product. Each bucket shows how much is in it, and every time some went in (from which lot)
- * or came out (repacked, or used in another product).
+ * Tingi: the loose product left over from a batch that doesn't fill a pack — the tablea pellets
+ * a production run doesn't use, mostly — kept in a bucket per product. Each bucket shows how much
+ * is in it, and every time some went in (left over from which batch, or put in by hand) or came
+ * out (repacked, used in another product or a production run). The same buckets show on
+ * Inventory and on Production.
  */
 export function TingiBuckets() {
   const { tingi, products } = useStore();
   const [using, setUsing] = useState<string | null>(null);
+  const [putting, setPutting] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const buckets = bucketsOf(tingi).filter((b) => b.balance > 0 || b.moves.length > 0);
   const nameOf = (id: string | null) => {
@@ -57,11 +61,16 @@ export function TingiBuckets() {
     <section className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-display text-[20px] font-semibold">Tingi</h2>
-        {buckets.some((b) => b.balance > 0) && (
-          <button type="button" onClick={() => setUsing(buckets.find((b) => b.balance > 0)!.key)} className={BUTTON.secondary}>
-            <ArrowUpFromLine className="h-4 w-4" /> Use tingi
+        <div className="flex gap-2">
+          <button type="button" onClick={() => setPutting(true)} className={BUTTON.secondary}>
+            <ArrowDownToLine className="h-4 w-4" /> Put in
           </button>
-        )}
+          {buckets.some((b) => b.balance > 0) && (
+            <button type="button" onClick={() => setUsing(buckets.find((b) => b.balance > 0)!.key)} className={BUTTON.secondary}>
+              <ArrowUpFromLine className="h-4 w-4" /> Use tingi
+            </button>
+          )}
+        </div>
       </div>
       {buckets.length === 0 ? (
         <p className="rounded-2xl border border-line/15 bg-card px-4 py-3 text-[13.5px] text-muted-foreground">
@@ -91,7 +100,11 @@ export function TingiBuckets() {
                         {t.qty} {t.unit}
                       </span>
                       <span className="min-w-0 flex-1 truncate text-muted-foreground">
-                        {t.direction === "in" ? `from lot ${t.lotId || "—"}` : t.usedForProductId ? `into ${nameOf(t.usedForProductId)}` : t.note || "used"}
+                        {t.direction === "in"
+                          ? t.note || (t.lotId ? `from lot ${t.lotId}` : "put in")
+                          : t.usedForProductId
+                            ? `into ${nameOf(t.usedForProductId)}`
+                            : t.note || "used"}
                         {t.loggedByName ? ` · ${t.loggedByName}` : ""}
                       </span>
                     </li>
@@ -102,8 +115,74 @@ export function TingiBuckets() {
           ))}
         </ul>
       )}
+      {putting && <PutInDialog onClose={() => setPutting(false)} />}
       {using && <UseTingiDialog buckets={buckets.filter((b) => b.balance > 0)} initial={using} onClose={() => setUsing(null)} />}
     </section>
+  );
+}
+
+/** Putting loose product into a bucket by hand: which product, how much, when. */
+function PutInDialog({ onClose }: { onClose: () => void }) {
+  const { products } = useStore();
+  const [productId, setProductId] = useState("");
+  const [qty, setQty] = useState("");
+  const [unit, setUnit] = useState("kg");
+  const [date, setDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
+  const [error, setError] = useState<string | null>(null);
+  const product = products.find((p) => p.id === productId);
+
+  function save() {
+    const n = Number(qty);
+    if (!product) return setError("Which product is it?");
+    if (!(n > 0)) return setError("How much?");
+    addTingiMove({ productId: product.id, direction: "in", qty: n, unit, date, lotId: "", usedForProductId: null, note: "" });
+    onClose();
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto rounded-2xl sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Put into tingi</DialogTitle>
+          <DialogDescription>Loose product that doesn&apos;t fill a pack.</DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-3">
+          <div className={labelCls}>
+            What product
+            <ProductSearch value={productId} onChange={setProductId} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <label className={labelCls}>
+              How much
+              <span className="flex gap-1.5">
+                <input inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="e.g. 0.5" className={`${fieldCls} min-w-0`} />
+                <select value={unit} onChange={(e) => setUnit(e.target.value)} className={`${fieldCls} w-[72px] px-2`} aria-label="Unit">
+                  {[...new Set([...TINGI_UNITS, product?.unit || "kg"])].map((u) => (
+                    <option key={u}>{u}</option>
+                  ))}
+                </select>
+              </span>
+            </label>
+            <label className={labelCls}>
+              Date
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={fieldCls} />
+            </label>
+          </div>
+          {error && <p className="text-[13px] font-semibold text-danger">{error}</p>}
+          <div className="flex gap-2">
+            <button type="button" onClick={save} className="min-h-11 flex-1 rounded-[10px] bg-cacao text-[14px] font-semibold text-ivory">
+              Save
+            </button>
+            <button type="button" onClick={onClose} className="min-h-11 rounded-[10px] border border-line/20 px-4 text-[14px] font-semibold">
+              Cancel
+            </button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

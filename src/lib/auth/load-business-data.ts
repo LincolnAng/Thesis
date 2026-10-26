@@ -13,7 +13,7 @@ import { payrollCollection, staffCollection, timeRecordsCollection } from "@/lib
 import { calendarItemsCollection } from "@/lib/sheets/calendar-items";
 import { stockTransfersCollection } from "@/lib/sheets/stock-transfers";
 import { tingiCollection } from "@/lib/sheets/tingi";
-import { cacaoBucketCollection, productionRunsCollection } from "@/lib/sheets/production";
+import { productionRunsCollection } from "@/lib/sheets/production";
 import { redactForEmployee, visibleCalendarItems, type BusinessData } from "@/lib/auth/permissions";
 import { assembleProduct, type ProductRow } from "@/lib/store/sheet-shapes";
 import { effectiveProductPrice, productCostPerJar, type CostContext } from "@/lib/summary/recipe-cost";
@@ -28,7 +28,7 @@ import type { Role } from "@/lib/store/types";
  * Returns null when the session's profile no longer exists (deleted on another device).
  */
 export async function loadBusinessDataFor(session: Session): Promise<{ role: Role; data: BusinessData } | null> {
-  const [entries, products, recipes, rawMaterials, suppliers, supplierPriceHistory, budgets, events, eventStock, machines, supplierPrices, businessSettings, users, activity, staff, timeRecords, payroll, calendarItems, stockTransfers, tingi, productionRuns, cacaoBucket] =
+  const [entries, products, recipes, rawMaterials, suppliers, supplierPriceHistory, budgets, events, eventStock, machines, supplierPrices, businessSettings, users, activity, staff, timeRecords, payroll, calendarItems, stockTransfers, tingi, productionRuns] =
     await Promise.all([
       entriesCollection.getAll(),
       productsCollection.getAll(),
@@ -51,7 +51,6 @@ export async function loadBusinessDataFor(session: Session): Promise<{ role: Rol
       stockTransfersCollection.getAll(),
       tingiCollection.getAll(),
       productionRunsCollection.getAll(),
-      cacaoBucketCollection.getAll(),
     ]);
 
   // The cookie says who signed in; the sheet says who they are now. A deleted profile is
@@ -82,7 +81,6 @@ export async function loadBusinessDataFor(session: Session): Promise<{ role: Rol
     stockTransfers,
     tingi,
     productionRuns,
-    cacaoBucket,
   };
   if (me.role === "executive") return { role: me.role, data };
 

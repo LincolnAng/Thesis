@@ -2,25 +2,19 @@ import { isRawCacao } from "@/lib/summary/cacao";
 import { unitsPerBatch } from "@/lib/costing/per-unit";
 import { drawOf } from "@/lib/production/batch-draws";
 import { findProduct } from "@/lib/summary/product-match";
-import type { CacaoMove, Entry, Product, ProductionRun, RawMaterialStock } from "@/lib/store/types";
+import type { Entry, Product, ProductionRun, RawMaterialStock, TingiMove } from "@/lib/store/types";
 
 /**
  * Production runs and the leftover cacao bucket, worked out from what was logged.
  *
- * A run goes raw cacao → roaster → usable cacao → tablea pellets (+ any taken from the bucket)
- * → finished products, and whatever pellets weren't used go into the bucket. The bucket's balance
- * is always what went in minus what came out — never a stored total.
+ * A run goes raw cacao → roaster → usable cacao → tablea pellets (+ any taken from tingi) →
+ * finished products, and whatever pellets weren't used go into a product's tingi. Tingi is
+ * always what went in minus what came out — never a stored total.
  *
  * Pure: no store, no React.
  */
 
 const round = (n: number) => Math.round(n * 1000) / 1000;
-
-/**
- * Tablea pellets: what usable cacao is ground into before it's packed. Not a material or a
- * product of its own — a stage of every run, and what the leftover bucket holds (by this id).
- */
-export const PELLETS = { id: "tablea-pellets", name: "Tablea pellets" } as const;
 
 /** The raw cacao materials — the ones a roast starts from. */
 export function cacaoMaterials(materials: RawMaterialStock[]): RawMaterialStock[] {
@@ -39,9 +33,9 @@ export function cacaoPerUnit(product: Product, materialId: string): number {
   return batch / unitsPerBatch(product);
 }
 
-/** What's in the bucket for one cacao material. */
-export function bucketBalance(moves: CacaoMove[], materialId: string): number {
-  return round(moves.filter((m) => m.materialId === materialId).reduce((t, m) => t + (m.direction === "in" ? m.qty : -m.qty), 0));
+/** What's in one product's tingi, in one unit. */
+export function tingiBalance(moves: TingiMove[], productId: string, unit: string): number {
+  return round(moves.filter((m) => m.productId === productId && m.unit === unit).reduce((t, m) => t + (m.direction === "in" ? m.qty : -m.qty), 0));
 }
 
 /** Newest first: by date, then by when it was logged. */
