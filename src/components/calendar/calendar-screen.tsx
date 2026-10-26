@@ -17,12 +17,8 @@ import { PlanSettingsDialog } from "@/components/inventory/plan-settings-dialog"
 import { useStore } from "@/lib/store/use-store";
 import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 import { useCalendarEntries } from "@/lib/calendar/use-calendar-entries";
-import { STRATEGY_HINTS, STRATEGY_LABELS, toIsoDate, type ScheduleStrategy } from "@/lib/summary/production-schedule";
-import {
-  eventPlan,
-  toggleUnavailableDay,
-  unavailableDays,
-} from "@/lib/summary/business-config";
+import { toIsoDate } from "@/lib/summary/production-schedule";
+import { eventPlan } from "@/lib/summary/business-config";
 import {
   AGENDA_KINDS,
   CATEGORY_LABELS,
@@ -43,9 +39,12 @@ import {
 
 type View = "month" | "week" | "day";
 
-const STRATEGIES: ScheduleStrategy[] = ["fastest", "balanced", "min_expiry"];
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const ALL_CATEGORIES: CalendarCategory[] = ["agenda", "events", "holidays", "production", "shipments", "dayoffs", "leaves", "payments", "alerts"];
+// What the calendar shows. Production, day-offs and stock alerts stay on Production and Home;
+// what people add themselves (events, tasks, meetings, deadlines) shows with Events.
+const ALL_CATEGORIES: CalendarCategory[] = ["events", "holidays", "leaves", "payments", "shipments"];
+/** The filter an entry falls under: people's own items sit with Events. */
+const filterOf = (c: CalendarCategory): CalendarCategory => (c === "agenda" ? "events" : c);
 
 /** One colour per category, from the design tokens' palette, used for dots and chip edges. */
 const CATEGORY_COLOR: Record<CalendarCategory, string> = {
@@ -132,7 +131,6 @@ export function CalendarScreen() {
 
   const [view, setView] = useState<View>("month");
   const [cursor, setCursor] = useState(today);
-  const [strategy, setStrategy] = useState<ScheduleStrategy>("fastest");
   // Payments are an executive's; an employee's data has none, so the filter isn't offered.
   const categories = exec ? ALL_CATEGORIES : ALL_CATEGORIES.filter((c) => c !== "payments");
   const [hidden, setHidden] = useState<Set<CalendarCategory>>(new Set());
@@ -147,18 +145,16 @@ export function CalendarScreen() {
     return { staffId, start, end: e.endDate ?? e.date, note: e.details.find((d) => d.label === "Reason")?.value ?? "" };
   };
 
-  const { all, plan } = useCalendarEntries(strategy);
+  const { all } = useCalendarEntries();
   const eventPlans = useMemo(
     () => Object.fromEntries(events.map((e) => [e.id, eventPlan(businessSettings, e.id)])),
     [events, businessSettings],
   );
-  const offDays = unavailableDays(businessSettings);
 
-  const visible = all.filter((e) => categories.includes(e.category) && !hidden.has(e.category));
+  const visible = all.filter((e) => categories.includes(filterOf(e.category)) && !hidden.has(filterOf(e.category)));
   // A day's entries: all-day ones first, then by time, like Google Calendar.
   const on = (date: string) =>
     visible.filter((e) => coversDay(e, date)).sort((a, b) => (a.startTime ?? "").localeCompare(b.startTime ?? "") || Number(a.category !== "holidays") - Number(b.category !== "holidays"));
-  const lastPlannedDay = plan.days.at(-1)?.date;
 
   // The days the current view covers.
   const month = fromIso(cursor);
@@ -197,19 +193,13 @@ export function CalendarScreen() {
   }
 
   const countIn = (c: CalendarCategory) =>
-    all.filter((e) => e.category === c && rangeDays.some((d) => coversDay(e, d))).length;
-  const beyondPlan = Boolean(lastPlannedDay && rangeDays.some((d) => d > lastPlannedDay));
+    all.filter((e) => filterOf(e.category) === c && rangeDays.some((d) => coversDay(e, d))).length;
 
   return (
     <Page
       title="Calendar"
       right={
         <>
-          {exec && (
-            <button type="button" onClick={() => setShowSettings(true)} className={BUTTON.secondary}>
-              Plan settings
-            </button>
-          )}
           <DropdownMenu>
             <DropdownMenuTrigger className={`${BUTTON.primary} min-w-[120px]`}>
               <Plus className="h-4 w-4" strokeWidth={2.4} />
@@ -306,26 +296,7 @@ export function CalendarScreen() {
           })}
         </div>
 
-        {/* How the suggested production is laid out */}
-        {!hidden.has("production") && (
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="font-semibold text-muted-foreground">Suggested production</span>
-            <Segmented
-              label="Suggested production"
-              value={strategy}
-              onChange={setStrategy}
-              options={STRATEGIES.map((s) => ({ value: s, label: STRATEGY_LABELS[s], title: STRATEGY_HINTS[s] }))}
-            />
-            <span className="text-muted-foreground">{STRATEGY_HINTS[strategy]}</span>
-          </div>
-        )}
-
         {!loadedFromServer && <p className="text-[13px] text-muted-foreground">Loading the shop&apos;s records…</p>}
-        {beyondPlan && !hidden.has("production") && lastPlannedDay && (
-          <p className="text-[12px] text-muted-foreground">
-            Suggested production is worked out up to {shortDate(lastPlannedDay)}; later days show everything else.
-          </p>
-        )}
 
         {view === "month" && (
           <div>
@@ -340,7 +311,6 @@ export function CalendarScreen() {
               ))}
               {monthDays.map((date) => {
                 const items = on(date);
-                const off = offDays.includes(date);
                 const past = date < today;
                 return (
                   <button
@@ -352,11 +322,7 @@ export function CalendarScreen() {
                     }}
                     aria-label={`${longDate(date)}, ${items.length} ${items.length === 1 ? "item" : "items"}`}
                     className={`flex min-h-[76px] flex-col gap-0.5 overflow-hidden rounded-lg border p-1 text-left transition hover:border-cacao/40 min-[700px]:min-h-[96px] ${
-                      off
-                        ? "border-dashed border-line/25 bg-[repeating-linear-gradient(135deg,#EDEBE3_0_5px,transparent_5px_10px)]"
-                        : past
-                          ? "border-transparent bg-track/60"
-                          : "border-line/10 bg-card"
+                      past ? "border-transparent bg-track/60" : "border-line/10 bg-card"
                     } ${date === today ? "ring-2 ring-cacao" : ""}`}
                   >
                     <span className={`text-[11px] font-semibold ${past ? "text-muted-foreground" : "text-ink"}`}>
@@ -397,7 +363,6 @@ export function CalendarScreen() {
                     className="mb-2 min-h-9 text-[13px] font-semibold hover:text-cacao"
                   >
                     {longDate(date)}
-                    {offDays.includes(date) && <span className="ml-2 text-[11px] font-semibold text-muted-foreground">Day off</span>}
                   </button>
                   {items.length === 0 ? (
                     <p className="text-[12px] text-muted-foreground">Nothing on this day.</p>
@@ -417,17 +382,7 @@ export function CalendarScreen() {
         {view === "day" && (
           <div className="flex flex-col gap-3">
             {cursor >= today && (
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-line/15 bg-card px-4 py-3">
-                <span className="text-[13px] text-muted-foreground">
-                  {offDays.includes(cursor) ? "This is a day off — nothing is planned for it." : "A working day."}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => toggleUnavailableDay(businessSettings, cursor)}
-                  className="min-h-11 rounded-[10px] border border-line/20 px-4 text-[13px] font-semibold"
-                >
-                  {offDays.includes(cursor) ? "Make it a working day" : "Mark as day off"}
-                </button>
+              <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-line/15 bg-card px-4 py-3">
                 <button
                   type="button"
                   onClick={() => setAgendaDialog({ date: cursor })}
