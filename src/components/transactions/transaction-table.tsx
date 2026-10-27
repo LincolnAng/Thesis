@@ -3,7 +3,7 @@
 import { Fragment, useMemo, useState } from "react";
 import { ArrowDownLeft, ArrowUpRight, HandCoins, History as HistoryIcon, Pencil, Trash2 } from "lucide-react";
 import { ENTRY_TYPE_LABELS, EXPENSE_CATEGORY_LABELS, PRICE_TYPE_LABELS, describePaymentMethod, formatDate, formatPeso } from "@/lib/format";
-import { currentDueDate, dueInfo, FREQUENCY_LABELS, installmentSchedule, methodOf, obligationInfo, obligationKind, outstanding, paymentsOf } from "@/lib/transactions/ledger";
+import { currentDueDate, termsLabel, dueInfo, FREQUENCY_LABELS, installmentSchedule, methodOf, obligationInfo, obligationKind, outstanding, paymentsOf } from "@/lib/transactions/ledger";
 import { isMaterialWaste } from "@/lib/transactions/waste";
 import { fullName } from "@/lib/summary/product-sizes";
 import { findProduct } from "@/lib/summary/product-match";
@@ -89,11 +89,13 @@ function dueLine(e: Entry): string {
  * How the money actually moved: cash, or a bank transfer and which bank. A receivable or payable
  * lists each way its payments came in (nothing until one has); anything else, how it was paid.
  */
-function paidBy(e: Entry, showPayment: boolean): { method: string; bank: string | null }[] {
+function paidBy(e: Entry, showPayment: boolean): { method: string; bank: string | null; planned?: boolean }[] {
   if (!showPayment || !hasPayment(e)) return [];
   if (obligationKind(e)) {
-    const seen = new Map<string, { method: string; bank: string | null }>();
+    const seen = new Map<string, { method: string; bank: string | null; planned?: boolean }>();
     for (const p of paymentsOf(e)) if (p.method) seen.set(`${p.method}|${p.bankName ?? ""}`, { method: p.method, bank: p.bankName ?? null });
+    // Nothing paid yet: show how it's expected to be paid, marked as such.
+    if (seen.size === 0 && e.paymentMethod) return [{ method: e.paymentMethod, bank: e.bankName ?? null, planned: true }];
     return [...seen.values()];
   }
   return e.paymentMethod ? [{ method: e.paymentMethod, bank: e.bankName ?? null }] : [];
@@ -492,6 +494,7 @@ export function TransactionTable({
                       {paidBy(e, showPayment).map((m) => (
                         <span key={`${m.method}${m.bank}`} className="block truncate leading-6" title={describePaymentMethod(m.method, m.bank)}>
                           {m.method === "bank_transfer" ? (m.bank ?? "Bank transfer") : describePaymentMethod(m.method, m.bank)}
+                          {m.planned && <span className="block text-[11px] leading-4 text-muted-foreground">when paid</span>}
                         </span>
                       ))}
                     </td>
@@ -522,6 +525,13 @@ export function TransactionTable({
                           {kind && paymentsOf(e).length > 0 && (
                             <span className="whitespace-nowrap text-[11.5px] text-muted-foreground">
                               {paymentsOf(e).length > 1 ? "Last paid" : "Paid"} {formatDate(paymentsOf(e).at(-1)!.date)}
+                            </span>
+                          )}
+                          {/* The deadline, and the arrangement behind it ("within 30 days"). */}
+                          {kind && status.left > 0 && currentDueDate(e) && (
+                            <span className="whitespace-nowrap text-[11.5px] text-muted-foreground">
+                              Due {formatDate(currentDueDate(e)!)}
+                              {e.paymentTerms && e.paymentTerms.startsWith("net_") ? ` · ${termsLabel(e.paymentTerms).toLowerCase()}` : ""}
                             </span>
                           )}
                         </div>

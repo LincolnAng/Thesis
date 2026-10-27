@@ -50,8 +50,8 @@ const KINDS: [Kind, string][] = [
   ["all", "All"],
   ["SALE", "Sales"],
   ["EXPENSE", "Expenses"],
-  ["RECEIVABLE", "Receivables"],
-  ["PAYABLE", "Payables"],
+  ["RECEIVABLE", "Accounts receivable"],
+  ["PAYABLE", "Accounts payable"],
   ["INVEST", "Investments"],
   ["WASTE", "Spoilage"],
   ["MATERIAL_WASTE", "Waste"],
@@ -184,10 +184,9 @@ function TransactionsPageInner() {
 
   const kinds = exec ? KINDS : KINDS.filter(([k]) => EMPLOYEE_KINDS.includes(k));
   const effectiveKind: Kind = kinds.some(([k]) => k === kind) ? kind : "all";
-  const stepKind = (by: 1 | -1) => {
-    const at = Math.max(0, kinds.findIndex(([k]) => k === effectiveKind));
-    setKind(kinds[(at + by + kinds.length) % kinds.length][0]);
-  };
+  // How many receivables or payables still have something owed, for the tab's badge.
+  const openCount = (k: "RECEIVABLE" | "PAYABLE") =>
+    ledger.filter((e) => obligationKind(e) === (k === "RECEIVABLE" ? "receivable" : "payable") && outstanding(e) > 0).length;
   const inKind = (e: Entry) => {
     switch (effectiveKind) {
       case "all":
@@ -367,17 +366,26 @@ function TransactionsPageInner() {
 
         {/* One list: filter by kind, with the add button beside it. */}
         <div className="flex flex-wrap items-center justify-between gap-3">
-          {/* A carousel through the log: everything, then each kind in turn. */}
-          <CarouselNav
-            wrap
-            label={kinds.find(([k]) => k === effectiveKind)?.[1] ?? "All"}
-            labelWidth="w-[160px]"
-            position={{ index: Math.max(0, kinds.findIndex(([k]) => k === effectiveKind)), count: kinds.length }}
-            onPrev={() => stepKind(-1)}
-            onNext={() => stepKind(1)}
-            prevLabel="Previous kind of transaction"
-            nextLabel="Next kind of transaction"
-          />
+          {/* Every kind as its own tab, so Receivables and Payables are always in sight. */}
+          <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Kind of transaction">
+            {kinds.map(([k, label]) => (
+              <button
+                key={k}
+                type="button"
+                role="tab"
+                aria-selected={effectiveKind === k}
+                onClick={() => setKind(k)}
+                className={`min-h-10 rounded-full border px-4 text-[13.5px] font-semibold transition ${
+                  effectiveKind === k ? "border-cacao bg-cacao text-ivory" : "border-line/20 bg-card text-foreground hover:border-cacao/50"
+                }`}
+              >
+                {label}
+                {(k === "RECEIVABLE" || k === "PAYABLE") && openCount(k) > 0 && (
+                  <span className={`ml-1.5 rounded-full px-1.5 text-[11px] ${effectiveKind === k ? "bg-ivory/25" : "bg-[var(--status-warning)]/15 text-[var(--status-warning)]"}`}>{openCount(k)}</span>
+                )}
+              </button>
+            ))}
+          </div>
           <button
             type="button"
             onClick={() => setAdding(true)}

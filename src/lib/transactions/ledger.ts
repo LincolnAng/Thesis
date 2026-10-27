@@ -98,6 +98,9 @@ export const PAYMENT_TERMS: [string, string][] = [
   ["net_7", "Within 7 days"],
   ["net_15", "Within 15 days"],
   ["net_30", "Within 30 days"],
+  ["net_45", "Within 45 days"],
+  ["net_60", "Within 60 days"],
+  ["net_90", "Within 90 days"],
   ["date", "A specific date"],
   ["custom", "Other arrangement"],
 ];
@@ -117,6 +120,12 @@ export function dueFromTerms(terms: string, fromDay: string): string | null {
       return addDays(fromDay, 15);
     case "net_30":
       return addDays(fromDay, 30);
+    case "net_45":
+      return addDays(fromDay, 45);
+    case "net_60":
+      return addDays(fromDay, 60);
+    case "net_90":
+      return addDays(fromDay, 90);
     default:
       return null;
   }

@@ -15,7 +15,7 @@ import { spoiledValue } from "@/lib/summary/spoilage";
 import { allExpenseCategories } from "@/lib/summary/expenses-summary";
 import { familiesOf, fullName, sizeName } from "@/lib/summary/product-sizes";
 import { findProduct } from "@/lib/summary/product-match";
-import { addPayment, FREQUENCY_LABELS, installmentSchedule, outstanding, paidSoFar } from "@/lib/transactions/ledger";
+import { addPayment, dueFromTerms, FREQUENCY_LABELS, installmentSchedule, outstanding, paidSoFar, PAYMENT_TERMS } from "@/lib/transactions/ledger";
 import { describeOrder, lineSubtotal, orderQuantity, orderTotal } from "@/lib/transactions/order-lines";
 import { COMMON_BANKS, COMMON_EWALLETS, EXPENSE_CATEGORY_LABELS, describePaymentMethod, formatDate, formatPeso, namesProvider } from "@/lib/format";
 import { PAYROLL_CATEGORIES } from "@/lib/auth/permissions";
@@ -204,6 +204,8 @@ export function TransactionDialog({
   const [dueDate, setDueDate] = useState(e?.installments ? "" : (e?.dueDate ?? ""));
   // Paid in one go by a due date, or in instalments (monthly, yearly…), each with its own date.
   const [schedule, setSchedule] = useState<"once" | "installments">(e?.installments ? "installments" : "once");
+  // The arrangement (within 30 days…), which sets the deadline from the transaction's date.
+  const [terms, setTerms] = useState(e?.paymentTerms && PAYMENT_TERMS.some(([k]) => k === e.paymentTerms) ? e.paymentTerms : "date");
   const [frequency, setFrequency] = useState<InstallmentFrequency>(e?.installments?.frequency ?? "monthly");
   const [instCount, setInstCount] = useState(e?.installments ? String(e.installments.count) : "3");
   const [firstDue, setFirstDue] = useState(e?.installments?.firstDue ?? "");
@@ -355,7 +357,10 @@ export function TransactionDialog({
   const leftAfter = Math.max(0, Math.round((leftBefore - payNum) * 100) / 100);
 
   // --- saving ----------------------------------------------------------------------------
-  const snapshot = JSON.stringify([kind, invKind, branch, date, notes, priceType, lines, customer, what, category, amount, party, lostProduct, lostMaterial, lostQty, when, method, bank, dueDate, schedule, frequency, instCount, firstDue, defaulted, payAmount, payDate, payMethodPicked, payMethod, payBank]);
+  const snapshot = JSON.stringify([kind, invKind, branch, date, notes, priceType, lines, customer, what, category, amount, party, lostProduct, lostMaterial, lostQty, when, method, bank, dueDate, schedule, terms, frequency, instCount, firstDue, defaulted, payAmount, payDate, payMethodPicked, payMethod, payBank]);
+  // A "within N days" arrangement counts its deadline from the transaction's date.
+  const termsDue = dueFromTerms(terms, date);
+  const effectiveDue = termsDue ?? dueDate;
   const plan = schedule === "installments" && Number(instCount) >= 1 && firstDue ? { frequency, count: Math.floor(Number(instCount)), firstDue } : null;
   const planPreview = plan ? installmentSchedule({ amount: total, amountPaid: null, paymentStatus: null, installments: plan, payments: [] }) : [];
   const [initialSnapshot] = useState(snapshot);
@@ -494,7 +499,8 @@ export function TransactionDialog({
       Object.assign(d, {
         paymentTerm: term,
         // With instalments, the due date is the last one's; each instalment has its own date.
-        dueDate: plan ? (planPreview.at(-1)?.date ?? null) : dueDate || null,
+        dueDate: plan ? (planPreview.at(-1)?.date ?? null) : effectiveDue || null,
+        paymentTerms: plan ? null : terms,
         installments: plan,
         paymentMethod: method,
         bankName,
@@ -965,10 +971,31 @@ export function TransactionDialog({
                     />
                   </div>
                   {schedule === "once" ? (
-                    <label className="flex flex-col gap-1">
-                      <span className={label}>Deadline</span>
-                      <input type="date" value={dueDate} onChange={(ev) => setDueDate(ev.target.value)} className={field} />
-                    </label>
+                    <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
+                      <label className="flex flex-col gap-1">
+                        <span className={label}>Payment terms</span>
+                        <select value={terms} onChange={(ev) => setTerms(ev.target.value)} className={field}>
+                          {PAYMENT_TERMS.map(([k, l]) => (
+                            <option key={k} value={k}>
+                              {l}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="flex flex-col gap-1">
+                        <span className={label}>Deadline</span>
+                        <input
+                          type="date"
+                          value={effectiveDue}
+                          onChange={(ev) => {
+                            setDueDate(ev.target.value);
+                            // Picking a day by hand makes it "a specific date".
+                            if (termsDue) setTerms("date");
+                          }}
+                          className={field}
+                        />
+                      </label>
+                    </div>
                   ) : (
                     <div className="flex flex-col gap-2.5 rounded-lg bg-secondary/60 p-3">
                       <div className="grid grid-cols-2 gap-2">
