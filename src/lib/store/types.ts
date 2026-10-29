@@ -462,6 +462,9 @@ export interface TimeRecord {
   /** "HH:MM", 24-hour. */
   timeIn: string | null;
   timeOut: string | null;
+  /** "HH:MM" — lunch or rest break; 30 minutes is allowed (lib/payroll/pay). */
+  breakStart?: string | null;
+  breakEnd?: string | null;
   status: DayStatus;
   /** Overtime hours an Executive approved. Only approved hours are paid. */
   otHours: number;
@@ -486,6 +489,9 @@ export interface PayrollRecord {
   /** Cash advances (bale) or anything else taken off. */
   deductions: number;
   deductionNote: string;
+  /** Added by hand at pay time — an allowance, a bonus, a correction. */
+  additions?: number;
+  additionNote?: string;
   net: number;
   paidOn: string;
   /** The salary expense this payment recorded in Transactions. */

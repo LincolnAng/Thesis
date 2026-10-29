@@ -15,6 +15,8 @@ import type { PayrollRecord, StaffMember } from "@/lib/store/types";
 import { PayDialog, printPayslip, type PayBreakdown } from "@/components/salaries/pay-dialog";
 import { StaffList, rateLabel } from "@/components/salaries/staff-list";
 import { TimeRecordGrid } from "@/components/salaries/time-record";
+import { TimeInPanel } from "@/components/salaries/time-in-panel";
+import { isAdmin, useCurrentUser } from "@/lib/auth/current-user";
 
 /**
  * Salaries, for Executives: who's owed what this payday, worked out from each person's rate and
@@ -45,7 +47,9 @@ function peopleFor(staff: StaffMember[], has: (s: StaffMember) => boolean): Staf
 }
 
 export function SalariesScreen() {
-  const [tab, setTab] = useState<Tab>("payroll");
+  const me = useCurrentUser();
+  // The Admin (the main computer) times people in, so she starts on the time record.
+  const [tab, setTab] = useState<Tab>(isAdmin(me) ? "time" : "payroll");
   return (
     <Page title="Salaries" subnav={<PageTabs tabs={TABS} value={tab} onChange={setTab} />}>
       {tab === "payroll" && <PayrollView />}
@@ -69,6 +73,7 @@ function payLines(line: PayLine): { label: string; amount: number }[] {
           ]
         : [{ label: `Half of ${formatPeso(s.rate)} a month`, amount: line.basic }];
   if (line.overtime > 0) lines.push({ label: `Overtime, ${line.otHours} h at 125%`, amount: line.overtime });
+  if (line.breakDeduction > 0) lines.push({ label: `Breaks over 30 min · ${line.breakOverMinutes} min`, amount: -line.breakDeduction });
   return lines;
 }
 
@@ -122,6 +127,8 @@ function PayrollView() {
       withheld: withheldLines(line),
       deductions: paid.deductions,
       deductionNote: paid.deductionNote,
+      additions: paid.additions,
+      additionNote: paid.additionNote,
       net: paid.net,
       paidOn: paid.paidOn,
     });
@@ -304,15 +311,21 @@ function NoStaffYet() {
 
 function TimeView() {
   const { staff, timeRecords } = useStore();
+  const me = useCurrentUser();
   const today = manilaToday();
   const [period, setPeriod] = useState(() => periodFor(today));
   const people = peopleFor(staff, (s) => timeRecords.some((r) => r.staffId === s.id && r.date >= period.start && r.date <= period.end));
   if (staff.length === 0) return <NoStaffYet />;
   return (
     <div className="flex max-w-[1000px] flex-col gap-8">
-      <p className="rounded-xl bg-secondary px-4 py-3 text-[13.5px] text-muted-foreground">
-        People are timed in and out on the main computer, on the Admin profile. Here you correct a day, mark absences, leave and days off, and approve overtime.
-      </p>
+      {/* Time in and out happens only on the Admin profile — the main computer. */}
+      {isAdmin(me) ? (
+        <TimeInPanel />
+      ) : (
+        <p className="rounded-xl bg-secondary px-4 py-3 text-[13.5px] text-muted-foreground">
+          People are timed in and out on the main computer, on the Admin profile. Here you correct a day, mark absences, leave and days off, and approve overtime.
+        </p>
+      )}
       <section className="flex flex-col gap-3">
         <h2 className="font-display text-[20px] font-semibold">Daily time record</h2>
         <PeriodNav period={period} onShift={(n) => setPeriod((p) => shiftPeriod(p, n))} today={today} />

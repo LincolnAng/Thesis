@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { BUTTON, Pill } from "@/components/ui/kit";
 import { useStore } from "@/lib/store/use-store";
 import { addStaff, updateStaff } from "@/lib/store/store";
+import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 import { formatPeso } from "@/lib/format";
 import type { PayType, StaffMember } from "@/lib/store/types";
 
@@ -30,6 +31,7 @@ function TimeInNote() {
 }
 
 export function StaffList() {
+  const exec = isExecutive(useCurrentUser());
   const { staff } = useStore();
   const [editing, setEditing] = useState<StaffMember | "new" | null>(null);
   const sorted = [...staff].sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name));
@@ -38,10 +40,14 @@ export function StaffList() {
     <div className="flex max-w-[760px] flex-col gap-3">
       <TimeInNote />
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[14px] text-muted-foreground">Rates are seen by Executives only. Staff see their names, to time in.</p>
-        <button type="button" onClick={() => setEditing("new")} className={BUTTON.primary}>
-          <Plus className="h-4 w-4" /> Add staff
-        </button>
+        <p className="text-[14px] text-muted-foreground">
+          {exec ? "Rates are seen by Executives and the Admin, who works out pay. Employees never see them." : "Who is paid what. Only an Executive changes these."}
+        </p>
+        {exec && (
+          <button type="button" onClick={() => setEditing("new")} className={BUTTON.primary}>
+            <Plus className="h-4 w-4" /> Add staff
+          </button>
+        )}
       </div>
       {sorted.length === 0 ? (
         <p className="rounded-2xl border border-line/15 bg-card px-4 py-8 text-center text-[14px] text-muted-foreground">
@@ -62,14 +68,16 @@ export function StaffList() {
                 <p className="text-[13px] text-muted-foreground">{[s.position, s.startDate ? `since ${s.startDate}` : null].filter(Boolean).join(" · ") || "—"}</p>
               </div>
               <span className="shrink-0 text-[14px] font-semibold tabular-nums">{rateLabel(s)}</span>
-              <button
-                type="button"
-                onClick={() => setEditing(s)}
-                aria-label={`Change ${s.name}`}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-line/20 text-muted-foreground hover:bg-secondary"
-              >
-                <Pencil className="h-4 w-4" />
-              </button>
+              {exec && (
+                <button
+                  type="button"
+                  onClick={() => setEditing(s)}
+                  aria-label={`Change ${s.name}`}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-line/20 text-muted-foreground hover:bg-secondary"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+              )}
             </li>
           ))}
         </ul>

@@ -16,11 +16,12 @@ test("paydays are the 15th and the last day of the month", () => {
   assert.equal(shiftPeriod(periodFor("2026-12-20"), 1).start, "2027-01-01");
 });
 
-test("hours on the clock take an hour off for lunch; extra hours are in half hours", () => {
-  assert.equal(hoursWorked({ timeIn: "08:00", timeOut: "17:00" }), 8);
+test("a 30-minute break comes off the day (or the break actually taken); extra hours are in half hours", () => {
+  assert.equal(hoursWorked({ timeIn: "08:00", timeOut: "16:30" }), 8);
+  assert.equal(hoursWorked({ timeIn: "08:00", timeOut: "17:00", breakStart: "12:00", breakEnd: "13:00" }), 8);
   assert.equal(hoursWorked({ timeIn: "08:00", timeOut: "12:00" }), 4);
   assert.equal(hoursWorked({ timeIn: "08:00", timeOut: null }), null);
-  assert.equal(extraHours({ timeIn: "08:00", timeOut: "19:20" }), 2);
+  assert.equal(extraHours({ timeIn: "08:00", timeOut: "18:50" }), 2);
   assert.equal(formatClock("13:05"), "1:05 PM");
 });
 
@@ -74,4 +75,14 @@ test("government contributions come off the end-of-month payday, from January 20
   assert.equal(payFor(staff({ payType: "monthly", rate: 2000, allowanceOnly: true }), periodFor("2027-01-20"), []).contributions, null);
   // The start date is the shop's to set.
   assert.ok(payFor(khent, periodFor("2026-11-20"), [], [], { contributionsFrom: "2026-11-01" }).contributions);
+});
+
+test("break minutes past the 30 allowed come off pay at the hourly rate", () => {
+  const p = periodFor("2026-10-01");
+  const long = [day("2026-10-01", { breakStart: "12:00", breakEnd: "12:50" }), day("2026-10-02", { breakStart: "12:00", breakEnd: "12:25" })];
+  const line = payFor(staff({ rate: 520 }), p, long);
+  assert.equal(line.breakOverMinutes, 20);
+  assert.equal(line.breakDeduction, Math.round((20 / 60) * (520 / 8) * 100) / 100);
+  assert.equal(line.gross, 1040 - line.breakDeduction);
+  assert.equal(payFor(staff({ rate: 2000, payType: "monthly", allowanceOnly: true }), p, long).breakDeduction, 0);
 });

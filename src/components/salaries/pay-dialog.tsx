@@ -30,13 +30,17 @@ export function PayDialog({
   member: StaffMember;
   breakdown: PayBreakdown;
   onClose: () => void;
-  onPay: (p: { paidOn: string; deductions: number; deductionNote: string; net: number }) => void;
+  onPay: (p: { paidOn: string; deductions: number; deductionNote: string; additions: number; additionNote: string; net: number }) => void;
 }) {
   const [paidOn, setPaidOn] = useState(breakdown.defaultDate);
   const [less, setLess] = useState("");
   const [note, setNote] = useState("");
+  // Worked out by hand on top of the automatic figure: an allowance, a bonus, a correction.
+  const [plus, setPlus] = useState("");
+  const [plusNote, setPlusNote] = useState("");
   const withheld = (breakdown.withheld ?? []).reduce((n, w) => n + w.amount, 0);
-  const afterWithheld = Math.max(0, breakdown.gross - withheld);
+  const additions = Math.max(0, Number(plus) || 0);
+  const afterWithheld = Math.max(0, breakdown.gross - withheld) + additions;
   const deductions = Math.min(afterWithheld, Number(less) || 0);
   const net = Math.round((afterWithheld - deductions) * 100) / 100;
   const field = "h-11 rounded-lg border border-input bg-transparent px-3 text-[15px] outline-none focus:border-cacao";
@@ -70,6 +74,14 @@ export function PayDialog({
 
         <div className="grid grid-cols-2 gap-3">
           <label className="flex flex-col gap-1 text-[13px] font-semibold">
+            Add (₱)
+            <input inputMode="decimal" value={plus} onChange={(e) => setPlus(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" className={`${field} text-right`} />
+          </label>
+          <label className="flex flex-col gap-1 text-[13px] font-semibold">
+            For
+            <input value={plusNote} onChange={(e) => setPlusNote(e.target.value)} placeholder="Allowance, bonus, correction" className={field} />
+          </label>
+          <label className="flex flex-col gap-1 text-[13px] font-semibold">
             Less (₱)
             <input inputMode="decimal" value={less} onChange={(e) => setLess(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" className={`${field} text-right`} />
           </label>
@@ -96,7 +108,7 @@ export function PayDialog({
           <button
             type="button"
             disabled={!paidOn || net <= 0}
-            onClick={() => onPay({ paidOn, deductions, deductionNote: note.trim(), net })}
+            onClick={() => onPay({ paidOn, deductions, deductionNote: note.trim(), additions, additionNote: plusNote.trim(), net })}
             className="min-h-11 flex-1 rounded-[10px] bg-cacao text-[14px] font-semibold text-ivory disabled:opacity-40"
           >
             Record payment of {formatPeso(net)}
@@ -122,6 +134,8 @@ export function printPayslip(p: {
   withheld?: { label: string; amount: number }[];
   deductions: number;
   deductionNote: string;
+  additions?: number;
+  additionNote?: string;
   net: number;
   paidOn: string;
 }) {
@@ -134,6 +148,8 @@ export function printPayslip(p: {
 <style>body{font-family:system-ui,sans-serif;padding:24px;color:#222}table{width:100%;border-collapse:collapse;margin-top:12px}td{padding:6px 0}h1{font-size:18px;margin:0}p{margin:2px 0;color:#555}.sign{margin-top:48px;display:flex;justify-content:space-between;gap:24px}.sign div{flex:1;border-top:1px solid #333;padding-top:4px;font-size:12px;text-align:center}</style>
 </head><body><h1>${esc(p.business)} — Payslip</h1><p>${esc(p.name)}${p.position ? ` · ${esc(p.position)}` : ""}</p><p>${esc(p.period)} · paid ${esc(p.paidOn)}</p>
 <table>${p.lines.map((l) => row(l.label, formatPeso(l.amount))).join("")}${row("Gross pay", formatPeso(gross), true)}${(p.withheld ?? []).map((w) => row(`Less ${w.label}`, `−${formatPeso(w.amount)}`)).join("")}${
+    (p.additions ?? 0) > 0 ? row(`Add${p.additionNote ? ` — ${p.additionNote}` : ""}`, formatPeso(p.additions ?? 0)) : ""
+  }${
     p.deductions > 0 ? row(`Less${p.deductionNote ? ` — ${p.deductionNote}` : ""}`, `−${formatPeso(p.deductions)}`) : ""
   }${row("Take-home pay", formatPeso(p.net), true)}</table>
 <div class="sign"><div>Released by</div><div>Received by ${esc(p.name)}</div></div>

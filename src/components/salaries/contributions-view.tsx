@@ -5,6 +5,7 @@ import { Undo2 } from "lucide-react";
 import { CarouselNav } from "@/components/ui/carousel-nav";
 import { Pill } from "@/components/ui/kit";
 import { useStore } from "@/lib/store/use-store";
+import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 import { recordRemittance, setBusinessSetting, undoSalaryPayment } from "@/lib/store/store";
 import { formatPeso } from "@/lib/format";
 import { manilaToday, payFor, periodFor } from "@/lib/payroll/pay";
@@ -31,6 +32,7 @@ const shiftMonth = (ym: string, n: number) => {
 };
 
 export function ContributionsView() {
+  const exec = isExecutive(useCurrentUser());
   const { staff, timeRecords, payroll } = useStore();
   const from = useContributionsFrom();
   const today = manilaToday();
@@ -54,7 +56,7 @@ export function ContributionsView() {
         <CarouselNav label={monthLabel(month)} onPrev={() => setMonth((m) => shiftMonth(m, -1))} onNext={() => setMonth((m) => shiftMonth(m, 1))} labelWidth="w-[160px]" />
         <span className="text-[13px] text-muted-foreground">
           Deductions start {monthLabel(from.slice(0, 7))}
-          {!editingFrom && (
+          {!editingFrom && exec && (
             <button type="button" onClick={() => setEditingFrom(true)} className="ml-2 font-semibold text-cacao underline-offset-2 hover:underline">
               Change
             </button>

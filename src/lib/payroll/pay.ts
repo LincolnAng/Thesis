@@ -14,6 +14,7 @@ import { contributionsFor, DEFAULT_CONTRIBUTIONS_FROM, type Contributions } from
  *   day absent (half that for a half day). Days off and leave aren't deducted.
  * - Staff paid an allowance only (not a salary) have nothing deducted: no absences, no
  *   government contributions.
+ * - A 30-minute break is allowed each day; minutes beyond it come off pay at the hourly rate.
  * - Overtime is paid at 125% of the hourly rate, and only the hours an Executive approved.
  *   The hourly rate is the daily rate ÷ 8; for monthly staff, the monthly rate × 12 ÷ 313
  *   working days (a six-day week) ÷ 8.
@@ -27,8 +28,10 @@ import { contributionsFor, DEFAULT_CONTRIBUTIONS_FROM, type Contributions } from
 export const OT_PREMIUM = 1.25;
 export const HOURS_PER_DAY = 8;
 export const WORK_DAYS_PER_YEAR = 313;
-/** Over this many hours on the clock, an hour is taken off for lunch. */
-const LUNCH_AFTER_HOURS = 5;
+/** The break everyone gets: 30 minutes. Longer comes off pay (see breakOverMinutes). */
+export const BREAK_MINUTES = 30;
+/** With no break recorded, a day longer than this on the clock has the 30 minutes taken off. */
+const BREAK_AFTER_HOURS = 5;
 export const THIRTEENTH_DUE = { month: 12, day: 24 };
 /** A monthly rate ÷ this is one day's pay, for deducting absences. */
 export const DAYS_PER_MONTH_FOR_ABSENCES = 30;
@@ -91,17 +94,35 @@ const minutes = (hhmm: string | null) => {
   return m ? Number(m[1]) * 60 + Number(m[2]) : null;
 };
 
-/** Hours worked from time in to time out, less an hour for lunch on a long day. Null until both are in. */
-export function hoursWorked(r: Pick<TimeRecord, "timeIn" | "timeOut">): number | null {
+/** Minutes of break taken, from break start to break end; null when not both recorded. */
+export function breakMinutes(r: Pick<TimeRecord, "breakStart" | "breakEnd">): number | null {
+  const a = minutes(r.breakStart ?? null);
+  const b = minutes(r.breakEnd ?? null);
+  return a == null || b == null || b <= a ? null : b - a;
+}
+
+/** Break taken beyond the 30 minutes allowed. */
+export function breakOverMinutes(r: Pick<TimeRecord, "breakStart" | "breakEnd">): number {
+  const taken = breakMinutes(r);
+  return taken == null ? 0 : Math.max(0, taken - BREAK_MINUTES);
+}
+
+/**
+ * Hours worked from time in to time out, less the break: the break actually taken when its start
+ * and end were recorded, else the 30 minutes on a long day. Null until in and out are both in.
+ */
+export function hoursWorked(r: Pick<TimeRecord, "timeIn" | "timeOut"> & Partial<Pick<TimeRecord, "breakStart" | "breakEnd">>): number | null {
   const a = minutes(r.timeIn);
   const b = minutes(r.timeOut);
   if (a == null || b == null || b <= a) return null;
-  const hours = (b - a) / 60;
-  return r2(hours > LUNCH_AFTER_HOURS ? hours - 1 : hours);
+  const taken = breakMinutes(r);
+  const elapsed = (b - a) / 60;
+  const off = taken != null ? taken / 60 : elapsed > BREAK_AFTER_HOURS ? BREAK_MINUTES / 60 : 0;
+  return r2(Math.max(0, elapsed - off));
 }
 
 /** Hours past a full day, in half hours — what an Executive is asked to approve as overtime. */
-export function extraHours(r: Pick<TimeRecord, "timeIn" | "timeOut">): number {
+export function extraHours(r: Pick<TimeRecord, "timeIn" | "timeOut"> & Partial<Pick<TimeRecord, "breakStart" | "breakEnd">>): number {
   const h = hoursWorked(r);
   return h == null ? 0 : Math.floor(Math.max(0, h - HOURS_PER_DAY) * 2) / 2;
 }
@@ -125,6 +146,9 @@ export interface PayLine {
   otHours: number;
   /** Overtime hours on the clock that no one has approved yet (not paid). */
   unapprovedExtra: number;
+  /** Break minutes taken beyond the 30 allowed, over the period, and what they come off pay. */
+  breakOverMinutes: number;
+  breakDeduction: number;
   /** Absence days a monthly worker is docked for (a half day counts 0.5). */
   absentDays: number;
   /** Taken off a monthly worker's basic for absences. */
@@ -178,7 +202,10 @@ function basePay(staff: StaffMember, period: PayPeriod, records: TimeRecord[]) {
   const absenceDeduction = r2(Math.min(share, absenceAmount(staff, absentDays)));
   const basic = r2(staff.payType === "daily" ? staff.rate * (fullDays + halfDays / 2) : share - absenceDeduction);
   const overtime = r2(otHours * hourlyRate(staff) * OT_PREMIUM);
-  return { fullDays, halfDays, unpaidDays, otHours, unapprovedExtra, absentDays, absenceDeduction, basic, overtime, gross: r2(basic + overtime) };
+  // Over-long breaks come off at the hourly rate (allowances aren't docked).
+  const breakOver = staff.allowanceOnly ? 0 : mine.reduce((n, r) => n + breakOverMinutes(r), 0);
+  const breakDeduction = r2((breakOver / 60) * hourlyRate(staff));
+  return { fullDays, halfDays, unpaidDays, otHours, unapprovedExtra, absentDays, absenceDeduction, breakOverMinutes: breakOver, breakDeduction, basic, overtime, gross: r2(Math.max(0, basic + overtime - breakDeduction)) };
 }
 
 export function payFor(staff: StaffMember, period: PayPeriod, records: TimeRecord[], payroll: PayrollRecord[] = [], options: PayOptions = {}): PayLine {

@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Clock, LogIn, LogOut, Pencil } from "lucide-react";
+import { Clock, Coffee, LogIn, LogOut, Pencil } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useStore } from "@/lib/store/use-store";
 import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 import { saveTimeRecord } from "@/lib/store/store";
-import { formatClock, hoursWorked, manilaTime, manilaToday } from "@/lib/payroll/pay";
+import { breakOverMinutes, formatClock, hoursWorked, manilaTime, manilaToday } from "@/lib/payroll/pay";
 import type { StaffMember, TimeRecord } from "@/lib/store/types";
 
 /**
@@ -29,6 +29,15 @@ function hoursLabel(r: TimeRecord): string | null {
   return `${whole}h${mins ? ` ${mins}m` : ""} worked`;
 }
 
+type Step = { what: "in" | "breakStart" | "breakEnd" | "out"; label: string; main: boolean };
+
+/** The next step of someone's day: in → start break → end break → out. */
+function nextSteps(r: TimeRecord | null): Step[] {
+  if (!r?.timeIn) return [{ what: "in", label: "Time in", main: true }];
+  if (r.breakStart && !r.breakEnd) return [{ what: "breakEnd", label: "End break", main: true }];
+  return [...(!r.breakStart ? [{ what: "breakStart" as const, label: "Start break", main: false }] : []), { what: "out", label: "Time out", main: false }];
+}
+
 export function TimeInPanel() {
   const { staff, timeRecords, loadedFromServer } = useStore();
   const me = useCurrentUser();
@@ -49,14 +58,15 @@ export function TimeInPanel() {
     .sort((a, b) => Number(b.userId === me?.id) - Number(a.userId === me?.id) || a.name.localeCompare(b.name));
   const recordOf = (s: StaffMember) => timeRecords.find((r) => r.staffId === s.id && r.date === today) ?? null;
 
-  async function clock(member: StaffMember, record: TimeRecord | null) {
+  /** Time in, break start, break end or time out — whichever comes next — stamped with the time now. */
+  async function clock(member: StaffMember, record: TimeRecord | null, what: "in" | "breakStart" | "breakEnd" | "out") {
     setBusy(member.id);
     setFailed(null);
     const time = manilaTime();
     const ok = await saveTimeRecord(
       record
-        ? { ...record, timeOut: time }
-        : { staffId: member.id, date: today, timeIn: time, timeOut: null, status: "present", otHours: 0, note: "" },
+        ? { ...record, ...(what === "breakStart" ? { breakStart: time } : what === "breakEnd" ? { breakEnd: time } : { timeOut: time }) }
+        : { staffId: member.id, date: today, timeIn: time, timeOut: null, breakStart: null, breakEnd: null, status: "present", otHours: 0, note: "" },
     );
     setBusy(null);
     if (!ok) setFailed(`${member.name}'s time didn't save — check the internet, then try again.`);
@@ -97,22 +107,37 @@ export function TimeInPanel() {
                     {notWorking
                       ? { absent: "Absent today", off: "Day off", leave: "On leave" }[r.status as "absent" | "off" | "leave"]
                       : r?.timeIn
-                        ? `In ${formatClock(r.timeIn)} · Out ${r.timeOut ? formatClock(r.timeOut) : "—"}${done && hoursLabel(r) ? ` · ${hoursLabel(r)}` : ""}`
+                        ? [
+                            `In ${formatClock(r.timeIn)}`,
+                            r.breakStart ? `Break ${formatClock(r.breakStart)}–${r.breakEnd ? formatClock(r.breakEnd) : "now"}` : null,
+                            `Out ${r.timeOut ? formatClock(r.timeOut) : "—"}`,
+                            done && hoursLabel(r) ? hoursLabel(r) : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")
                         : "Not in yet"}
+                    {r && breakOverMinutes(r) > 0 && (
+                      <span className="ml-1 font-semibold text-[var(--status-warning)]">· break {breakOverMinutes(r)} min over</span>
+                    )}
                   </p>
                 </div>
                 {!notWorking && !done && (
-                  <button
-                    type="button"
-                    disabled={busy === member.id}
-                    onClick={() => void clock(member, r)}
-                    className={`flex min-h-12 min-w-[140px] items-center justify-center gap-2 rounded-xl px-5 text-[15px] font-bold transition disabled:opacity-50 ${
-                      r?.timeIn ? "border-2 border-cacao bg-card text-cacao" : "bg-cacao text-ivory"
-                    }`}
-                  >
-                    {r?.timeIn ? <LogOut className="h-5 w-5" /> : <LogIn className="h-5 w-5" />}
-                    {r?.timeIn ? "Time out" : "Time in"}
-                  </button>
+                  <span className="flex flex-wrap gap-2">
+                    {nextSteps(r).map((st) => (
+                      <button
+                        key={st.what}
+                        type="button"
+                        disabled={busy === member.id}
+                        onClick={() => void clock(member, r, st.what)}
+                        className={`flex min-h-12 min-w-[130px] items-center justify-center gap-2 rounded-xl px-4 text-[15px] font-bold transition disabled:opacity-50 ${
+                          st.main ? "bg-cacao text-ivory" : "border-2 border-cacao bg-card text-cacao"
+                        }`}
+                      >
+                        {st.what === "in" ? <LogIn className="h-5 w-5" /> : st.what === "out" ? <LogOut className="h-5 w-5" /> : <Coffee className="h-5 w-5" />}
+                        {st.label}
+                      </button>
+                    ))}
+                  </span>
                 )}
                 {(r?.timeIn || done) && !notWorking && (
                   <button
@@ -147,15 +172,20 @@ export function FixTimesDialog({ member, record, date, onClose }: { member: Staf
   const me = useCurrentUser();
   const [timeIn, setTimeIn] = useState(record?.timeIn ?? "");
   const [timeOut, setTimeOut] = useState(record?.timeOut ?? "");
+  const [breakStart, setBreakStart] = useState(record?.breakStart ?? "");
+  const [breakEnd, setBreakEnd] = useState(record?.breakEnd ?? "");
   const [error, setError] = useState<string | null>(null);
 
   async function save() {
     if (!timeIn) return setError("Enter the time in.");
     if (timeOut && timeOut <= timeIn) return setError("Time out has to be after time in.");
+    if (breakStart && breakEnd && breakEnd <= breakStart) return setError("The break has to end after it starts.");
     const ok = await saveTimeRecord({
       ...(record ?? { staffId: member.id, date, status: "present" as const, otHours: 0, note: "" }),
       timeIn,
       timeOut: timeOut || null,
+      breakStart: breakStart || null,
+      breakEnd: breakEnd || null,
     });
     if (ok) onClose();
     else setError("It didn't save — check the internet, then try again.");
@@ -182,6 +212,17 @@ export function FixTimesDialog({ member, record, date, onClose }: { member: Staf
             <input type="time" value={timeOut} onChange={(e) => setTimeOut(e.target.value)} className={field} />
           </label>
         </div>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="flex flex-col gap-1 text-[13px] font-semibold">
+            Break start
+            <input type="time" value={breakStart} onChange={(e) => setBreakStart(e.target.value)} className={field} />
+          </label>
+          <label className="flex flex-col gap-1 text-[13px] font-semibold">
+            Break end
+            <input type="time" value={breakEnd} onChange={(e) => setBreakEnd(e.target.value)} className={field} />
+          </label>
+        </div>
+        <p className="-mt-1 text-[12px] text-muted-foreground">A 30-minute break is allowed; anything longer comes off pay.</p>
         {error && <p className="text-[13px] font-semibold text-danger">{error}</p>}
         <div className="flex gap-2">
           <button type="button" onClick={() => void save()} className="min-h-11 flex-1 rounded-[10px] bg-cacao text-[14px] font-semibold text-ivory">

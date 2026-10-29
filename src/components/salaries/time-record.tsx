@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useStore } from "@/lib/store/use-store";
 import { deleteTimeRecord, saveTimeRecord } from "@/lib/store/store";
-import { daysIn, extraHours, formatClock, hoursWorked, parseDay, type PayPeriod } from "@/lib/payroll/pay";
+import { breakOverMinutes, daysIn, extraHours, formatClock, hoursWorked, parseDay, type PayPeriod } from "@/lib/payroll/pay";
 import type { DayStatus, StaffMember, TimeRecord } from "@/lib/store/types";
 
 /**
@@ -94,12 +94,16 @@ function DayDialog({ member, date, record, onClose }: { member: StaffMember; dat
   const [status, setStatus] = useState<DayStatus>(record?.status ?? "present");
   const [timeIn, setTimeIn] = useState(record?.timeIn ?? "");
   const [timeOut, setTimeOut] = useState(record?.timeOut ?? "");
+  const [breakStart, setBreakStart] = useState(record?.breakStart ?? "");
+  const [breakEnd, setBreakEnd] = useState(record?.breakEnd ?? "");
   const [ot, setOt] = useState(record?.otHours ? String(record.otHours) : "");
   const [note, setNote] = useState(record?.note ?? "");
   const [error, setError] = useState<string | null>(null);
   const working = status === "present" || status === "half";
-  const hours = hoursWorked({ timeIn: timeIn || null, timeOut: timeOut || null });
-  const extra = extraHours({ timeIn: timeIn || null, timeOut: timeOut || null });
+  const times = { timeIn: timeIn || null, timeOut: timeOut || null, breakStart: breakStart || null, breakEnd: breakEnd || null };
+  const hours = hoursWorked(times);
+  const extra = extraHours(times);
+  const over = breakOverMinutes(times);
 
   async function save() {
     if (working && timeIn && timeOut && timeOut <= timeIn) return setError("Time out has to be after time in.");
@@ -110,6 +114,8 @@ function DayDialog({ member, date, record, onClose }: { member: StaffMember; dat
       status,
       timeIn: working ? timeIn || null : null,
       timeOut: working ? timeOut || null : null,
+      breakStart: working ? breakStart || null : null,
+      breakEnd: working ? breakEnd || null : null,
       otHours: working ? Math.max(0, Number(ot) || 0) : 0,
       note: note.trim(),
     });
@@ -152,10 +158,19 @@ function DayDialog({ member, date, record, onClose }: { member: StaffMember; dat
                 Time out
                 <input type="time" value={timeOut} onChange={(e) => setTimeOut(e.target.value)} className={field} />
               </label>
+              <label className="flex flex-col gap-1 text-[13px] font-semibold">
+                Break start
+                <input type="time" value={breakStart} onChange={(e) => setBreakStart(e.target.value)} className={field} />
+              </label>
+              <label className="flex flex-col gap-1 text-[13px] font-semibold">
+                Break end
+                <input type="time" value={breakEnd} onChange={(e) => setBreakEnd(e.target.value)} className={field} />
+              </label>
             </div>
             {hours != null && (
               <p className="text-[13px] text-muted-foreground">
-                {formatClock(timeIn)} to {formatClock(timeOut)} — {hours} hours worked (an hour off for lunch on a long day).
+                {formatClock(timeIn)} to {formatClock(timeOut)} — {hours} hours worked, after the break.
+                {over > 0 && <span className="font-semibold text-[var(--status-warning)]"> Break {over} min over the 30 allowed — comes off pay.</span>}
               </p>
             )}
             <label className="flex flex-col gap-1 text-[13px] font-semibold">

@@ -84,6 +84,16 @@ const EMPLOYEE_SETTING_PREFIXES = ["shelfLifeDays:", "eventPlan:", "seasonality:
 /** Settings an employee may change: marking a day off on the production calendar. */
 const EMPLOYEE_WRITABLE_SETTING_KEYS = new Set(["unavailableDays"]);
 
+/**
+ * What a non-Executive may see and record. The Admin (Ruchel) works out and pays salaries, so the
+ * salary expenses are hers too; an employee never sees them.
+ */
+export function canSeeEntry(role: Role, entry: Pick<Entry, "type"> & { category?: string | null }): boolean {
+  if (role === "executive") return true;
+  if (role === "admin") return EMPLOYEE_ENTRY_TYPES.includes(entry.type);
+  return employeeCanSeeEntry(entry);
+}
+
 export function employeeCanSeeEntry(entry: Pick<Entry, "type"> & { category?: string | null }): boolean {
   return EMPLOYEE_ENTRY_TYPES.includes(entry.type) && !isPayroll({ type: entry.type, category: entry.category ?? null });
 }
@@ -154,7 +164,7 @@ export function redactForEmployee(data: BusinessData, sellingPrice: (product: Pr
   return {
     ...data,
     entries: data.entries
-      .filter(employeeCanSeeEntry)
+      .filter((e) => canSeeEntry(role, e))
       // Spoilage is valued at cost, so its amount is a cost.
       .map((e) => (e.type === "WASTE" ? { ...e, amount: null } : e))
       // Who still owes the business what is the owners' to track, not the counter's.
@@ -178,10 +188,11 @@ export function redactForEmployee(data: BusinessData, sellingPrice: (product: Pr
     supplierPrices: [],
     businessSettings: data.businessSettings.filter((s) => employeeCanSeeSetting(s.key)),
     activity: [],
-    // Their own name, to time in — never anyone else's, a rate, or anything else about pay.
-    staff: own.map(staffNameOnly),
-    timeRecords: data.timeRecords.filter((r) => ownIds.has(r.staffId)),
-    payroll: [],
+    // The Admin works out salaries, so has the staff list with rates, everyone's days and the
+    // payslips. An employee gets only their own name — never a rate or anything else about pay.
+    staff: keeper ? data.staff : own.map(staffNameOnly),
+    timeRecords: keeper ? data.timeRecords : data.timeRecords.filter((r) => ownIds.has(r.staffId)),
+    payroll: keeper ? data.payroll : [],
   };
 }
 
@@ -261,15 +272,15 @@ export function decideWrite(req: WriteRequest): WriteDecision {
   switch (collection) {
     case "entries": {
       if (op === "append") {
-        if (!item || !employeeCanSeeEntry(item as Pick<Entry, "type" | "category">)) return deny("forbidden_entry_type");
+        if (!item || !canSeeEntry(req.role, item as Pick<Entry, "type" | "category">)) return deny("forbidden_entry_type");
         // Payment terms are the owners' to set: an employee's sale or expense is recorded as
         // paid on the spot, never as a payable or receivable.
         return { allow: true, item: withoutPaymentFields(stamp(req) ?? {}) };
       }
       // An employee can only touch entries they could see, and can't turn one into payroll.
-      if (!existing || !employeeCanSeeEntry(existing as Pick<Entry, "type" | "category">)) return deny("forbidden");
+      if (!existing || !canSeeEntry(req.role, existing as Pick<Entry, "type" | "category">)) return deny("forbidden");
       if (op === "delete") return { allow: true };
-      if (!item || !employeeCanSeeEntry(item as Pick<Entry, "type" | "category">)) return deny("forbidden_entry_type");
+      if (!item || !canSeeEntry(req.role, item as Pick<Entry, "type" | "category">)) return deny("forbidden_entry_type");
       // Their copy of a spoilage entry has no amount (it's a cost); keep the real one.
       const merged = existing.type === "WASTE" && item.type === "WASTE" ? { ...item, amount: existing.amount } : item;
       // Who logged it isn't theirs to change, and their copy has no payment terms — keep the
@@ -290,6 +301,9 @@ export function decideWrite(req: WriteRequest): WriteDecision {
     case "eventStock":
       return { allow: true };
     case "tingi":
+    case "payroll":
+      // The Admin records and takes back salary payments; anyone else, no.
+      return req.role === "admin" && (op === "append" || op === "delete") ? { allow: true } : deny("forbidden");
     case "stockTransfers":
     case "productionRuns":
       // Moving stock between branches, in and out of a tingi bucket, and logging a
@@ -324,7 +338,11 @@ export function decideWrite(req: WriteRequest): WriteDecision {
           date: item.date,
           timeIn: clock(item.timeIn),
           timeOut: clock(item.timeOut),
-          status: existing?.status ?? "present",
+          breakStart: clock(item.breakStart),
+          breakEnd: clock(item.breakEnd),
+          // The Admin works out pay, so marks absences, half days, leave and days off; overtime
+          // (money on top) is still an Executive's to approve.
+          status: ["present", "half", "absent", "off", "leave"].includes(String(item.status)) ? item.status : (existing?.status ?? "present"),
           otHours: existing?.otHours ?? 0,
           note: typeof item.note === "string" ? item.note.slice(0, 200) : "",
           loggedById: stamped.loggedById,

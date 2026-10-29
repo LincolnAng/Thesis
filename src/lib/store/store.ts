@@ -1471,6 +1471,7 @@ export function recordSalaryPayment(input: Omit<PayrollRecord, "id" | "createdAt
           ? `Less SSS ${formatPeso(input.sss)}, PhilHealth ${formatPeso(input.philhealth)}, Pag-IBIG ${formatPeso(input.pagibig)}`
           : "",
         input.deductions > 0 ? `Less ${formatPeso(input.deductions)}${input.deductionNote ? ` (${input.deductionNote})` : ""}` : "",
+        (input.additions ?? 0) > 0 ? `Plus ${formatPeso(input.additions ?? 0)}${input.additionNote ? ` (${input.additionNote})` : ""}` : "",
       ]
         .filter(Boolean)
         .join("; ") || null,

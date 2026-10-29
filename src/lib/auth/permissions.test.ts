@@ -233,7 +233,7 @@ test("only the Admin times people in and out — for this pay period, clock time
   const base = { role: "admin" as const, user: me, collection: "timeRecords" as const, now, ownStaffIds: ["st1", "st4"] };
   const ok = decideWrite({ ...base, op: "append", item: { id: "t9", staffId: "st1", date: "2026-10-22", timeIn: "08:03", status: "absent", otHours: 9 } });
   assert.ok(ok.allow);
-  assert.equal(ok.allow && ok.item?.status, "present");
+  assert.equal(ok.allow && ok.item?.status, "absent");
   assert.equal(ok.allow && ok.item?.otHours, 0);
   assert.equal(ok.allow && ok.item?.loggedByName, "Kuya Jun");
   // A forgotten day earlier this period is fine; last period, the future and someone not on staff are not.
@@ -246,25 +246,35 @@ test("only the Admin times people in and out — for this pay period, clock time
   const out = decideWrite({ ...base, op: "update", item: { ...existing, timeOut: "17:10", status: "present", otHours: 5 }, existing });
   assert.ok(out.allow);
   assert.equal(out.allow && out.item?.timeOut, "17:10");
-  assert.equal(out.allow && out.item?.status, "half");
+  // The Admin can mark the day (absent, half day, leave); overtime stays an Executive's.
+  assert.equal(out.allow && out.item?.status, "present");
   assert.equal(out.allow && out.item?.otHours, 1);
   assert.equal(decideWrite({ ...base, op: "delete", id: "t9", existing } as never).allow, false);
 
   // An employee can't time anyone in — themselves included.
   const emp = decideWrite({ ...base, role: "employee", op: "append", item: { id: "t3", staffId: "st1", date: "2026-10-22", timeIn: "08:00" } });
   assert.equal(emp.allow, false);
-  for (const collection of ["staff", "payroll"] as const) {
-    assert.equal(decideWrite({ role: "admin", user: me, collection, op: "append", item: { id: "x" } }).allow, false, collection);
-  }
+  // The Admin records salary payments, but doesn't change who is paid what.
+  assert.equal(decideWrite({ role: "admin", user: me, collection: "staff", op: "append", item: { id: "x" } }).allow, false);
+  assert.equal(decideWrite({ role: "admin", user: me, collection: "payroll", op: "append", item: { id: "x" } }).allow, true);
+  assert.equal(decideWrite({ role: "employee", user: me, collection: "payroll", op: "append", item: { id: "x" } }).allow, false);
+  // …and the salary expense that goes with it; an employee can't record one.
+  const salary = { id: "x9", type: "EXPENSE", amount: 12500, category: "labor", sku: "Salary — Oct 1–15", counterparty: "Khent" };
+  assert.ok(decideWrite({ role: "admin", user: me, collection: "entries", op: "append", item: salary }).allow);
+  assert.equal(decideWrite({ role: "employee", user: me, collection: "entries", op: "append", item: salary }).allow, false);
 });
 
-test("the Admin sees everyone's names and times (no pay); an employee sees only their own", () => {
+test("the Admin sees the staff, their pay and everyone's times; an employee sees only their own", () => {
   const data = sample();
   data.staff.push({ id: "st4", name: "Dadoy", payType: "daily", rate: 525, position: "", pwd: true, userId: null, startDate: null, active: true, allowanceOnly: false, createdAt: "" });
   const admin = redactForEmployee(data, (p) => p.standardPrice, "u-ruchel", "admin");
-  assert.deepEqual(admin.staff.map((s) => [s.name, s.rate, s.pwd]).sort(), [["Dadoy", 0, false], ["Khent", 0, false]]);
+  assert.deepEqual(admin.staff.map((s) => [s.name, s.rate]).sort(), [["Dadoy", 525], ["Khent", 25000], ["Old", 500]]);
   assert.equal(admin.timeRecords.length, 1);
-  assert.deepEqual(admin.payroll, []);
+  assert.equal(admin.payroll.length, 1);
+  // Salary expenses are hers to see; costs, investments and payment terms are not.
+  assert.ok(admin.entries.some((e) => e.id === "x1"));
+  assert.ok(!admin.entries.some((e) => e.id === "r1"));
+  assert.equal(redactForEmployee(data, (p) => p.standardPrice, "u-emp", "employee").payroll.length, 0);
   const other = redactForEmployee(data, (p) => p.standardPrice, "u-emp", "employee");
   assert.equal(other.staff.length, 0);
 });

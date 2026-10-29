@@ -38,7 +38,7 @@ export const staffCollection = createSheetCollection<StaffMember>({
 });
 
 const STATUSES: DayStatus[] = ["present", "half", "absent", "off", "leave"];
-const TIME_HEADER = ["id", "staffId", "date", "timeIn", "timeOut", "status", "otHours", "note", "loggedById", "loggedByName", "createdAt", "deletedAt"];
+const TIME_HEADER = ["id", "staffId", "date", "timeIn", "timeOut", "status", "otHours", "note", "loggedById", "loggedByName", "createdAt", "deletedAt", "breakStart", "breakEnd"];
 
 export const timeRecordsCollection = createSheetCollection<TimeRecord>({
   sheetName: "People & Payroll",
@@ -46,8 +46,8 @@ export const timeRecordsCollection = createSheetCollection<TimeRecord>({
   header: TIME_HEADER,
   idColumn: "id",
   deletedColumn: "deletedAt",
-  toRow: (t) => [t.id, t.staffId, t.date, t.timeIn ?? "", t.timeOut ?? "", t.status, String(t.otHours || 0), t.note ?? "", t.loggedById ?? "", t.loggedByName ?? "", t.createdAt, ""],
-  fromRow: ([id, staffId, date, timeIn, timeOut, status, otHours, note, loggedById, loggedByName, createdAt]) =>
+  toRow: (t) => [t.id, t.staffId, t.date, t.timeIn ?? "", t.timeOut ?? "", t.status, String(t.otHours || 0), t.note ?? "", t.loggedById ?? "", t.loggedByName ?? "", t.createdAt, "", t.breakStart ?? "", t.breakEnd ?? ""],
+  fromRow: ([id, staffId, date, timeIn, timeOut, status, otHours, note, loggedById, loggedByName, createdAt, , breakStart, breakEnd]) =>
     id && staffId && date
       ? {
           id,
@@ -61,11 +61,13 @@ export const timeRecordsCollection = createSheetCollection<TimeRecord>({
           loggedById: loggedById || null,
           loggedByName: loggedByName || null,
           createdAt: createdAt || new Date().toISOString(),
+          breakStart: breakStart || null,
+          breakEnd: breakEnd || null,
         }
       : null,
 });
 
-const PAYROLL_HEADER = ["id", "staffId", "kind", "periodStart", "periodEnd", "basic", "overtime", "deductions", "deductionNote", "net", "paidOn", "entryId", "createdAt", "deletedAt", "sss", "philhealth", "pagibig"];
+const PAYROLL_HEADER = ["id", "staffId", "kind", "periodStart", "periodEnd", "basic", "overtime", "deductions", "deductionNote", "net", "paidOn", "entryId", "createdAt", "deletedAt", "sss", "philhealth", "pagibig", "additions", "additionNote"];
 
 export const payrollCollection = createSheetCollection<PayrollRecord>({
   sheetName: "People & Payroll",
@@ -73,8 +75,8 @@ export const payrollCollection = createSheetCollection<PayrollRecord>({
   header: PAYROLL_HEADER,
   idColumn: "id",
   deletedColumn: "deletedAt",
-  toRow: (p) => [p.id, p.staffId, p.kind, p.periodStart, p.periodEnd, String(p.basic), String(p.overtime), String(p.deductions), p.deductionNote ?? "", String(p.net), p.paidOn, p.entryId ?? "", p.createdAt, "", String(p.sss || 0), String(p.philhealth || 0), String(p.pagibig || 0)],
-  fromRow: ([id, staffId, kind, periodStart, periodEnd, basic, overtime, deductions, deductionNote, net, paidOn, entryId, createdAt, , sss, philhealth, pagibig]) =>
+  toRow: (p) => [p.id, p.staffId, p.kind, p.periodStart, p.periodEnd, String(p.basic), String(p.overtime), String(p.deductions), p.deductionNote ?? "", String(p.net), p.paidOn, p.entryId ?? "", p.createdAt, "", String(p.sss || 0), String(p.philhealth || 0), String(p.pagibig || 0), String(p.additions || 0), p.additionNote ?? ""],
+  fromRow: ([id, staffId, kind, periodStart, periodEnd, basic, overtime, deductions, deductionNote, net, paidOn, entryId, createdAt, , sss, philhealth, pagibig, additions, additionNote]) =>
     id && staffId
       ? {
           id,
@@ -93,6 +95,8 @@ export const payrollCollection = createSheetCollection<PayrollRecord>({
           sss: num(sss),
           philhealth: num(philhealth),
           pagibig: num(pagibig),
+          additions: num(additions),
+          additionNote: additionNote ?? "",
         }
       : null,
 });

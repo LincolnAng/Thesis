@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Boxes, CalendarDays, Clock, Factory, Home, Settings, Tag, TrendingUp, Wallet, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, Boxes, CalendarDays, Factory, Home, Settings, Tag, TrendingUp, Wallet, type LucideIcon } from "lucide-react";
 import type { Role } from "@/lib/store/types";
 
 export interface NavItem {
@@ -29,15 +29,14 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/salaries", label: "Salaries", icon: Wallet },
 ];
 
-const TIME_IN: NavItem = { href: "/salaries", label: "Time in", icon: Clock };
 
 /** The tabs as a profile sees them. */
 export function navItemsFor(role: Role | undefined): NavItem[] {
   if (role === "executive") return NAV_ITEMS;
   return NAV_ITEMS.flatMap((item) => {
     if (item.href === "/costing") return [];
-    // Time in and out happens on the Admin profile only — the main computer.
-    if (item.href === "/salaries") return role === "admin" ? [TIME_IN] : [];
+    // The Admin (the main computer) times people in and works out their pay.
+    if (item.href === "/salaries") return role === "admin" ? [item] : [];
     return [item];
   });
 }
