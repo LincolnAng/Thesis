@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildReminders, isStockAlert } from "./reminders.ts";
+import { buildReminders, endOfNextMonth, isStockAlert } from "./reminders.ts";
 import type { CalendarEntry } from "@/lib/calendar/entries";
 import type { Entry } from "@/lib/store/types";
 
@@ -56,4 +56,22 @@ test("each reminder reads as a short instruction, with stock kept apart", () => 
   assert.deepEqual(t.buy, ["Buy Cacao beans", "2 kg short"]);
   assert.equal(t.lv[0], "Shiela is on leave");
   assert.deepEqual(r.today.filter(isStockAlert).map((x) => x.id), ["low", "buy"]);
+});
+
+test("holidays and days off show in Coming up through the end of next month; everything else, the next few days", () => {
+  assert.equal(endOfNextMonth("2026-10-29"), "2026-11-30");
+  assert.equal(endOfNextMonth("2026-12-15"), "2027-01-31");
+  assert.equal(endOfNextMonth("2027-01-31"), "2027-02-28");
+  const r = buildReminders(
+    [
+      cal({ id: "hol-soon", category: "holidays", date: "2026-11-01", title: "Holiday: All Saints' Day" }),
+      cal({ id: "hol-later", category: "holidays", date: "2026-11-30", title: "Holiday: Bonifacio Day" }),
+      cal({ id: "hol-too-far", category: "holidays", date: "2026-12-08", title: "Holiday: Immaculate Conception" }),
+      cal({ id: "off-later", category: "dayoffs", date: "2026-11-15", title: "Day off" }),
+      cal({ id: "event-later", category: "events", date: "2026-11-15", title: "Bazaar" }),
+    ],
+    [],
+    "2026-10-29",
+  );
+  assert.deepEqual(r.upcoming.map((x) => x.id), ["hol-soon", "off-later", "hol-later"]);
 });

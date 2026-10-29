@@ -91,6 +91,16 @@ export interface Reminders {
 }
 
 export const COMING_UP_DAYS = 3;
+
+/** Days nobody works — holidays and days marked off. Coming up shows these further ahead. */
+export const isNoWork = (r: Pick<Reminder, "category">) => r.category === "holidays" || r.category === "dayoffs";
+
+/** The last day of the month after `day`'s: how far ahead Coming up shows days off. */
+export function endOfNextMonth(day: string): string {
+  const [y, m] = day.split("-").map(Number);
+  const last = new Date(Date.UTC(y, m + 1, 0)); // day 0 of the month after next = last of next
+  return last.toISOString().slice(0, 10);
+}
 export const FOLLOW_UP_AFTER_DAYS = 14;
 
 const peso = (n: number) => `₱${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
@@ -207,6 +217,8 @@ export function buildReminders(
   const todays: Reminder[] = [...extra.today];
   const upcoming: Reminder[] = [...extra.upcoming];
   const horizon = addDays(today, COMING_UP_DAYS);
+  // Holidays and days off are planned around, so they show through the end of next month.
+  const noWorkHorizon = endOfNextMonth(today);
 
   for (const e of calendar) {
     // Shipments already happened; they're history, not reminders.
@@ -226,6 +238,7 @@ export function buildReminders(
       continue;
     }
     if (coversDay(e, today)) todays.push(fromCalendar(e, today));
+    else if (e.date > today && e.date <= noWorkHorizon && isNoWork(e)) upcoming.push(fromCalendar(e, today));
     else if (e.date > today && e.date <= horizon && (e.category === "events" || e.category === "dayoffs" || e.category === "alerts" || e.category === "leaves" || e.category === "holidays")) upcoming.push(fromCalendar(e, today));
   }
 

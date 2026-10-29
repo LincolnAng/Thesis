@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { CalendarDays, Check, ChevronRight, Clock, Factory, HandCoins, ListChecks, PackageX, PartyPopper, ShoppingCart, TrendingDown, UsersRound, Wallet } from "lucide-react";
 import { useReminders } from "@/lib/reminders/use-reminders";
-import { GROUP_LABELS, GROUP_ORDER, STOCK_GROUPS, groupOf, type Reminder, type ReminderGroup } from "@/lib/reminders/reminders";
+import { GROUP_LABELS, GROUP_ORDER, STOCK_GROUPS, groupOf, isNoWork, type Reminder, type ReminderGroup } from "@/lib/reminders/reminders";
 import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 import { setTaskDone, updateCalendarItem } from "@/lib/store/store";
 import { manilaToday } from "@/lib/payroll/pay";
@@ -48,7 +48,8 @@ const upcomingTitle = (r: Reminder) => (r.category === "holidays" ? r.title.repl
 
 /**
  * Coming up, a card per day: the weekday and month, the date in a circle — filled red with a
- * white number on a holiday — and that day's entries under it. The cards wrap and stretch to
+ * white number on a day nobody works (a holiday or a day off) — and that day's entries under it.
+ * Days off show through the end of next month; everything else, the next few days. The cards wrap and stretch to
  * fill each row, so two days or seven sit evenly instead of leaving a gap.
  */
 function ComingUp({ upcoming }: { upcoming: Reminder[] }) {
@@ -58,9 +59,9 @@ function ComingUp({ upcoming }: { upcoming: Reminder[] }) {
     <ul className="flex flex-wrap gap-2">
       {[...days].map(([date, items]) => {
         const d = dateOf(date);
-        const holiday = items.some((r) => r.category === "holidays");
-        // Holidays first: they're why the circle is red.
-        const sorted = [...items].sort((a, b) => Number(b.category === "holidays") - Number(a.category === "holidays"));
+        const noWork = items.some(isNoWork);
+        // Holidays and days off first: they're why the circle is red.
+        const sorted = [...items].sort((a, b) => Number(isNoWork(b)) - Number(isNoWork(a)));
         return (
           <li key={date} className="flex min-w-[104px] flex-[1_1_104px] flex-col items-center gap-1.5 rounded-xl border border-line/10 bg-secondary/30 px-2.5 py-2.5 text-center">
             <span className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
@@ -68,15 +69,15 @@ function ComingUp({ upcoming }: { upcoming: Reminder[] }) {
             </span>
             <span
               className={`flex h-10 w-10 items-center justify-center rounded-full text-[17px] font-bold tabular-nums ${
-                holiday ? "bg-danger text-white" : "bg-card text-foreground ring-1 ring-line/20"
+                noWork ? "bg-danger text-white" : "bg-card text-foreground ring-1 ring-line/20"
               }`}
-              aria-label={holiday ? `${d.getDate()}, a holiday` : undefined}
+              aria-label={noWork ? `${d.getDate()}, no work` : undefined}
             >
               {d.getDate()}
             </span>
             <ul className="flex w-full flex-col gap-1 text-[13px] leading-snug">
               {sorted.map((r) => (
-                <li key={r.id} className={r.category === "holidays" ? "font-semibold text-danger" : "text-foreground"}>
+                <li key={r.id} className={isNoWork(r) ? "font-semibold text-danger" : "text-foreground"}>
                   {upcomingTitle(r)}
                 </li>
               ))}
@@ -183,9 +184,9 @@ export function TodayTasks() {
         <div className="mt-4">
           <div className="flex items-baseline justify-between gap-2">
             <Heading>Coming up</Heading>
-            {upcoming.some((r) => r.category === "holidays") && (
+            {upcoming.some(isNoWork) && (
               <span className="flex items-center gap-1 text-[11.5px] font-semibold text-muted-foreground">
-                <span className="h-2.5 w-2.5 rounded-full bg-danger" /> Holiday
+                <span className="h-2.5 w-2.5 rounded-full bg-danger" /> No work
               </span>
             )}
           </div>
