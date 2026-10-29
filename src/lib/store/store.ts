@@ -20,6 +20,7 @@ import { findProduct } from "@/lib/summary/product-match";
 import { componentDraws, drawOf } from "@/lib/production/batch-draws";
 import { ENTRY_TYPE_LABELS, formatPeso } from "@/lib/format";
 import { isMaterialUse, isMaterialWaste } from "@/lib/transactions/waste";
+import { isPastRecord } from "@/lib/import/past-record";
 import { currentUser, signOut } from "@/lib/auth/current-user";
 import type { BusinessSettingRow } from "@/lib/sheets/business-settings";
 import type {
@@ -789,7 +790,8 @@ function applyEntrySideEffects(
 ): SideEffectResult {
   const touchedProductIds: string[] = [];
   const touchedMaterialIds: string[] = [];
-  if (!entry.quantity) return { products, rawMaterials, touchedProductIds, touchedMaterialIds };
+  // Past records imported from the old spreadsheets never move stock (lib/import/past-record).
+  if (!entry.quantity || isPastRecord(entry)) return { products, rawMaterials, touchedProductIds, touchedMaterialIds };
   const delta = entry.quantity * direction;
 
   // Anything sold or lost at an event/distributor comes out of the stock that was already

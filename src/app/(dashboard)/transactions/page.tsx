@@ -3,7 +3,8 @@
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowDownLeft, ArrowUpRight, CircleDollarSign, FileDown, PackageX } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, CircleDollarSign, FileDown, FileUp, PackageX } from "lucide-react";
+import { ImportDialog } from "@/components/transactions/import-dialog";
 import { ReportDialog } from "@/components/reports/report-dialog";
 import { isMaterialWaste } from "@/lib/transactions/waste";
 import { findProduct } from "@/lib/summary/product-match";
@@ -93,6 +94,7 @@ function TransactionsPageInner() {
   const [filters, setFilters] = useState<TransactionFilters>(EMPTY_FILTERS);
   const [adding, setAdding] = useState(false);
   const [reporting, setReporting] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [editing, setEditing] = useState<Entry | null>(null);
   const [defaulting, setDefaulting] = useState<ObligationRow | null>(null);
   const [movingDue, setMovingDue] = useState<ObligationRow | null>(null);
@@ -398,6 +400,11 @@ function TransactionsPageInner() {
           </div>
           <span className="flex flex-wrap gap-2">
             {exec && (
+              <button type="button" onClick={() => setImporting(true)} className={BUTTON.secondary}>
+                <FileUp className="h-4 w-4" /> Import from spreadsheet
+              </button>
+            )}
+            {exec && (
               <button type="button" onClick={() => setReporting(true)} className={BUTTON.secondary}>
                 <FileDown className="h-4 w-4" /> Download report
               </button>
@@ -500,6 +507,7 @@ function TransactionsPageInner() {
         </div>
       </div>
 
+      {importing && <ImportDialog onClose={() => setImporting(false)} />}
       {reporting && <ReportDialog defaultMonth={period === "all" ? months[0] : period} onClose={() => setReporting(false)} />}
       {adding && (
         <TransactionDialog open onOpenChange={setAdding} existing={null} exec={exec} onSave={(draft) => addEntry(draft)} />

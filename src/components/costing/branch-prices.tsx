@@ -29,13 +29,13 @@ export function BranchPrices({ product, unitCost, mainPrice, unit }: { product: 
         </p>
       </div>
       {others.map((b) => (
-        <BranchCalc key={`${b.id}-${businessSettings[branchPriceKey(product.id, b.id)] ?? ""}`} productId={product.id} branchId={b.id} branchName={b.name} unitCost={unitCost} mainPrice={mainPrice} unit={unit} />
+        <BranchCalc key={`${b.id}-${businessSettings[branchPriceKey(product.id, b.id)] ?? ""}`} productId={product.id} branchId={b.id} branchName={b.name} mainName={mainBranch(branches).name} unitCost={unitCost} mainPrice={mainPrice} unit={unit} />
       ))}
     </div>
   );
 }
 
-function BranchCalc({ productId, branchId, branchName, unitCost, mainPrice, unit }: { productId: string; branchId: string; branchName: string; unitCost: number | null; mainPrice: number; unit: string }) {
+function BranchCalc({ productId, branchId, branchName, mainName, unitCost, mainPrice, unit }: { productId: string; branchId: string; branchName: string; mainName: string; unitCost: number | null; mainPrice: number; unit: string }) {
   const { businessSettings } = useStore();
   const savedPrice = branchPrice(businessSettings, productId, branchId);
   const [freight, setFreight] = useState(String(freightPerUnit(businessSettings, productId, branchId) || ""));
@@ -95,6 +95,7 @@ function BranchCalc({ productId, branchId, branchName, unitCost, mainPrice, unit
             )}
           </div>
           <span className="text-muted-foreground">Only a suggestion: tap one to try it, or type your own price below.</span>
+          <FreightBasis mainName={mainName} branchName={branchName} mainPrice={mainPrice} unitCost={unitCost} freight={freightNum} unit={unit} recommend={recommend} />
         </div>
       )}
       <div className="flex flex-wrap items-center gap-2 text-[13.5px]">
@@ -117,6 +118,59 @@ function BranchCalc({ productId, branchId, branchName, unitCost, mainPrice, unit
         </button>
         {saved && <span className="text-[13px] font-semibold text-success">Saved.</span>}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The working behind the two suggestions, with this product's own numbers — so the price can be
+ * defended, not just taken. Same formulas as recommendedBranchPrices (lib/inventory/branch-prices).
+ */
+function FreightBasis({
+  mainName,
+  branchName,
+  mainPrice,
+  unitCost,
+  freight,
+  unit,
+  recommend,
+}: {
+  mainName: string;
+  branchName: string;
+  mainPrice: number;
+  unitCost: number | null;
+  freight: number;
+  unit: string;
+  recommend: { sameProfit: number; sameMargin: number | null };
+}) {
+  const [open, setOpen] = useState(false);
+  const profit = unitCost != null ? mainPrice - unitCost : null;
+  const margin = unitCost != null && mainPrice > 0 && unitCost < mainPrice ? (mainPrice - unitCost) / mainPrice : null;
+  const pct = (n: number) => `${Math.round(n * 1000) / 10}%`;
+  return (
+    <div>
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="text-[12.5px] font-semibold text-cacao underline-offset-2 hover:underline">
+        {open ? "Hide how these are worked out" : "How are these worked out?"}
+      </button>
+      {open && (
+        <div className="mt-1.5 flex flex-col gap-2 text-[12.5px] leading-relaxed">
+          <p>
+            <span className="font-semibold">Freight per {unit}</span> is what you type: what it costs to ship one {unit} to {branchName} — the freight bill for a shipment divided by how many {unit}s were in it. {`Shipping to ${branchName} is the only cost that changes, so it's the only thing added.`}
+          </p>
+          <p>
+            <span className="font-semibold">Same ₱ profit</span> — {mainName} price + freight = {formatPeso(mainPrice)} + {formatPeso(freight)} = <span className="font-semibold">{formatPeso(recommend.sameProfit)}</span>
+            {profit != null ? `. Each ${unit} still earns ${formatPeso(profit)}, as in ${mainName}; the buyer pays the freight.` : ". The buyer pays the freight; each one earns what it does now."}{" "}
+            The lowest price that doesn&apos;t lose money on the trip.
+          </p>
+          {margin != null && recommend.sameMargin != null && unitCost != null && (
+            <p>
+              <span className="font-semibold">Same margin %</span> — in {mainName}, {pct(margin)} of the price is profit ({formatPeso(mainPrice)} − {formatPeso(unitCost)} cost = {formatPeso(profit!)}). {`Keeping that share on the higher ${branchName} cost:`} (cost {formatPeso(unitCost)} + freight {formatPeso(freight)}) ÷ (1 − {pct(margin)}) = <span className="font-semibold">{formatPeso(recommend.sameMargin)}</span>.{" "}
+              {`Higher, because the profit grows with the cost — the usual way to price when costs go up. When freight is big next to the cost, it climbs fast: check it against what ${branchName} shops charge.`}
+            </p>
+          )}
+          <p className="text-muted-foreground">Both are rounded up to the next peso. Neither is set on its own: the {branchName} price is only what you save.</p>
+        </div>
+      )}
     </div>
   );
 }

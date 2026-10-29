@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, Plus, Search, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ListChecks, Plus, Search, Trash2 } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { updateProduct } from "@/lib/store/store";
 import { perBatch, perUnit, unitsPerBatch } from "@/lib/costing/per-unit";
 import { useStore } from "@/lib/store/use-store";
@@ -23,8 +24,8 @@ import type { Product, RawMaterialStock, RecipeComponentRow, RecipeExtraRow, Rec
  *
  * Your time isn't a cost here (see batchLaborCost in lib/summary/cost-engine).
  *
- * Ingredients and packaging are only ever picked, never priced here: type in the search bar,
- * pick the raw material, say how much one takes. Its price is the one on the Raw materials /
+ * Ingredients and packaging are only ever picked, never priced here: open the checklist, tick
+ * every raw material that goes in (with how much one takes, if known), and add them all at once. Its price is the one on the Raw materials /
  * Packaging tab — the same figure, from the same purchases — so there is one price per material
  * and nothing to type twice.
  *
@@ -79,23 +80,25 @@ export function RecipePanel({ product }: { product: Product }) {
   const inRecipe = new Set([...rows.map((r) => r.materialId), ...components.map((c) => c.productId)]);
   const materialOption = (m: RawMaterialStock, group?: string): Option => {
     const price = priceOf(m.id);
-    return { key: `m:${m.id}`, label: m.name, hint: price != null ? `${formatPeso(price)}/${m.unit}` : "no price yet", group };
+    return { key: `m:${m.id}`, label: m.name, hint: price != null ? `${formatPeso(price)}/${m.unit}` : "no price yet", unit: m.unit, group, added: inRecipe.has(m.id) };
   };
   const ingredientOptions: Option[] = [
-    ...ingredientsList.filter((m) => !inRecipe.has(m.id)).map((m) => materialOption(m, "Raw materials")),
-    ...madeByYou
-      .filter((p) => !inRecipe.has(p.id))
-      .map((p) => {
-        const each = productCostPerJar(p, ctx).costPerJar;
-        return { key: `p:${p.id}`, label: p.name, hint: each > 0 ? `${formatPeso(each)} each` : "no cost yet", group: "Made by you" };
-      }),
+    ...ingredientsList.map((m) => materialOption(m, "Raw materials")),
+    ...madeByYou.map((p) => {
+      const each = productCostPerJar(p, ctx).costPerJar;
+      return { key: `p:${p.id}`, label: p.name, hint: each > 0 ? `${formatPeso(each)} each` : "no cost yet", unit: p.unit || "pcs", group: "Made by you", added: inRecipe.has(p.id) };
+    }),
   ];
-  const packagingOptions: Option[] = packagingList.filter((m) => !inRecipe.has(m.id)).map((m) => materialOption(m));
+  const packagingOptions: Option[] = packagingList.map((m) => materialOption(m));
 
-  function addIngredient(key: string) {
-    const [kind, id] = key.split(":");
-    if (kind === "p") saveComponents([...components, { id: newId("cmp"), productId: id, quantity: 0 }]);
-    else saveRows([...rows, { id: newId("ing"), materialId: id, quantity: 0 }]);
+  // Everything ticked in the checklist goes in at once; amounts are typed per one and stored per batch.
+  function addPicked(picked: Picked[]) {
+    const newRows = picked.filter((x) => x.key.startsWith("m:")).map((x) => ({ id: newId("ing"), materialId: x.key.slice(2), quantity: perBatch(product, x.qty) }));
+    const newComponents = picked.filter((x) => x.key.startsWith("p:")).map((x) => ({ id: newId("cmp"), productId: x.key.slice(2), quantity: perBatch(product, x.qty) }));
+    const patch: Partial<Product> = {};
+    if (newRows.length) patch.recipeIngredients = [...rows, ...newRows];
+    if (newComponents.length) patch.recipeComponents = [...components, ...newComponents];
+    if (newRows.length || newComponents.length) save(patch);
   }
   const materialPrice = (r: RecipeIngredientRow) => {
     const m = rawMaterials.find((x) => x.id === r.materialId);
@@ -121,11 +124,11 @@ export function RecipePanel({ product }: { product: Product }) {
         emptyText={
           ingredientsList.length === 0 && madeByYou.length === 0
             ? "No raw materials yet — add them on the Raw materials tab first."
-            : `Nothing yet. Search for each raw material that goes into one ${unit}.`
+            : `Nothing yet. Tick every raw material that goes into one ${unit}.`
         }
         count={ingredientRows.length + components.length}
         note={componentCost > 0 ? `Includes ${formatPeso(one(componentCost))} of things you make yourself.` : undefined}
-        search={<SearchAdd placeholder="Search raw materials to add…" options={ingredientOptions} onPick={addIngredient} />}
+        search={<ChecklistAdd label="Add ingredients" title="Which ingredients go in?" unit={unit} options={ingredientOptions} defaultQty={0} onAdd={addPicked} />}
       >
         {ingredientRows.map((r) => {
           const m = rawMaterials.find((x) => x.id === r.materialId);
@@ -164,15 +167,9 @@ export function RecipePanel({ product }: { product: Product }) {
         itemLabel="Packaging"
         total={one(cost.packagingTotal)}
         unit={unit}
-        emptyText={packagingList.length === 0 ? "No packaging yet — add jars, lids or labels on the Packaging tab first." : `None yet. Search for the jar, lid or label one ${unit} uses.`}
+        emptyText={packagingList.length === 0 ? "No packaging yet — add jars, lids or labels on the Packaging tab first." : `None yet. Tick the jar, lid and label one ${unit} uses.`}
         count={packagingRows.length}
-        search={
-          <SearchAdd
-            placeholder="Search packaging to add…"
-            options={packagingOptions}
-            onPick={(key) => saveRows([...rows, { id: newId("ing"), materialId: key.slice(2), quantity: perBatch(product, 1) }])}
-          />
-        }
+        search={<ChecklistAdd label="Add packaging" title="Which packaging does it use?" unit={unit} options={packagingOptions} defaultQty={1} onAdd={addPicked} />}
       >
         {packagingRows.map((r) => {
           const m = rawMaterials.find((x) => x.id === r.materialId);
@@ -416,71 +413,121 @@ interface Option {
   key: string;
   label: string;
   hint: string;
+  unit: string;
   group?: string;
+  /** Already in the recipe — shown ticked, can't be added twice. */
+  added?: boolean;
 }
 
-/** Type to find a material; pick one to add it. The price comes with it — nothing to type but the name. */
-function SearchAdd({ placeholder, options, onPick }: { placeholder: string; options: Option[]; onPick: (key: string) => void }) {
-  const [q, setQ] = useState("");
-  const [open, setOpen] = useState(false);
-  const needle = q.trim().toLowerCase();
-  const matches = options.filter((o) => !needle || o.label.toLowerCase().includes(needle)).slice(0, 8);
+interface Picked {
+  key: string;
+  /** How much goes into one; 0 when left blank, to fill in on the recipe. */
+  qty: number;
+}
 
-  function pick(key: string) {
-    onPick(key);
-    setQ("");
+/**
+ * The Add button and its checklist: every raw material in one list, tick all that go in — with how
+ * much one takes, if known — and add them in one go. Their prices come with them.
+ */
+function ChecklistAdd({ label, title, unit, options, defaultQty, onAdd }: { label: string; title: string; unit: string; options: Option[]; defaultQty: number; onAdd: (picked: Picked[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [ticked, setTicked] = useState<Map<string, string>>(new Map());
+  const needle = q.trim().toLowerCase();
+  const shown = options.filter((o) => !needle || o.label.toLowerCase().includes(needle));
+  const left = options.filter((o) => !o.added).length;
+
+  function close() {
     setOpen(false);
+    setQ("");
+    setTicked(new Map());
+  }
+  function toggle(key: string) {
+    setTicked((prev) => {
+      const next = new Map(prev);
+      if (next.has(key)) next.delete(key);
+      else next.set(key, defaultQty > 0 ? String(defaultQty) : "");
+      return next;
+    });
+  }
+  function add() {
+    onAdd([...ticked].map(([key, qty]) => ({ key, qty: Number(qty) || 0 })));
+    close();
   }
 
   return (
-    <div className="relative">
-      <label className="flex h-10 items-center gap-2 rounded-lg border border-dashed border-line/30 px-3 focus-within:border-solid focus-within:border-cacao">
-        <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <input
-          value={q}
-          onChange={(e) => {
-            setQ(e.target.value);
-            setOpen(true);
-          }}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && matches[0]) {
-              e.preventDefault();
-              pick(matches[0].key);
-            }
-            if (e.key === "Escape") setOpen(false);
-          }}
-          placeholder={placeholder}
-          aria-label={placeholder}
-          className="w-full bg-transparent text-[14px] outline-none placeholder:text-muted-foreground"
-        />
-      </label>
-      {open && (
-        <ul className="absolute left-0 right-0 top-11 z-20 max-h-72 overflow-y-auto rounded-lg border border-line/20 bg-card py-1 shadow-lg">
-          {matches.length === 0 ? (
-            <li className="px-3 py-2 text-[13px] text-muted-foreground">{options.length === 0 ? "Everything is already in the recipe." : "Nothing matches — add it on the Raw materials or Packaging tab first."}</li>
-          ) : (
-            matches.map((o, i) => (
-              <li key={o.key}>
-                {o.group && o.group !== matches[i - 1]?.group && (
-                  <div className="px-3 pb-0.5 pt-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{o.group}</div>
-                )}
-                <button
-                  type="button"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => pick(o.key)}
-                  className="flex w-full items-baseline justify-between gap-3 px-3 py-2 text-left text-[14px] hover:bg-secondary"
-                >
-                  <span className="font-medium">{o.label}</span>
-                  <span className="shrink-0 text-[12.5px] text-muted-foreground tabular-nums">{o.hint}</span>
-                </button>
-              </li>
-            ))
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        disabled={options.length === 0}
+        className="flex h-10 w-fit items-center gap-2 rounded-lg border border-dashed border-line/30 px-3 text-[14px] font-semibold text-cacao hover:border-solid hover:border-cacao disabled:opacity-40"
+      >
+        <ListChecks className="h-4 w-4" /> {label}
+      </button>
+      <Dialog open={open} onOpenChange={(o) => !o && close()}>
+        <DialogContent className="flex max-h-[88svh] flex-col gap-3 rounded-2xl sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{title}</DialogTitle>
+            <DialogDescription>
+              Tick everything that goes into one {unit}. Type how much one takes if you know it — or leave it and fill it in on the recipe.
+            </DialogDescription>
+          </DialogHeader>
+          {options.length > 8 && (
+            <label className="flex h-10 shrink-0 items-center gap-2 rounded-lg border border-input px-3 focus-within:border-cacao">
+              <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find one…" aria-label="Find a material" className="w-full bg-transparent text-[14px] outline-none placeholder:text-muted-foreground" />
+            </label>
           )}
-        </ul>
-      )}
-    </div>
+          <ul className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1">
+            {shown.length === 0 && <li className="py-3 text-[13px] text-muted-foreground">Nothing matches — add it on the Raw materials or Packaging tab first.</li>}
+            {shown.map((o, i) => {
+              const on = ticked.has(o.key);
+              return (
+                <li key={o.key}>
+                  {o.group && o.group !== shown[i - 1]?.group && <div className="px-1 pb-1 pt-3 text-[11px] font-bold uppercase tracking-wide text-muted-foreground first:pt-0">{o.group}</div>}
+                  <div className={`flex min-h-12 items-center gap-3 rounded-lg px-2 ${on ? "bg-secondary" : ""} ${o.added ? "opacity-55" : ""}`}>
+                    <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 py-2">
+                      <input type="checkbox" checked={on || !!o.added} disabled={o.added} onChange={() => toggle(o.key)} className="h-5 w-5 shrink-0 accent-cacao" />
+                      <span className="min-w-0">
+                        <span className="block truncate text-[14px] font-medium">{o.label}</span>
+                        <span className="block text-[12px] text-muted-foreground tabular-nums">{o.added ? "Already in the recipe" : o.hint}</span>
+                      </span>
+                    </label>
+                    {on && (
+                      <span className="flex shrink-0 items-center gap-1.5">
+                        <input
+                          inputMode="decimal"
+                          autoFocus
+                          value={ticked.get(o.key) ?? ""}
+                          onChange={(e) => {
+                            const v = e.target.value.replace(/[^0-9.]/g, "");
+                            setTicked((prev) => new Map(prev).set(o.key, v));
+                          }}
+                          placeholder="How much"
+                          aria-label={`How much ${o.label} goes into one`}
+                          className={`${input} w-24 bg-card text-right`}
+                        />
+                        <span className="w-10 text-[12.5px] text-muted-foreground">{o.unit}</span>
+                      </span>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="flex shrink-0 items-center gap-2 border-t border-line/10 pt-3">
+            <span className="flex-1 text-[13px] text-muted-foreground">{left === 0 ? "Everything is already in the recipe." : `${ticked.size} ticked`}</span>
+            <button type="button" onClick={close} className="min-h-11 rounded-[10px] border border-line/20 px-4 text-[14px] font-semibold">
+              Cancel
+            </button>
+            <button type="button" disabled={ticked.size === 0} onClick={add} className="flex min-h-11 items-center gap-1.5 rounded-[10px] bg-cacao px-4 text-[14px] font-semibold text-ivory disabled:opacity-40">
+              <Check className="h-4 w-4" /> Add {ticked.size > 0 ? ticked.size : ""}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
