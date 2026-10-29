@@ -226,11 +226,11 @@ function enqueueForCollection(collection: string, task: () => Promise<void>): Pr
   return run;
 }
 
-function setSyncFailing(failing: boolean) {
-  if (state.syncStatus.failing === failing) return;
+function setSyncFailing(failing: boolean, refused = false) {
+  if (state.syncStatus.failing === failing && Boolean(state.syncStatus.refused) === refused) return;
   setState((prev) => ({
     ...prev,
-    syncStatus: { failing, failedAt: failing ? new Date().toISOString() : null },
+    syncStatus: { failing, failedAt: failing ? new Date().toISOString() : null, refused: failing && refused },
   }));
 }
 
@@ -259,6 +259,7 @@ async function mirrorOp(
   // True only once the server has said the write landed. Callers that tell the owner "saved"
   // wait for this; everything else carries on as before.
   let confirmed = false;
+  let refused = false;
   try {
     await enqueueForCollection(collection, async () => {
       for (let attempt = 0; ; attempt++) {
@@ -269,6 +270,13 @@ async function mirrorOp(
             body: JSON.stringify({ collection, op, ...payload }),
           });
           const json = await res.json();
+          // Refused for this profile: trying again won't change the answer, and blaming the
+          // connection would send someone off to check their wifi.
+          if (res.status === 403) {
+            refused = true;
+            setSyncFailing(true, true);
+            return;
+          }
           if (!json.success) throw new Error(json.reason ?? json.detail ?? "sync failed");
           setSyncFailing(false);
           confirmed = true;
@@ -287,6 +295,8 @@ async function mirrorOp(
   } finally {
     pendingWrites -= 1;
   }
+  // Put the screen back to what the sheet holds, rather than show a change that didn't save.
+  if (refused && pendingWrites === 0) void loadAllFromServer();
   return confirmed;
 }
 

@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useStore } from "@/lib/store/use-store";
+import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 import {
   clearProductPattern,
   productPattern,
@@ -92,7 +93,8 @@ function ProductRow({
 }: {
   product: Product;
   busy: boolean;
-  onWorkOut: () => void;
+  /** Null for a profile that can't ask the AI (Executives only); editing by hand is everyone's. */
+  onWorkOut: (() => void) | null;
 }) {
   const { businessSettings, products } = useStore();
   const pattern = productPattern(businessSettings, product.id);
@@ -124,10 +126,12 @@ function ProductRow({
           </span>
         )}
 
-        <Button size="sm" variant="ghost" className="h-8 gap-1 px-2 text-xs" onClick={onWorkOut} disabled={busy}>
-          <RefreshCw className={`h-3.5 w-3.5 ${busy ? "animate-spin" : ""}`} />
-          {busy ? "Checking…" : pattern ? "Check again" : "Check"}
-        </Button>
+        {onWorkOut && (
+          <Button size="sm" variant="ghost" className="h-8 gap-1 px-2 text-xs" onClick={onWorkOut} disabled={busy}>
+            <RefreshCw className={`h-3.5 w-3.5 ${busy ? "animate-spin" : ""}`} />
+            {busy ? "Checking…" : pattern ? "Check again" : "Check"}
+          </Button>
+        )}
         {pattern && (
           <Button
             size="icon-sm"
@@ -205,6 +209,7 @@ function ProductRow({
 
 export function SeasonalityCard({ embedded = false }: { embedded?: boolean } = {}) {
   const { businessSettings, products, entries } = useStore();
+  const exec = isExecutive(useCurrentUser());
   const [busyId, setBusyId] = useState<string | null>(null);
   const [allBusy, setAllBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -251,10 +256,13 @@ export function SeasonalityCard({ embedded = false }: { embedded?: boolean } = {
         </p>
 
         <div className="flex flex-wrap items-center gap-3">
-          <Button size="sm" className="gap-1.5" onClick={runAll} disabled={allBusy || products.length === 0}>
-            <Sparkles className="h-4 w-4" />
-            {allBusy ? "Checking…" : unset > 0 ? `Check all ${products.length}` : "Optimize AI"}
-          </Button>
+          {/* Working the pattern out asks the AI, which is an Executive's (see /api/season-pattern). */}
+          {exec && (
+            <Button size="sm" className="gap-1.5" onClick={runAll} disabled={allBusy || products.length === 0}>
+              <Sparkles className="h-4 w-4" />
+              {allBusy ? "Checking…" : unset > 0 ? `Check all ${products.length}` : "Optimize AI"}
+            </Button>
+          )}
           {unset > 0 && !allBusy && (
             <span className="text-[12px] text-muted-foreground">
               {`${unset} of ${products.length} not checked yet — until then they're treated as the same all year.`}
@@ -271,7 +279,7 @@ export function SeasonalityCard({ embedded = false }: { embedded?: boolean } = {
         ) : (
           <ul className="divide-y divide-border">
             {products.map((p) => (
-              <ProductRow key={p.id} product={p} busy={busyId === p.id} onWorkOut={() => void run(p)} />
+              <ProductRow key={p.id} product={p} busy={busyId === p.id} onWorkOut={exec ? () => void run(p) : null} />
             ))}
           </ul>
         )}

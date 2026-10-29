@@ -15,7 +15,11 @@ export function SyncErrorBanner() {
   return (
     <div className="flex items-center gap-2 border-b border-red-300 bg-red-50 px-4 py-2 text-xs font-medium text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
       <AlertTriangle className="h-4 w-4 shrink-0" />
-      <span>Couldn&apos;t save your last change to Google Sheets — check your connection and try that edit again.</span>
+      <span>
+        {syncStatus.refused
+          ? "Your profile can't make that change, so it wasn't saved and has been put back. Ask an Executive to make it."
+          : "Couldn't save your last change to Google Sheets — check your connection and try that edit again."}
+      </span>
     </div>
   );
 }

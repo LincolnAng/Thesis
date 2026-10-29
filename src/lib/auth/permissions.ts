@@ -81,8 +81,18 @@ const EMPLOYEE_SETTING_KEYS = new Set([
 // freight cost behind them is not.
 const EMPLOYEE_SETTING_PREFIXES = ["shelfLifeDays:", "eventPlan:", "seasonality:", "branchPrice:"];
 
-/** Settings an employee may change: marking a day off on the production calendar. */
-const EMPLOYEE_WRITABLE_SETTING_KEYS = new Set(["unavailableDays"]);
+/**
+ * Settings anyone may change — the production plan's, none of them money: a day off on the
+ * production calendar, when stock counts as expiring soon, a product's shelf life, what an event
+ * needs, and the busy and quiet months. The screens for these (Forecast → Settings, a new event,
+ * the seasonal pattern) are everyone's.
+ */
+const EMPLOYEE_WRITABLE_SETTING_KEYS = new Set(["unavailableDays", "expiringWithinDays"]);
+const EMPLOYEE_WRITABLE_SETTING_PREFIXES = ["shelfLifeDays:", "eventPlan:", "seasonality:"];
+
+export function employeeCanWriteSetting(key: string): boolean {
+  return EMPLOYEE_WRITABLE_SETTING_KEYS.has(key) || EMPLOYEE_WRITABLE_SETTING_PREFIXES.some((p) => key.startsWith(p));
+}
 
 /**
  * What a non-Executive may see and record. The Admin (Ruchel) works out and pays salaries, so the
@@ -312,17 +322,21 @@ export function decideWrite(req: WriteRequest): WriteDecision {
     case "events":
     case "eventStock":
       return { allow: true };
-    case "tingi":
     case "payroll":
       // The Admin records and takes back salary payments; anyone else, no.
       return req.role === "admin" && (op === "append" || op === "delete") ? { allow: true } : deny("forbidden");
+    case "machines":
+      // The equipment the plan runs on — what each machine makes and how fast. No costs in it,
+      // and the people who run the machines are the ones who set them up.
+      return op === "append" || op === "update" || op === "delete" ? { allow: true } : deny("forbidden");
+    case "tingi":
     case "stockTransfers":
     case "productionRuns":
       // Moving stock between branches, in and out of a tingi bucket, and logging a
       // production run are everyday work; taking one back is an Executive's.
       return op === "append" && item ? { allow: true, item: { ...item, loggedByName: req.user.name } } : deny("forbidden");
     case "businessSettings":
-      return op === "update" && item && EMPLOYEE_WRITABLE_SETTING_KEYS.has(String(item.key))
+      return op === "update" && item && employeeCanWriteSetting(String(item.key))
         ? { allow: true }
         : deny("forbidden");
     case "activity":

@@ -142,11 +142,37 @@ test("employee cannot add or remove products, touch costing data, budgets or see
   no("suppliers", "append");
   no("supplierPrices", "append");
   no("budgets", "update");
-  no("machines", "update");
   no("entries", "migrate");
   no("activity", "update");
   assert.equal(decideWrite({ role: "employee", user: me, collection: "businessSettings", op: "update", item: { key: "hourly_labor_rate" } }).allow, false);
   assert.equal(decideWrite({ role: "employee", user: me, collection: "businessSettings", op: "update", item: { key: "unavailableDays" } }).allow, true);
+});
+
+test("everyone sets up the production plan: machines, expiring-soon days, shelf life, event plans, busy months", () => {
+  for (const role of ["employee", "admin"] as const) {
+    for (const op of ["append", "update", "delete"] as const) {
+      assert.equal(decideWrite({ role, user: me, collection: "machines", op, item: { id: "mc" }, existing: { id: "mc" } }).allow, true, `${role} machines ${op}`);
+    }
+    for (const key of ["expiringWithinDays", "shelfLifeDays:p1", "eventPlan:evt-1", "seasonality:p1", "unavailableDays"]) {
+      assert.equal(decideWrite({ role, user: me, collection: "businessSettings", op: "update", item: { key } }).allow, true, `${role} ${key}`);
+    }
+    // Money settings stay with Executives.
+    for (const key of ["hourly_labor_rate", "salesTargetMonthly", "branchPrice:p1:mnl", "branchFreight:p1:mnl", "cacaoUtilizationPct"]) {
+      assert.equal(decideWrite({ role, user: me, collection: "businessSettings", op: "update", item: { key } }).allow, false, `${role} ${key}`);
+    }
+  }
+});
+
+test("tingi and stock moves are everyday work — anyone adds, only an Executive takes one back", () => {
+  for (const role of ["employee", "admin"] as const) {
+    for (const collection of ["tingi", "stockTransfers", "productionRuns"] as const) {
+      assert.equal(decideWrite({ role, user: me, collection, op: "append", item: { id: "x" } }).allow, true, `${role} ${collection} append`);
+      assert.equal(decideWrite({ role, user: me, collection, op: "delete", existing: { id: "x" } }).allow, false, `${role} ${collection} delete`);
+    }
+  }
+  // Payroll is still the Admin's (and Executives') alone.
+  assert.equal(decideWrite({ role: "employee", user: me, collection: "payroll", op: "append", item: { id: "x" } }).allow, false);
+  assert.equal(decideWrite({ role: "admin", user: me, collection: "payroll", op: "append", item: { id: "x" } }).allow, true);
 });
 
 test("nobody writes profiles as raw rows — PINs go through the profiles API", () => {

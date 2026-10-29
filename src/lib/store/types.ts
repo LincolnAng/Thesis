@@ -379,6 +379,9 @@ export interface SyncStatus {
    * retried, only that something didn't save and hasn't been confirmed since. */
   failing: boolean;
   failedAt: string | null;
+  /** The failed write was refused for this profile (not a connection problem): it isn't
+   * retried, and the screen goes back to what the sheet holds. */
+  refused?: boolean;
 }
 
 /**
