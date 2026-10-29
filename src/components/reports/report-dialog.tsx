@@ -4,7 +4,7 @@ import { useState } from "react";
 import { FileDown, FileSpreadsheet } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useStore } from "@/lib/store/use-store";
-import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
+import { isAdmin, isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 import { buildSalesReport, REPORT_PARTS, type ReportPart } from "@/lib/reports/sales-report";
 import { downloadCsv, downloadPdf } from "@/lib/reports/render";
 
@@ -24,7 +24,8 @@ function monthRange(ym: string) {
 export function ReportDialog({ defaultMonth, onClose }: { defaultMonth: string; onClose: () => void }) {
   const { entries, products } = useStore();
   const me = useCurrentUser();
-  const exec = isExecutive(me);
+  // The Admin sees what's owed too, as an Executive does.
+  const exec = isExecutive(me) || isAdmin(me);
   const [range, setRange] = useState<"month" | "custom">("month");
   const [month, setMonth] = useState(defaultMonth);
   const [from, setFrom] = useState(monthRange(defaultMonth).from);

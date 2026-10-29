@@ -89,8 +89,8 @@ const EMPLOYEE_WRITABLE_SETTING_KEYS = new Set(["unavailableDays"]);
  * salary expenses are hers too; an employee never sees them.
  */
 export function canSeeEntry(role: Role, entry: Pick<Entry, "type"> & { category?: string | null }): boolean {
-  if (role === "executive") return true;
-  if (role === "admin") return EMPLOYEE_ENTRY_TYPES.includes(entry.type);
+  // The Admin keeps the books with the Executives: every transaction, investments included.
+  if (role === "executive" || role === "admin") return true;
   return employeeCanSeeEntry(entry);
 }
 
@@ -163,12 +163,15 @@ export function redactForEmployee(data: BusinessData, sellingPrice: (product: Pr
   const ownIds = new Set(own.map((s) => s.id));
   return {
     ...data,
-    entries: data.entries
-      .filter((e) => canSeeEntry(role, e))
-      // Spoilage is valued at cost, so its amount is a cost.
-      .map((e) => (e.type === "WASTE" ? { ...e, amount: null } : e))
-      // Who still owes the business what is the owners' to track, not the counter's.
-      .map(withoutPaymentFields),
+    entries: keeper
+      ? // The Admin's Transactions are the Executive's: amounts, payment terms and what's owed.
+        data.entries
+      : data.entries
+          .filter((e) => canSeeEntry(role, e))
+          // Spoilage is valued at cost, so its amount is a cost.
+          .map((e) => (e.type === "WASTE" ? { ...e, amount: null } : e))
+          // Who still owes the business what is the owners' to track, not the counter's.
+          .map(withoutPaymentFields),
     products: data.products.map((p) => ({
       ...p,
       standardPrice: sellingPrice(p),
@@ -184,9 +187,10 @@ export function redactForEmployee(data: BusinessData, sellingPrice: (product: Pr
     rawMaterials: data.rawMaterials.map((m) => ({ ...m, unitCost: 0 })),
     suppliers: [],
     supplierPriceHistory: [],
-    budgets: [],
+    // The sales target and budgets show on the Admin's Transactions (only Executives change them).
+    budgets: keeper ? data.budgets : [],
     supplierPrices: [],
-    businessSettings: data.businessSettings.filter((s) => employeeCanSeeSetting(s.key)),
+    businessSettings: data.businessSettings.filter((s) => employeeCanSeeSetting(s.key) || (keeper && s.key === "salesTargetMonthly")),
     activity: [],
     // The Admin works out salaries, so has the staff list with rates, everyone's days and the
     // payslips. An employee gets only their own name — never a rate or anything else about pay.
@@ -271,6 +275,14 @@ export function decideWrite(req: WriteRequest): WriteDecision {
 
   switch (collection) {
     case "entries": {
+      // The Admin records and changes transactions as an Executive does — payment terms, what's
+      // owed and investments included.
+      if (req.role === "admin") {
+        if (op === "append") return { allow: true, item: stamp(req) };
+        if (!existing) return deny("forbidden");
+        if (op === "delete") return { allow: true };
+        return { allow: true, item: { ...item, loggedById: existing.loggedById, loggedByName: existing.loggedByName } };
+      }
       if (op === "append") {
         if (!item || !canSeeEntry(req.role, item as Pick<Entry, "type" | "category">)) return deny("forbidden_entry_type");
         // Payment terms are the owners' to set: an employee's sale or expense is recorded as

@@ -271,9 +271,14 @@ test("the Admin sees the staff, their pay and everyone's times; an employee sees
   assert.deepEqual(admin.staff.map((s) => [s.name, s.rate]).sort(), [["Dadoy", 525], ["Khent", 25000], ["Old", 500]]);
   assert.equal(admin.timeRecords.length, 1);
   assert.equal(admin.payroll.length, 1);
-  // Salary expenses are hers to see; costs, investments and payment terms are not.
+  // Her Transactions are an Executive's: salaries, investments, spoilage values, what's owed.
   assert.ok(admin.entries.some((e) => e.id === "x1"));
-  assert.ok(!admin.entries.some((e) => e.id === "r1"));
+  assert.ok(admin.entries.some((e) => e.id === "r1"));
+  assert.equal(admin.entries.find((e) => e.id === "w1")?.amount, 120);
+  assert.equal(admin.budgets.length, 1);
+  // An admin's sale on credit keeps its payment terms.
+  const credit = decideWrite({ role: "admin", user: me, collection: "entries", op: "append", item: { id: "c1", type: "SALE", amount: 500, paymentTerm: "receivable", dueDate: "2026-11-30" } });
+  assert.equal(credit.allow && credit.item?.paymentTerm, "receivable");
   assert.equal(redactForEmployee(data, (p) => p.standardPrice, "u-emp", "employee").payroll.length, 0);
   const other = redactForEmployee(data, (p) => p.standardPrice, "u-emp", "employee");
   assert.equal(other.staff.length, 0);

@@ -79,9 +79,12 @@ function monthLabel(key: string, style: "long" | "short" = "long") {
 function TransactionsPageInner() {
   const { entries, categoryBudgets, businessSettings, products } = useStore();
   const me = useCurrentUser();
-  const exec = isExecutive(me);
-  // The Admin (Ruchel) sees the month's sales and expenses at the top; employees see no totals.
+  // The Admin (Ruchel) has the same Transactions as an Executive — the money summary, what's
+  // owed, payment terms and investments. Only setting the sales target and budgets stays with
+  // Executives. Employees see sales, expenses, spoilage and waste, with no totals.
+  const owner = isExecutive(me);
   const admin = isAdmin(me);
+  const exec = owner || admin;
   const searchParams = useSearchParams();
   // Arriving from a supplier's "See spending" link: show only what was paid to them.
   const supplierFilter = searchParams.get("supplier");
@@ -327,12 +330,6 @@ function TransactionsPageInner() {
               note={`${formatPeso(summary.spoiled)} products spoiled · ${formatPeso(summary.wasted)} materials wasted · ${periodName}`}
             />
           </section>
-        ) : admin ? (
-          <section className="grid grid-cols-1 gap-3 min-[600px]:grid-cols-2" aria-label="Sales and expenses">
-            <MoneyBox icon={<ArrowDownLeft className="h-5 w-5" />} label="Sales" value={summary.sales} tone="good" note={`Everything sold · ${periodName}`} />
-            {/* Everyday expenses only — salaries and investments aren't in the Admin's copy. */}
-            <MoneyBox icon={<ArrowUpRight className="h-5 w-5" />} label="Expenses" value={summary.expenses} tone="bad" note={`Everyday expenses · ${periodName}`} />
-          </section>
         ) : null /* Employees see no totals: what the company earns and spends stays with Executives. */}
 
         {exec && (
@@ -341,9 +338,11 @@ function TransactionsPageInner() {
               <h2 id="target-title" className="font-display text-[17px] font-semibold">
                 Sales target & budget · {periodName}
               </h2>
-              <button type="button" onClick={() => setEditBudgets((v) => !v)} className="min-h-8 text-[12.5px] font-semibold text-cacao">
-                {editBudgets ? "Done editing" : "Edit target & budgets"}
-              </button>
+              {owner && (
+                <button type="button" onClick={() => setEditBudgets((v) => !v)} className="min-h-8 text-[12.5px] font-semibold text-cacao">
+                  {editBudgets ? "Done editing" : "Edit target & budgets"}
+                </button>
+              )}
             </div>
             <div className="grid grid-cols-1 gap-3 min-[800px]:grid-cols-2 min-[800px]:gap-8">
               <Progress label="Sales against target" value={summary.sales} goal={periodTarget} empty="No sales target set" tone="good" />
@@ -398,7 +397,7 @@ function TransactionsPageInner() {
             ))}
           </div>
           <span className="flex flex-wrap gap-2">
-            {(exec || admin) && (
+            {exec && (
               <button type="button" onClick={() => setReporting(true)} className={BUTTON.secondary}>
                 <FileDown className="h-4 w-4" /> Download report
               </button>
