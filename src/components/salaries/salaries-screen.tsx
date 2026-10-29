@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Printer, Undo2 } from "lucide-react";
+import { FileDown, Printer, Undo2 } from "lucide-react";
+import { BUTTON } from "@/components/ui/kit";
+import { PayrollReportDialog } from "@/components/reports/payroll-report-dialog";
 import { Page, PageTabs } from "@/components/layout/page";
 import { CarouselNav } from "@/components/ui/carousel-nav";
 import { Pill } from "@/components/ui/kit";
@@ -50,8 +52,18 @@ export function SalariesScreen() {
   const me = useCurrentUser();
   // The Admin (the main computer) times people in, so she starts on the time record.
   const [tab, setTab] = useState<Tab>(isAdmin(me) ? "time" : "payroll");
+  const [reporting, setReporting] = useState(false);
   return (
-    <Page title="Salaries" subnav={<PageTabs tabs={TABS} value={tab} onChange={setTab} />}>
+    <Page
+      title="Salaries"
+      subnav={<PageTabs tabs={TABS} value={tab} onChange={setTab} />}
+      right={
+        <button type="button" onClick={() => setReporting(true)} className={BUTTON.primary}>
+          <FileDown className="h-4 w-4" /> Download payroll report
+        </button>
+      }
+    >
+      {reporting && <PayrollReportDialog onClose={() => setReporting(false)} />}
       {tab === "payroll" && <PayrollView />}
       {tab === "time" && <TimeView />}
       {tab === "thirteenth" && <ThirteenthView />}

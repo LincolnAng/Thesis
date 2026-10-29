@@ -58,6 +58,8 @@ export const SHARED_TABS: Record<string, string[]> = {
     // Payroll
     "kind", "periodStart", "periodEnd", "basic", "overtime", "deductions", "deductionNote", "net", "paidOn", "entryId",
     "sss", "philhealth", "pagibig",
+    // Added later: a time record's break, and a payslip's additions
+    "breakStart", "breakEnd", "additions", "additionNote",
   ],
   "Shop Setup": [
     "section",

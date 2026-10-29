@@ -3,7 +3,8 @@
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowDownLeft, ArrowUpRight, CircleDollarSign, PackageX } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, CircleDollarSign, FileDown, PackageX } from "lucide-react";
+import { ReportDialog } from "@/components/reports/report-dialog";
 import { isMaterialWaste } from "@/lib/transactions/waste";
 import { findProduct } from "@/lib/summary/product-match";
 import { fullName } from "@/lib/summary/product-sizes";
@@ -88,6 +89,7 @@ function TransactionsPageInner() {
   const [kind, setKind] = useState<Kind>(supplierFilter ? "EXPENSE" : "all");
   const [filters, setFilters] = useState<TransactionFilters>(EMPTY_FILTERS);
   const [adding, setAdding] = useState(false);
+  const [reporting, setReporting] = useState(false);
   const [editing, setEditing] = useState<Entry | null>(null);
   const [defaulting, setDefaulting] = useState<ObligationRow | null>(null);
   const [movingDue, setMovingDue] = useState<ObligationRow | null>(null);
@@ -395,13 +397,20 @@ function TransactionsPageInner() {
               </button>
             ))}
           </div>
-          <button
-            type="button"
-            onClick={() => setAdding(true)}
-            className={BUTTON.primary}
-          >
-            + Add transaction
-          </button>
+          <span className="flex flex-wrap gap-2">
+            {(exec || admin) && (
+              <button type="button" onClick={() => setReporting(true)} className={BUTTON.secondary}>
+                <FileDown className="h-4 w-4" /> Download report
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              className={BUTTON.primary}
+            >
+              + Add transaction
+            </button>
+          </span>
         </div>
 
         <TransactionSearch
@@ -492,6 +501,7 @@ function TransactionsPageInner() {
         </div>
       </div>
 
+      {reporting && <ReportDialog defaultMonth={period === "all" ? months[0] : period} onClose={() => setReporting(false)} />}
       {adding && (
         <TransactionDialog open onOpenChange={setAdding} existing={null} exec={exec} onSave={(draft) => addEntry(draft)} />
       )}
