@@ -209,7 +209,7 @@ function Details({
               <li key={i} className="grid grid-cols-[minmax(0,1fr)_48px_88px] items-center gap-x-4 py-1">
                 <span className="truncate">{l.name || "—"}</span>
                 <span className={`text-right tabular-nums ${faint}`}>{l.qty != null ? `× ${l.qty}` : ""}</span>
-                <span className="text-right font-semibold tabular-nums">{l.amount != null ? formatPeso(l.amount) : ""}</span>
+                <span className={`text-right font-semibold tabular-nums ${e.type === "WASTE" && (l.amount ?? 0) > 0 ? "text-spoilage" : ""}`}>{l.amount != null ? formatPeso(l.amount) : ""}</span>
               </li>
             ))}
           </ul>
@@ -489,7 +489,8 @@ export function TransactionTable({
                       </span>
                     ))}
                   </td>
-                  <td className={`${td} whitespace-nowrap tabular-nums ${e.type === "WASTE" ? "text-muted-foreground" : "text-foreground"}`}>
+                  {/* Spoilage and waste in orange when they cost something; a zero or unpriced one stays grey. */}
+                  <td className={`${td} whitespace-nowrap tabular-nums ${e.type === "WASTE" ? ((e.amount ?? 0) > 0 ? "font-semibold text-spoilage" : "text-muted-foreground") : "text-foreground"}`}>
                     {e.amount != null ? formatPeso(e.amount) : null}
                   </td>
                   {showMethod && (

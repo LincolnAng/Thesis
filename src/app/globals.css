@@ -25,6 +25,7 @@
   --color-status-warning: var(--status-warning);
   --color-status-critical: var(--status-critical);
   --color-status-info: var(--status-info);
+  --color-spoilage: var(--spoilage);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
@@ -114,6 +115,8 @@
   --status-warning: #9A6B12;
   --status-critical: #B3261E;
   --status-info: oklch(0.55 0.13 250);
+  /* Spoilage and waste: a loss, but not a debt or an error — orange, apart from red. */
+  --spoilage: oklch(0.62 0.17 50);
 
   /* Layout — one content width for both Simple and Advanced. */
   --content-width: 1200px;
@@ -168,6 +171,7 @@
   --status-warning: oklch(0.80 0.14 70);
   --status-critical: oklch(0.72 0.17 25);
   --status-info: oklch(0.75 0.12 250);
+  --spoilage: oklch(0.76 0.15 55);
 }
 
 @layer base {

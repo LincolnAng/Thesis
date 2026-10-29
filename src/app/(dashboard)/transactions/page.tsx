@@ -328,7 +328,7 @@ function TransactionsPageInner() {
               icon={<PackageX className="h-5 w-5" />}
               label="Spoilage & waste"
               value={summary.spoiled + summary.wasted}
-              tone={summary.spoiled + summary.wasted > 0 ? "bad" : "neutral"}
+              tone={summary.spoiled + summary.wasted > 0 ? "spoiled" : "neutral"}
               note={`${formatPeso(summary.spoiled)} products spoiled · ${formatPeso(summary.wasted)} materials wasted · ${periodName}`}
             />
           </section>
@@ -597,11 +597,12 @@ function MoneyBox({
   label: string;
   value: number;
   note: string;
-  tone: "good" | "bad" | "neutral";
+  /** "spoiled": orange — a loss, kept apart from red money owed. */
+  tone: "good" | "bad" | "spoiled" | "neutral";
   filled?: boolean;
   alert?: boolean;
 }) {
-  const color = tone === "good" ? "text-success" : tone === "bad" ? "text-danger" : "text-foreground";
+  const color = tone === "good" ? "text-success" : tone === "bad" ? "text-danger" : tone === "spoiled" ? "text-spoilage" : "text-foreground";
   if (filled) {
     // The headline figure: green (red only when the month lost money), centred in its card,
     // with the month above it so the card reads on its own.
