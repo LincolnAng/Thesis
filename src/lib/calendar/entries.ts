@@ -30,7 +30,7 @@ export const CATEGORY_LABELS: Record<CalendarCategory, string> = {
   production: "Production",
   events: "Events & orders",
   shipments: "Shipments",
-  agenda: "My calendar",
+  agenda: "Calendar",
   holidays: "Holidays",
   dayoffs: "Day-offs",
   leaves: "Leaves",
@@ -61,14 +61,15 @@ export interface CalendarEntry {
   item?: CalendarItem;
 }
 
+/** Each kind's colour, from the same earthy palette as the calendar's categories. */
 export const AGENDA_KINDS: { kind: AgendaKind; label: string; color: string }[] = [
-  { kind: "event", label: "Event", color: "#1A73E8" },
-  { kind: "task", label: "Task", color: "#0B8043" },
-  { kind: "meeting", label: "Meeting", color: "#F4511E" },
-  { kind: "delivery", label: "Delivery deadline", color: "#039BE5" },
-  { kind: "receivable", label: "Collect payment", color: "#33B679" },
-  { kind: "payable", label: "Payment due", color: "#D50000" },
-  { kind: "reminder", label: "Reminder", color: "#616161" },
+  { kind: "event", label: "Event", color: "#558A42" },
+  { kind: "task", label: "Task", color: "#2F7D6B" },
+  { kind: "meeting", label: "Meeting", color: "#C4622D" },
+  { kind: "delivery", label: "Delivery deadline", color: "#3F6E8C" },
+  { kind: "receivable", label: "Collect payment", color: "#9A6B12" },
+  { kind: "payable", label: "Payment due", color: "#B3261E" },
+  { kind: "reminder", label: "Reminder", color: "#8A7F70" },
 ];
 export const agendaKind = (k: AgendaKind) => AGENDA_KINDS.find((a) => a.kind === k) ?? AGENDA_KINDS[0];
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Clock, Lock, MapPin, Users, Globe2 } from "lucide-react";
+import { Lock, Users, Globe2 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useStore } from "@/lib/store/use-store";
 import { useCurrentUser } from "@/lib/auth/current-user";
@@ -43,7 +43,6 @@ export function AgendaDialog({
   const [error, setError] = useState<string | null>(null);
 
   const others = users.filter((u) => u.id !== me?.id);
-  const color = AGENDA_KINDS.find((k) => k.kind === kind)?.color ?? "#1A73E8";
   const placeholder: Record<AgendaKind, string> = {
     event: "e.g. Christmas bazaar at SM",
     task: "e.g. Call the jar supplier",
@@ -79,91 +78,79 @@ export function AgendaDialog({
   }
 
   const field = "h-11 w-full rounded-lg border border-input bg-transparent px-3 text-[15px] outline-none focus:border-cacao";
-  const row = "flex items-start gap-3";
-  const icon = "mt-3 h-4 w-4 shrink-0 text-muted-foreground";
+  const label = "flex flex-col gap-1 text-[13px] font-semibold";
+  const chip = (on: boolean) => `flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-[13px] font-semibold transition ${on ? "border-cacao bg-cacao text-ivory" : "border-line/20 bg-card hover:border-cacao/50"}`;
+  const ownerName = existing ? (existing.ownerId === me?.id ? "you" : existing.ownerName || "someone") : "you";
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[92svh] overflow-y-auto rounded-2xl sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="sr-only">{existing ? "Change calendar item" : "Add to the calendar"}</DialogTitle>
-          <DialogDescription className="sr-only">Title, kind, when, where and who sees it.</DialogDescription>
+          <DialogTitle>{existing ? "Change calendar item" : "Add to the calendar"}</DialogTitle>
+          <DialogDescription>{existing ? `Added by ${ownerName}.` : "Saved under your name, so everyone can see who added it."}</DialogDescription>
         </DialogHeader>
 
-        <input
-          autoFocus
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder={placeholder[kind]}
-          aria-label="Title"
-          className="w-full border-b-2 bg-transparent pb-1.5 font-display text-[22px] outline-none placeholder:text-muted-foreground/60"
-          style={{ borderColor: color }}
-        />
+        <label className={label}>
+          What
+          <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder={placeholder[kind]} className={field} />
+        </label>
 
-        <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Kind">
-          {AGENDA_KINDS.map((k) => (
-            <button
-              key={k.kind}
-              type="button"
-              role="radio"
-              aria-checked={kind === k.kind}
-              onClick={() => setKind(k.kind)}
-              className="flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-[13px] font-semibold transition"
-              style={kind === k.kind ? { background: k.color, borderColor: k.color, color: "#fff" } : { borderColor: `${k.color}55`, color: k.color }}
-            >
-              <span className="h-2 w-2 rounded-full" style={{ background: kind === k.kind ? "#fff" : k.color }} />
-              {k.label}
-            </button>
-          ))}
-        </div>
-
-        <div className={row}>
-          <Clock className={icon} />
-          <div className="flex flex-1 flex-col gap-2">
-            <div className="grid grid-cols-2 gap-2">
-              <label className="flex flex-col gap-1 text-[12px] font-semibold text-muted-foreground">
-                Day
-                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={field} />
-              </label>
-              <label className="flex flex-col gap-1 text-[12px] font-semibold text-muted-foreground">
-                Until (optional)
-                <input type="date" value={endDate} min={date} onChange={(e) => setEndDate(e.target.value)} className={field} />
-              </label>
-            </div>
-            <label className="flex min-h-9 items-center gap-2 text-[14px]">
-              <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} className="h-5 w-5" />
-              All day
-            </label>
-            {!allDay && (
-              <div className="grid grid-cols-2 gap-2">
-                <label className="flex flex-col gap-1 text-[12px] font-semibold text-muted-foreground">
-                  From
-                  <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={field} />
-                </label>
-                <label className="flex flex-col gap-1 text-[12px] font-semibold text-muted-foreground">
-                  To
-                  <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className={field} />
-                </label>
-              </div>
-            )}
+        <div className={label}>
+          Kind
+          <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Kind">
+            {AGENDA_KINDS.map((k) => (
+              <button key={k.kind} type="button" role="radio" aria-checked={kind === k.kind} onClick={() => setKind(k.kind)} className={chip(kind === k.kind)}>
+                {/* The colour it takes on the calendar. */}
+                <span className="h-2.5 w-2.5 rounded-full ring-1 ring-card" style={{ background: k.color }} />
+                {k.label}
+              </button>
+            ))}
           </div>
         </div>
 
-        <div className={row}>
-          <MapPin className={icon} />
-          <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Add a place" aria-label="Where" className={field} />
+        <div className="grid grid-cols-2 gap-3">
+          <label className={label}>
+            Day
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={field} />
+          </label>
+          <label className={label}>
+            Until (optional)
+            <input type="date" value={endDate} min={date} onChange={(e) => setEndDate(e.target.value)} className={field} />
+          </label>
+          <label className="col-span-2 flex min-h-9 items-center gap-2 text-[14px]">
+            <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} className="h-5 w-5 accent-[var(--color-cacao)]" />
+            All day
+          </label>
+          {!allDay && (
+            <>
+              <label className={label}>
+                From
+                <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={field} />
+              </label>
+              <label className={label}>
+                To
+                <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className={field} />
+              </label>
+            </>
+          )}
         </div>
 
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          rows={2}
-          placeholder="Notes (optional)"
-          aria-label="Notes"
-          className="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-[15px] outline-none focus:border-cacao"
-        />
+        <label className={label}>
+          Where (optional)
+          <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Add a place" className={field} />
+        </label>
 
-        <div className="flex flex-col gap-2 rounded-xl bg-secondary/60 p-3">
+        <label className={label}>
+          Notes (optional)
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={2}
+            className="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-[15px] font-normal outline-none focus:border-cacao"
+          />
+        </label>
+
+        <div className="flex flex-col gap-2 rounded-xl border border-line/15 bg-card p-3">
           <span className="text-[13px] font-semibold">Who sees this</span>
           <div className="grid grid-cols-3 gap-1.5">
             {(
@@ -178,7 +165,7 @@ export function AgendaDialog({
                 type="button"
                 onClick={() => setVisibility(v)}
                 aria-pressed={visibility === v}
-                className={`flex min-h-11 items-center justify-center gap-1.5 rounded-lg border text-[13px] font-semibold ${visibility === v ? "border-cacao bg-cacao text-ivory" : "border-line/20 bg-card"}`}
+                className={`flex min-h-11 items-center justify-center gap-1.5 rounded-lg border text-[13px] font-semibold transition ${visibility === v ? "border-cacao bg-cacao text-ivory" : "border-line/20 bg-card hover:border-cacao/50"}`}
               >
                 <Icon className="h-4 w-4" />
                 {label}
@@ -213,14 +200,14 @@ export function AgendaDialog({
 
         {existing && (kind === "task" || kind === "delivery" || kind === "receivable" || kind === "payable" || kind === "reminder") && (
           <label className="flex min-h-11 items-center gap-2 text-[14px]">
-            <input type="checkbox" checked={done} onChange={(e) => setDone(e.target.checked)} className="h-5 w-5" />
+            <input type="checkbox" checked={done} onChange={(e) => setDone(e.target.checked)} className="h-5 w-5 accent-[var(--color-cacao)]" />
             Done
           </label>
         )}
 
         {error && <p className="text-[13px] font-semibold text-danger">{error}</p>}
         <div className="flex gap-2">
-          <button type="button" onClick={save} className="min-h-11 flex-1 rounded-[10px] text-[14px] font-semibold text-white" style={{ background: color }}>
+          <button type="button" onClick={save} className="min-h-11 flex-1 rounded-[10px] bg-cacao text-[14px] font-semibold text-ivory transition hover:bg-cacao/90">
             Save
           </button>
           {existing && (

@@ -42,7 +42,7 @@ export type ReminderGroup = "money" | "salaries" | "agenda" | "production" | "ev
 export const GROUP_LABELS: Record<ReminderGroup, string> = {
   money: "Money",
   salaries: "Salaries",
-  agenda: "My calendar",
+  agenda: "Calendar",
   production: "Production",
   events: "Events & holidays",
   staff: "Staff",

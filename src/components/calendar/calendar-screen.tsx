@@ -48,7 +48,7 @@ const filterOf = (c: CalendarCategory): CalendarCategory => (c === "agenda" ? "e
 
 /** One colour per category, from the design tokens' palette, used for dots and chip edges. */
 const CATEGORY_COLOR: Record<CalendarCategory, string> = {
-  agenda: "#1A73E8",
+  agenda: "#558A42",
   holidays: "#C2185B",
   production: "#7B4B2A",
   events: "#558A42",
@@ -84,10 +84,16 @@ function Dot({ category, color }: { category: CalendarCategory; color?: string }
 /** An entry's own colour (calendar items are coloured by kind), else its category's. */
 const colorOf = (e: CalendarEntry) => e.color ?? CATEGORY_COLOR[e.category];
 
+/** Who put a calendar item on the calendar — "you", or their name. */
+const addedBy = (e: CalendarEntry, meId: string | undefined) =>
+  e.item ? (e.item.ownerId === meId ? "you" : e.item.ownerName || "someone") : null;
+
 /** A compact line in a month cell. */
-function Chip({ entry }: { entry: CalendarEntry }) {
+function Chip({ entry, meId }: { entry: CalendarEntry; meId?: string }) {
+  const by = addedBy(entry, meId);
   return (
     <span
+      title={by ? `${entry.title} · added by ${by}` : entry.title}
       className="block truncate rounded px-1 py-px text-[10px] font-medium leading-tight"
       style={{ background: `${colorOf(entry)}1A`, color: colorOf(entry) }}
     >
@@ -101,8 +107,9 @@ function Chip({ entry }: { entry: CalendarEntry }) {
  * A full row in the week and day lists; opens the detail sheet. Tinted in its category's
  * colour, with a solid edge, so a day's list reads at a glance the same way the month does.
  */
-function EntryRow({ entry, onOpen }: { entry: CalendarEntry; onOpen: (e: CalendarEntry) => void }) {
+function EntryRow({ entry, meId, onOpen }: { entry: CalendarEntry; meId?: string; onOpen: (e: CalendarEntry) => void }) {
   const color = colorOf(entry);
+  const by = addedBy(entry, meId);
   return (
     <button
       type="button"
@@ -114,9 +121,15 @@ function EntryRow({ entry, onOpen }: { entry: CalendarEntry; onOpen: (e: Calenda
         <span className={`block text-[14px] font-semibold ${entry.item?.done ? "text-muted-foreground line-through" : entry.tone === "bad" ? "text-danger" : "text-foreground"}`}>{entry.title}</span>
         {entry.subtitle && <span className="block text-[12px] text-muted-foreground">{entry.subtitle}</span>}
       </span>
-      <span className="shrink-0 text-[11px] font-semibold" style={{ color }}>
-        {CATEGORY_LABELS[entry.category]}
-      </span>
+      {by ? (
+        <span className="shrink-0 rounded-full bg-card/80 px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+          By {by}
+        </span>
+      ) : (
+        <span className="shrink-0 text-[11px] font-semibold" style={{ color }}>
+          {CATEGORY_LABELS[entry.category]}
+        </span>
+      )}
     </button>
   );
 }
@@ -336,7 +349,7 @@ export function CalendarScreen() {
                     </span>
                     <span className="hidden flex-col gap-0.5 min-[700px]:flex">
                       {items.slice(0, 3).map((e) => (
-                        <Chip key={e.id} entry={e} />
+                        <Chip key={e.id} entry={e} meId={me?.id} />
                       ))}
                       {items.length > 3 && <span className="text-[10px] text-muted-foreground">+{items.length - 3} more</span>}
                     </span>
@@ -369,7 +382,7 @@ export function CalendarScreen() {
                   ) : (
                     <div className="flex flex-col gap-1.5">
                       {items.map((e) => (
-                        <EntryRow key={e.id} entry={e} onOpen={setOpen} />
+                        <EntryRow key={e.id} entry={e} meId={me?.id} onOpen={setOpen} />
                       ))}
                     </div>
                   )}
@@ -408,7 +421,7 @@ export function CalendarScreen() {
             ) : (
               <div className="flex flex-col gap-1.5">
                 {on(cursor).map((e) => (
-                  <EntryRow key={e.id} entry={e} onOpen={setOpen} />
+                  <EntryRow key={e.id} entry={e} meId={me?.id} onOpen={setOpen} />
                 ))}
               </div>
             )}
@@ -426,7 +439,7 @@ export function CalendarScreen() {
                   {open.title}
                 </DialogTitle>
                 <DialogDescription>
-                  {CATEGORY_LABELS[open.category]} · {open.endDate ? `${shortDate(open.date)} – ${shortDate(open.endDate)}` : longDate(open.date)}
+                  {open.item ? `Added by ${addedBy(open, me?.id)}` : CATEGORY_LABELS[open.category]} · {open.endDate ? `${shortDate(open.date)} – ${shortDate(open.endDate)}` : longDate(open.date)}
                 </DialogDescription>
               </DialogHeader>
               <dl className="flex flex-col gap-1.5 text-[14px]">
@@ -454,8 +467,7 @@ export function CalendarScreen() {
                       setOpen(null);
                       setAgendaDialog({ item, date: item!.date });
                     }}
-                    className="flex min-h-11 flex-1 items-center justify-center rounded-[10px] px-4 text-[14px] font-semibold text-white"
-                    style={{ background: colorOf(open) }}
+                    className="flex min-h-11 flex-1 items-center justify-center rounded-[10px] bg-cacao px-4 text-[14px] font-semibold text-ivory"
                   >
                     Edit
                   </button>
