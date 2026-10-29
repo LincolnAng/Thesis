@@ -24,3 +24,13 @@ test("branches come from settings, with CDO and Manila to start", () => {
   assert.deepEqual(branchesOf({}).map((b) => b.name), ["CDO", "Manila"]);
   assert.deepEqual(branchesOf({ branches: JSON.stringify([{ id: "cdo", name: "CDO" }, { id: "sg", name: "Singapore", country: "Singapore" }]) }).map((b) => `${b.name}/${b.country}`), ["CDO/Philippines", "Singapore/Singapore"]);
 });
+
+test("Manila price suggestions from freight: same peso profit, or same margin", async () => {
+  const { recommendedBranchPrices, suggestedPriceAtBranch } = await import("./branch-prices.ts");
+  assert.deepEqual(recommendedBranchPrices(325, 200, 25), { sameProfit: 350, sameMargin: 366 });
+  assert.deepEqual(recommendedBranchPrices(325, null, 25), { sameProfit: 350, sameMargin: null });
+  const settings = { "branchFreight:p1:manila": "25" };
+  assert.equal(suggestedPriceAtBranch(settings, branchesOf({}), "p1", "manila", 325), 350);
+  assert.equal(suggestedPriceAtBranch({ ...settings, "branchPrice:p1:manila": "360" }, branchesOf({}), "p1", "manila", 325), 360);
+  assert.equal(suggestedPriceAtBranch(settings, branchesOf({}), "p1", "cdo", 325), 325);
+});

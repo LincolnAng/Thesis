@@ -31,3 +31,22 @@ export function priceAtBranch(settings: Record<string, string>, branches: Branch
   if (!branchId || branchId === mainBranch(branches).id) return mainPrice;
   return branchPrice(settings, productId, branchId) ?? mainPrice;
 }
+
+/**
+ * What a product should sell for at a branch with freight, as two suggestions (never set on its
+ * own): the main price plus the freight, so each unit earns the same pesos; and — when the cost
+ * is known — the price that keeps the same margin percent on the higher landed cost. Rounded up
+ * to the next peso.
+ */
+export function recommendedBranchPrices(mainPrice: number, unitCost: number | null, freight: number): { sameProfit: number; sameMargin: number | null } {
+  const sameProfit = Math.ceil(mainPrice + freight);
+  if (unitCost == null || mainPrice <= 0 || unitCost >= mainPrice) return { sameProfit, sameMargin: null };
+  const margin = (mainPrice - unitCost) / mainPrice;
+  return { sameProfit, sameMargin: Math.ceil((unitCost + freight) / (1 - margin)) };
+}
+
+/** A branch's price for a sale: the price set there, else the main price plus freight (a suggestion). */
+export function suggestedPriceAtBranch(settings: Record<string, string>, branches: Branch[], productId: string, branchId: string | null | undefined, mainPrice: number): number {
+  if (!branchId || branchId === mainBranch(branches).id) return mainPrice;
+  return branchPrice(settings, productId, branchId) ?? Math.ceil(mainPrice + freightPerUnit(settings, productId, branchId));
+}

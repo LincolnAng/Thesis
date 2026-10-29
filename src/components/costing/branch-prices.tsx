@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useStore } from "@/lib/store/use-store";
 import { setBusinessSetting } from "@/lib/store/store";
 import { branchesOf, mainBranch } from "@/lib/inventory/branches";
-import { branchPrice, branchPriceKey, freightKey, freightPerUnit } from "@/lib/inventory/branch-prices";
+import { branchPrice, branchPriceKey, freightKey, freightPerUnit, recommendedBranchPrices } from "@/lib/inventory/branch-prices";
 import { evaluate, priceFor } from "@/lib/costing/price-calc";
 import { formatPeso } from "@/lib/format";
 import type { Product } from "@/lib/store/types";
@@ -44,6 +44,9 @@ function BranchCalc({ productId, branchId, branchName, unitCost, mainPrice, unit
   const [saved, setSaved] = useState(false);
 
   const landed = unitCost != null ? Math.round((unitCost + (Number(freight) || 0)) * 100) / 100 : null;
+  // What it should sell for there, worked out from freight — a suggestion to take or leave.
+  const freightNum = Number(freight) || 0;
+  const recommend = recommendedBranchPrices(mainPrice, unitCost, freightNum);
   const price = value === "" ? null : priceFor(mode, Number(value), landed);
   const r = evaluate(price, landed);
 
@@ -70,6 +73,30 @@ function BranchCalc({ productId, branchId, branchName, unitCost, mainPrice, unit
         </label>
         <span className="text-muted-foreground">→ cost in {branchName}: {landed != null ? formatPeso(landed) : "— (recipe not fully priced)"}</span>
       </div>
+      {freightNum > 0 && mainPrice > 0 && (
+        <div className="flex flex-col gap-1.5 rounded-lg bg-secondary/60 px-3 py-2 text-[13px]">
+          <span className="font-semibold">Suggested {branchName} price</span>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => (setMode("price"), setValue(String(recommend.sameProfit)), setSaved(false))}
+              className="min-h-9 rounded-full border border-cacao/40 bg-card px-3 font-semibold text-cacao hover:bg-cacao/5"
+            >
+              {formatPeso(recommend.sameProfit)} — keeps the same ₱ profit a {unit}
+            </button>
+            {recommend.sameMargin != null && recommend.sameMargin !== recommend.sameProfit && (
+              <button
+                type="button"
+                onClick={() => (setMode("price"), setValue(String(recommend.sameMargin)), setSaved(false))}
+                className="min-h-9 rounded-full border border-line/25 bg-card px-3 font-semibold hover:border-cacao hover:text-cacao"
+              >
+                {formatPeso(recommend.sameMargin!)} — keeps the same margin %
+              </button>
+            )}
+          </div>
+          <span className="text-muted-foreground">Only a suggestion: tap one to try it, or type your own price below.</span>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2 text-[13.5px]">
         <select value={mode} onChange={(e) => (setMode(e.target.value as "price" | "markup"), setValue(""), setSaved(false))} disabled={landed == null} className="h-10 rounded-lg border border-input bg-transparent px-2">
           <option value="price">Selling price ₱</option>

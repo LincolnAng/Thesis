@@ -17,7 +17,10 @@ import type { PricingMode, Product } from "@/lib/store/types";
  *   Aim for a margin  — keep a share of every sale; moves with the cost
  *
  * Under the choice, one box to fill in, the result in plain words (sells for, you keep), and
- * Save. Nothing changes the product's price until Save is pressed. Past sales keep the price
+ * Save. Markup and margin start from a sensible percent (or the one saved), with quick picks.
+ * When the recipe isn't fully priced yet, a cost can be typed in as an estimate so markup and
+ * margin still work — a price worked out that way is saved as a fixed price, since there's no
+ * real cost yet for it to follow. Nothing changes the product's price until Save is pressed. Past sales keep the price
  * they were sold at either way — a transaction stores its own amount. The friend price sits
  * at the bottom.
  */
@@ -51,37 +54,44 @@ export function PriceCalculator({
   const [value, setValue] = useState(() => String(startingMode(product) === "price" ? currentPrice || "" : product.marginPercent || ""));
   const [friend, setFriend] = useState(product.friendPrice ? String(product.friendPrice) : "");
   const [saved, setSaved] = useState<string | null>(null);
+  // An estimated cost, typed in when the recipe isn't fully priced yet.
+  const [estimate, setEstimate] = useState("");
+  const cost = unitCost ?? (Number(estimate) > 0 ? Number(estimate) : null);
+  const estimated = unitCost == null && cost != null;
 
   const typed = Number(value);
-  const price = value === "" ? null : priceFor(mode, typed, unitCost);
-  const r = evaluate(price, unitCost);
+  const price = value === "" ? null : priceFor(mode, typed, cost);
+  const r = evaluate(price, cost);
   const changed =
     price != null &&
     (Math.abs(price - currentPrice) >= 0.01 || MODE_FOR_SAVE[mode] !== product.pricingMode || (mode !== "price" && typed !== product.marginPercent));
   const friendChanged = Number(friend || 0) !== product.friendPrice;
-  const friendResult = evaluate(friend === "" ? null : Number(friend), unitCost);
+  const friendResult = evaluate(friend === "" ? null : Number(friend), cost);
 
   function choose(next: CalcMode) {
     if (next === mode) return;
-    // Carry the price on screen into the new way of describing it, so switching never jumps.
-    const carry = next === "price" ? price : next === "markup" ? r.markupPct : r.marginPct;
+    // Start from the percent saved for this way, else a usual one — not the current price turned
+    // into a percent, which on a cheap recipe reads as "14,344% markup".
+    const savedPct = next === "markup" && product.pricingMode === "cost_percent" ? product.marginPercent : next === "margin" && product.pricingMode === "margin" ? product.marginPercent : null;
+    const start = next === "price" ? (price ?? (currentPrice || null)) : (savedPct ?? (next === "markup" ? 50 : 40));
     setMode(next);
-    setValue(carry != null ? String(carry) : "");
+    setValue(start != null ? String(start) : "");
     setSaved(null);
   }
 
   function save() {
     if (price == null) return;
+    // On an estimated cost there's nothing real for a markup to follow, so it's saved as a price.
     const patch: Partial<Product> =
-      mode === "price"
+      mode === "price" || estimated
         ? { pricingMode: "manual", standardPrice: price }
         : { pricingMode: MODE_FOR_SAVE[mode], marginPercent: mode === "margin" ? Math.min(typed, MAX_MARGIN_PCT) : typed, standardPrice: price };
     updateProduct(product.id, patch);
-    setSaved(`Saved — it now sells for ${formatPeso(price)} a ${unit}.`);
+    setSaved(`Saved — it now sells for ${formatPeso(price)} a ${unit}${estimated ? " (a fixed price, worked out from your estimate)" : ""}.`);
   }
 
   const field = "h-12 rounded-lg border border-input bg-transparent px-3 text-[20px] font-bold tabular-nums outline-none focus:border-cacao";
-  const costText = unitCost != null ? formatPeso(unitCost) : null;
+  const costText = cost != null ? formatPeso(cost) : null;
 
   return (
     <div className="flex flex-col gap-5">
@@ -106,7 +116,7 @@ export function PriceCalculator({
         <span className="text-[13px] font-semibold">How do you want to set the price?</span>
         <div className="grid grid-cols-1 gap-2 min-[640px]:grid-cols-3" role="radiogroup" aria-label="How to set the price">
           {WAYS.map(({ mode: m, icon: Icon, title, says, moves }) => {
-            const needsCost = m !== "price" && unitCost == null;
+            const needsCost = false;
             const on = mode === m;
             return (
               <button
@@ -124,12 +134,26 @@ export function PriceCalculator({
                   <Icon className="h-4 w-4" /> {title}
                 </span>
                 <span className="text-[12.5px]">{says}</span>
-                <span className="text-[12px] text-muted-foreground">{needsCost ? "Needs the cost first — finish the recipe and its prices." : moves}</span>
+                <span className="text-[12px] text-muted-foreground">{needsCost ? "" : moves}</span>
               </button>
             );
           })}
         </div>
       </div>
+
+      {/* No real cost yet: an estimate lets markup and margin work. */}
+      {mode !== "price" && unitCost == null && (
+        <label className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--status-warning)]/40 bg-[var(--status-warning)]/5 px-3 py-2.5 text-[13.5px]">
+          <span>The recipe isn&apos;t fully priced yet, so its cost isn&apos;t known. What does one {unit} cost you, roughly? ₱</span>
+          <input
+            inputMode="decimal"
+            value={estimate}
+            onChange={(ev) => (setEstimate(ev.target.value.replace(/[^0-9.]/g, "")), setSaved(null))}
+            aria-label="Estimated cost per unit"
+            className="h-10 w-24 rounded-lg border border-input bg-card px-2 text-right text-[15px] outline-none focus:border-cacao"
+          />
+        </label>
+      )}
 
       {/* The one box to fill in */}
       <div className="flex flex-col gap-2">
@@ -154,6 +178,20 @@ export function PriceCalculator({
                 : "% of the price is yours to keep"}
           </span>
         </label>
+        {mode !== "price" && (
+          <div className="flex flex-wrap gap-2" aria-label="Quick percents">
+            {(mode === "markup" ? [30, 50, 75, 100] : [25, 30, 40, 50]).map((pct) => (
+              <button
+                key={pct}
+                type="button"
+                onClick={() => (setValue(String(pct)), setSaved(null))}
+                className={`min-h-9 rounded-full border px-3 text-[12.5px] font-semibold transition hover:border-cacao hover:text-cacao ${typed === pct ? "border-cacao text-cacao" : "border-line/25"}`}
+              >
+                {pct}%{cost != null ? ` · ${formatPeso(priceFor(mode, pct, cost) ?? 0)}` : ""}
+              </button>
+            ))}
+          </div>
+        )}
         {mode === "price" && unitCost != null && (
           <div className="flex flex-wrap gap-2" aria-label="Quick prices">
             {(
@@ -199,7 +237,8 @@ export function PriceCalculator({
             That&apos;s a {r.markupPct}% markup on cost, or {r.marginPct}% of the price kept.
           </span>
         )}
-        {r.price != null && unitCost == null && <span className="text-[12.5px] text-muted-foreground">Finish the recipe and its prices to see what you keep.</span>}
+        {r.price != null && cost == null && <span className="text-[12.5px] text-muted-foreground">Finish the recipe and its prices (or type an estimated cost) to see what you keep.</span>}
+        {estimated && <span className="text-[12.5px] text-[var(--status-warning)]">Worked out from your estimated cost of {formatPeso(cost!)}.</span>}
       </div>
 
       <div className="flex flex-wrap items-center gap-3">

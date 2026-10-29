@@ -38,6 +38,9 @@ import type { Product, RawMaterialStock, RecipeComponentRow, RecipeExtraRow, Rec
 const newId = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
 
 const input = "h-10 rounded-lg border border-input bg-transparent px-2 text-[14px] outline-none focus:border-cacao";
+/** The recipe's spreadsheet columns: item · measurement · price per unit · cost · remove. */
+const GRID = "grid grid-cols-[minmax(0,1.5fr)_170px_130px_110px_48px]";
+const CELL = "min-w-0 border-r border-line/10 px-3 py-2 last:border-r-0";
 
 export function RecipePanel({ product }: { product: Product }) {
   const { rawMaterials, products } = useStore();
@@ -108,7 +111,7 @@ export function RecipePanel({ product }: { product: Product }) {
   return (
     <div className="flex flex-col divide-y divide-line/10">
       <p className="pb-3 text-[14px]">
-        What goes into <span className="font-semibold">one {unit}</span>. Batches can be any size — the cost of one {unit} stays the same.
+        The recipe book and its costing: what goes into <span className="font-semibold">one {unit}</span>, how much, and what it costs. Batches can be any size — the cost of one {unit} stays the same.
       </p>
 
       <Section
@@ -158,6 +161,7 @@ export function RecipePanel({ product }: { product: Product }) {
 
       <Section
         title="Packaging"
+        itemLabel="Packaging"
         total={one(cost.packagingTotal)}
         unit={unit}
         emptyText={packagingList.length === 0 ? "No packaging yet — add jars, lids or labels on the Packaging tab first." : `None yet. Search for the jar, lid or label one ${unit} uses.`}
@@ -188,6 +192,7 @@ export function RecipePanel({ product }: { product: Product }) {
 
       <Section
         title="Other costs"
+        itemLabel="Item"
         hint={`Anything else one ${unit} costs — a sticker, a share of gas or delivery.`}
         total={one(cost.miscTotal)}
         unit={unit}
@@ -290,6 +295,7 @@ function Section({
   count,
   note,
   search,
+  itemLabel,
   children,
 }: {
   title: string;
@@ -304,6 +310,8 @@ function Section({
   note?: string;
   /** A search bar for adding, shown under the list. */
   search?: React.ReactNode;
+  /** The first column's heading — Ingredient, Packaging, Item. */
+  itemLabel?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -315,7 +323,30 @@ function Section({
         </span>
       </div>
       {hint && <p className="-mt-1.5 text-[12.5px] text-muted-foreground">{hint}</p>}
-      {count === 0 && emptyText ? <p className="text-[13px] text-muted-foreground">{emptyText}</p> : children}
+      {count === 0 && emptyText ? (
+        <p className="text-[13px] text-muted-foreground">{emptyText}</p>
+      ) : (
+        // A spreadsheet, like the Transactions table: a ruled grid with a heading row and a total.
+        <div className="overflow-x-auto rounded-xl border border-line/15">
+          <div className="min-w-[560px]">
+            <div className={`${GRID} border-b border-line/15 bg-secondary text-[11px] font-bold uppercase tracking-wide text-muted-foreground`}>
+              <span className={CELL}>{itemLabel ?? "Ingredient"}</span>
+              <span className={`${CELL} text-center`}>Measurement</span>
+              <span className={`${CELL} text-center`}>Price per unit</span>
+              <span className={`${CELL} text-right`}>Cost</span>
+              <span className={CELL} />
+            </div>
+            <div className="divide-y divide-line/10 [&>*:nth-child(even)]:bg-secondary/30">{children}</div>
+            <div className={`${GRID} border-t border-line/15 bg-secondary/60 text-[13.5px] font-semibold`}>
+              <span className={CELL}>Total</span>
+              <span className={CELL} />
+              <span className={CELL} />
+              <span className={`${CELL} text-right tabular-nums`}>{formatPeso(total)}</span>
+              <span className={CELL} />
+            </div>
+          </div>
+        </div>
+      )}
       {note && <p className="text-[12.5px] text-muted-foreground">{note}</p>}
       {search}
       {addLabel && onAdd && (
@@ -355,24 +386,28 @@ function Line({
 }) {
   const field = useNumericDraft(qty, onQty);
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-      <span className="min-w-[140px] flex-1 text-[14px] font-medium">
+    <div className={`${GRID} items-center bg-card`}>
+      <span className={`${CELL} text-[14px] font-medium`}>
         {name}
         {tag && <span className="ml-1.5 rounded-full bg-secondary px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground">{tag}</span>}
       </span>
-      <input
-        inputMode="decimal"
-        aria-label={`How much ${name} goes into one`}
-        value={field.value}
-        onChange={(e) => field.onChange(e.target.value.replace(/[^0-9.]/g, ""))}
-        className={`${input} w-20 shrink-0 text-right`}
-      />
-      <span className="w-10 shrink-0 text-[12.5px] text-muted-foreground">{unit}</span>
-      <span className="w-28 shrink-0 text-[12.5px] text-muted-foreground tabular-nums">{price}</span>
-      <span className="w-20 shrink-0 text-right text-[13.5px] font-semibold tabular-nums">{cost}</span>
-      <button type="button" onClick={onRemove} aria-label={`Remove ${name}`} className="flex h-10 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-danger">
-        <Trash2 className="h-4 w-4" />
-      </button>
+      <span className={`${CELL} flex items-center justify-center gap-1.5`}>
+        <input
+          inputMode="decimal"
+          aria-label={`How much ${name} goes into one`}
+          value={field.value}
+          onChange={(e) => field.onChange(e.target.value.replace(/[^0-9.]/g, ""))}
+          className={`${input} w-20 text-right`}
+        />
+        <span className="w-10 text-[12.5px] text-muted-foreground">{unit}</span>
+      </span>
+      <span className={`${CELL} text-center text-[12.5px] text-muted-foreground tabular-nums`}>{price.replace(/^at /, "")}</span>
+      <span className={`${CELL} text-right text-[13.5px] font-semibold tabular-nums`}>{cost}</span>
+      <span className={`${CELL} flex justify-center`}>
+        <button type="button" onClick={onRemove} aria-label={`Remove ${name}`} className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-danger">
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </span>
     </div>
   );
 }
@@ -464,19 +499,27 @@ function OtherCost({
 }) {
   const field = useNumericDraft(amount, onCost);
   return (
-    <div className="flex items-center gap-2">
-      <input value={row.label} onChange={(e) => onLabel(e.target.value)} placeholder="What for?" className={`${input} min-w-0 flex-1`} />
-      <span className="text-[13px] text-muted-foreground">₱</span>
-      <input
-        inputMode="decimal"
-        aria-label="Cost for one"
-        value={field.value}
-        onChange={(e) => field.onChange(e.target.value.replace(/[^0-9.]/g, ""))}
-        className={`${input} w-24 shrink-0 text-right`}
-      />
-      <button type="button" onClick={onRemove} aria-label="Remove" className="flex h-10 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-danger">
-        <Trash2 className="h-4 w-4" />
-      </button>
+    <div className={`${GRID} items-center bg-card`}>
+      <span className={CELL}>
+        <input value={row.label} onChange={(e) => onLabel(e.target.value)} placeholder="What for?" className={`${input} w-full`} />
+      </span>
+      <span className={`${CELL} text-center text-[12.5px] text-muted-foreground`}>—</span>
+      <span className={`${CELL} text-center text-[12.5px] text-muted-foreground`}>—</span>
+      <span className={`${CELL} flex items-center justify-end gap-1`}>
+        <span className="text-[13px] text-muted-foreground">₱</span>
+        <input
+          inputMode="decimal"
+          aria-label="Cost for one"
+          value={field.value}
+          onChange={(e) => field.onChange(e.target.value.replace(/[^0-9.]/g, ""))}
+          className={`${input} w-20 text-right`}
+        />
+      </span>
+      <span className={`${CELL} flex justify-center`}>
+        <button type="button" onClick={onRemove} aria-label="Remove" className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-danger">
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </span>
     </div>
   );
 }

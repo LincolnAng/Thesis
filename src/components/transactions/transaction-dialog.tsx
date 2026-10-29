@@ -23,7 +23,7 @@ import { isMaterialWaste, MATERIAL_WASTE } from "@/lib/transactions/waste";
 import { groupOf, materialStanding } from "@/lib/summary/material-stock";
 import { cacaoUtilizationPct } from "@/lib/summary/business-config";
 import { branchesOf, mainBranch } from "@/lib/inventory/branches";
-import { priceAtBranch } from "@/lib/inventory/branch-prices";
+import { suggestedPriceAtBranch as priceAtBranch } from "@/lib/inventory/branch-prices";
 import { currentUser } from "@/lib/auth/current-user";
 import type { Entry, InstallmentFrequency, OrderLine, PaymentMethod, PriceType, Product } from "@/lib/store/types";
 import type { EntryDraft } from "@/lib/home/describe-entry";
