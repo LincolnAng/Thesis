@@ -14,7 +14,7 @@ import { groupOf } from "@/lib/summary/material-stock";
 import { MATERIAL_USE } from "@/lib/transactions/waste";
 import { batchesOf, cacaoPerUnit } from "@/lib/production/runs";
 import { PackagingEditor, fieldCls, labelCls, packagingUsed, recipePackaging, type PackagingLine } from "@/components/production/add-batch-dialog";
-import type { Entry, Product, ProductionRun, RunInput } from "@/lib/store/types";
+import type { Entry, Product, ProductionRun, RunInput, RunOutput } from "@/lib/store/types";
 
 const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const num = (s: string) => Number(s) || 0;
@@ -22,6 +22,8 @@ const round = (n: number) => Math.round(n * 1000) / 1000;
 const decimal = (v: string) => v.replace(/[^0-9.]/g, "");
 const text = (n: number | undefined) => (n ? String(n) : "");
 const UNITS = ["kg", "g", "L", "mL", "pcs", "packs", "boxes", "sacks"];
+/** Usable, waste and excess rows: raw material · usable · waste · excess · unit · remove. */
+const OUT_GRID = "grid grid-cols-[minmax(0,1fr)_64px_64px_64px_82px_40px] gap-1.5";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -36,6 +38,15 @@ interface InputRow {
   key: string;
   materialId: string;
   qty: string;
+  unit: string;
+}
+
+interface OutputRow {
+  key: string;
+  materialId: string;
+  usable: string;
+  waste: string;
+  excess: string;
   unit: string;
 }
 
@@ -55,7 +66,8 @@ const key = () => `row-${++seq}`;
  * Log production: one batch, start to finish, under its lot ID —
  *
  *   1  Raw materials in   every raw material (or packaging, like boxes) put in: which, how much, the unit
- *   2  Usable, waste, excess   what came out usable, what was lost, and what was made but not packed
+ *   2  Usable, waste, excess   for each raw material: what came out usable, what was lost, and
+ *                         what was made but not packed
  *   3  Tablea pellets      made from the usable
  *   4  Finished products   typed by name, how many, and the packaging each went into
  *
@@ -81,9 +93,20 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
     return rows.length ? rows : [{ key: key(), materialId: materials[0]?.id ?? "", qty: "", unit: materials[0]?.unit || "kg" }];
   });
   const firstUnit = inputs.find((i) => num(i.qty) > 0)?.unit ?? inputs[0]?.unit ?? "kg";
-  const [usable, setUsable] = useState(text(existing?.usableQty));
-  const [waste, setWaste] = useState(text(existing?.wasteQty));
-  const [excess, setExcess] = useState(text(existing?.excessQty ?? existing?.leftoverQty));
+  // What came of each raw material — one row each, like the raw materials in.
+  const [outputs, setOutputs] = useState<OutputRow[]>(() => {
+    const saved: RunOutput[] = existing?.outputs?.length
+      ? existing.outputs
+      : existing && (existing.usableQty > 0 || (existing.wasteQty ?? 0) > 0 || (existing.excessQty ?? existing.leftoverQty) > 0)
+        ? [{ materialId: existing.materialId, usable: existing.usableQty, waste: existing.wasteQty ?? 0, excess: existing.excessQty || existing.leftoverQty, unit: existing.unit }]
+        : [];
+    const rows = saved.map((o) => ({ key: key(), materialId: o.materialId, usable: text(o.usable), waste: text(o.waste), excess: text(o.excess), unit: o.unit || "kg" }));
+    return rows.length ? rows : [{ key: key(), materialId: materials[0]?.id ?? "", usable: "", waste: "", excess: "", unit: materials[0]?.unit || "kg" }];
+  });
+  const sumOf = (f: "usable" | "waste" | "excess") => round(outputs.filter((o) => o.unit === firstUnit).reduce((t, o) => t + num(o[f]), 0));
+  const usableTotal = sumOf("usable");
+  const wasteTotal = sumOf("waste");
+  const excessTotal = sumOf("excess");
   const [pellets, setPellets] = useState<string | null>(existing ? text(existing.pelletsQty) : null);
   const [made, setMade] = useState<MadeRow[]>(() => {
     const rows: MadeRow[] = [];
@@ -110,11 +133,11 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
   const packagingOf = (l: (typeof madeLines)[number]) => l.row.packaging ?? recipePackaging(l.product, l.qty, rawMaterials);
 
   const rawTotal = round(inputs.filter((i) => i.unit === firstUnit).reduce((t, i) => t + num(i.qty), 0));
-  const pelletsQty = pellets === null ? num(usable) : num(pellets);
+  const pelletsQty = pellets === null ? usableTotal : num(pellets);
   const cacaoInput = inputs.find((i) => num(i.qty) > 0);
   const byRecipe = round(madeLines.reduce((t, l) => (l.product && cacaoInput ? t + cacaoPerUnit(l.product, cacaoInput.materialId) * l.qty : t), 0));
-  const accounted = round(num(usable) + num(waste) + num(excess));
-  const yieldPct = rawTotal > 0 && num(usable) > 0 ? Math.round((num(usable) / rawTotal) * 100) : null;
+  const accounted = round(usableTotal + wasteTotal + excessTotal);
+  const yieldPct = rawTotal > 0 && usableTotal > 0 ? Math.round((usableTotal / rawTotal) * 100) : null;
 
   function save() {
     const lot = (lotId.trim() || suggestedLot).trim();
@@ -123,7 +146,8 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
     if (inputs.some((i) => num(i.qty) > 0 && !i.materialId)) return setError("Pick which raw material each amount is.");
     const unknown = madeLines.find((l) => !l.product);
     if (unknown) return setError(`No product called “${unknown.row.name.trim()}” — check the name, or add it in Costing first.`);
-    if (pelletsQty > num(usable) + 1e-9 && num(usable) > 0) return setError("More tablea pellets than usable — check the two amounts.");
+    if (outputs.some((o) => (num(o.usable) > 0 || num(o.waste) > 0 || num(o.excess) > 0) && !o.materialId)) return setError("Pick which raw material each usable, waste and excess row is for.");
+    if (pelletsQty > usableTotal + 1e-9 && usableTotal > 0) return setError("More tablea pellets than usable — check the two amounts.");
 
     // The time of day now, on the day picked — so a run logged late still sorts by when it was made.
     const stamp = new Date(`${date}T${today.toTimeString().slice(0, 8)}`).toISOString();
@@ -166,7 +190,7 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
       materialId: first?.materialId ?? "",
       unit: first?.unit ?? firstUnit,
       rawQty: rawTotal,
-      usableQty: num(usable),
+      usableQty: usableTotal,
       pelletsQty: round(pelletsQty),
       fromBucketQty: 0,
       intoProductsQty: byRecipe,
@@ -174,14 +198,18 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
       made: madeLines.map((l) => `${fullName(l.product!, products)} × ${l.qty}`).join("; "),
       notes: notes.trim(),
       inputs: filled.map((i) => ({ materialId: i.materialId, qty: num(i.qty), unit: i.unit })),
-      wasteQty: num(waste),
-      excessQty: num(excess),
+      wasteQty: wasteTotal,
+      excessQty: excessTotal,
+      outputs: outputs
+        .filter((o) => o.materialId && (num(o.usable) > 0 || num(o.waste) > 0 || num(o.excess) > 0))
+        .map((o) => ({ materialId: o.materialId, usable: num(o.usable), waste: num(o.waste), excess: num(o.excess), unit: o.unit })),
     };
     if (existing) replaceProductionRun(existing.id, run, out, []);
     else addProductionRun(run, out, []);
     onClose();
   }
 
+  const patchOutput = (k: string, patch: Partial<OutputRow>) => setOutputs((rows) => rows.map((r) => (r.key === k ? { ...r, ...patch } : r)));
   const patchInput = (k: string, patch: Partial<InputRow>) => setInputs((rows) => rows.map((r) => (r.key === k ? { ...r, ...patch } : r)));
   const patchMade = (k: string, patch: Partial<MadeRow>) => setMade((rows) => rows.map((r) => (r.key === k ? { ...r, ...patch } : r)));
   const small = "h-11 rounded-lg border border-input bg-transparent px-2 text-[15px] outline-none focus:border-cacao";
@@ -266,20 +294,89 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
           </Section>
 
           <Section title="2 · Usable, waste and excess">
-            <div className="grid grid-cols-3 gap-2">
-              <label className={labelCls}>
-                Usable ({firstUnit})
-                <input inputMode="decimal" value={usable} onChange={(e) => setUsable(decimal(e.target.value))} placeholder="0" className={fieldCls} />
-              </label>
-              <label className={labelCls}>
-                Waste ({firstUnit})
-                <input inputMode="decimal" value={waste} onChange={(e) => setWaste(decimal(e.target.value))} placeholder="0" className={fieldCls} />
-              </label>
-              <label className={labelCls}>
-                Excess ({firstUnit})
-                <input inputMode="decimal" value={excess} onChange={(e) => setExcess(decimal(e.target.value))} placeholder="0" className={fieldCls} />
-              </label>
-            </div>
+            {materials.length > 0 && (
+              <>
+                <div className={`${OUT_GRID} text-[12px] font-semibold text-muted-foreground`}>
+                  <span>Raw material</span>
+                  <span>Usable</span>
+                  <span>Waste</span>
+                  <span>Excess</span>
+                  <span>Unit</span>
+                  <span />
+                </div>
+                {outputs.map((o) => (
+                  <div key={o.key} className={`${OUT_GRID} items-center`}>
+                    <select
+                      value={o.materialId}
+                      onChange={(e) => patchOutput(o.key, { materialId: e.target.value, unit: rawMaterials.find((m) => m.id === e.target.value)?.unit || o.unit })}
+                      aria-label="Raw material"
+                      className={small}
+                    >
+                      <option value="">Pick one</option>
+                      <optgroup label="Raw materials">
+                        {materials.filter((m) => groupOf(m) === "ingredient").map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Packaging (boxes, jars…)">
+                        {materials.filter((m) => groupOf(m) === "supply").map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    </select>
+                    {(["usable", "waste", "excess"] as const).map((f) => (
+                      <input key={f} inputMode="decimal" value={o[f]} onChange={(e) => patchOutput(o.key, { [f]: decimal(e.target.value) })} placeholder="0" aria-label={f} className={`${small} w-full min-w-0 text-right`} />
+                    ))}
+                    <select value={o.unit} onChange={(e) => patchOutput(o.key, { unit: e.target.value })} aria-label="Unit" className={small}>
+                      {[...new Set([o.unit, ...UNITS])].filter(Boolean).map((u) => (
+                        <option key={u} value={u}>
+                          {u}
+                        </option>
+                      ))}
+                    </select>
+                    <button type="button" onClick={() => setOutputs((rows) => (rows.length > 1 ? rows.filter((r) => r.key !== o.key) : rows))} aria-label="Remove" className="flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-danger">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <button type="button" onClick={() => setOutputs((rows) => [...rows, { key: key(), materialId: "", usable: "", waste: "", excess: "", unit: "kg" }])} className="flex min-h-9 w-fit items-center gap-1 text-[13px] font-semibold text-cacao">
+                    <Plus className="h-4 w-4" /> Add another raw material
+                  </button>
+                  {inputs.some((i) => i.materialId && !outputs.some((o) => o.materialId === i.materialId)) && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setOutputs((rows) => [
+                          ...rows.filter((o) => o.materialId || num(o.usable) || num(o.waste) || num(o.excess)),
+                          ...inputs
+                            .filter((i) => i.materialId && !rows.some((o) => o.materialId === i.materialId))
+                            .map((i) => ({ key: key(), materialId: i.materialId, usable: "", waste: "", excess: "", unit: i.unit })),
+                        ])
+                      }
+                      className="min-h-9 text-[13px] font-semibold text-cacao"
+                    >
+                      Same raw materials as above
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+            {(() => {
+              // A total per unit: kilos with kilos, pieces with pieces.
+              const units = [...new Set(outputs.filter((o) => num(o.usable) || num(o.waste) || num(o.excess)).map((o) => o.unit))];
+              if (units.length === 0) return null;
+              const part = (u: string) => {
+                const rows = outputs.filter((o) => o.unit === u);
+                const t = (f: "usable" | "waste" | "excess") => round(rows.reduce((n, o) => n + num(o[f]), 0));
+                return `${t("usable")} ${u} usable, ${t("waste")} wasted, ${t("excess")} excess`;
+              };
+              return <p className="text-[13px] font-semibold">Total: {units.map(part).join(" · ")}</p>;
+            })()}
             <p className="text-[12.5px] text-muted-foreground">
               Waste is what was lost (shells, burnt bits). Excess is what was made but not packed — powder, tablea, brandy or ice cream left over — and counts as waste.
               {yieldPct !== null && <span className="font-semibold text-foreground"> {yieldPct}% usable.</span>}
@@ -292,7 +389,7 @@ export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onC
           <Section title="3 · Tablea pellets">
             <label className={labelCls}>
               Pellets made ({firstUnit})
-              <input inputMode="decimal" value={pellets ?? usable} onChange={(e) => setPellets(decimal(e.target.value))} placeholder="0" className={fieldCls} />
+              <input inputMode="decimal" value={pellets ?? (usableTotal ? String(usableTotal) : "")} onChange={(e) => setPellets(decimal(e.target.value))} placeholder="0" className={fieldCls} />
             </label>
           </Section>
 

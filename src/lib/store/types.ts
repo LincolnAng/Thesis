@@ -594,10 +594,21 @@ export interface ProductionRun {
   createdAt: string;
   /** Every raw material (or packaging) put in, each with its own amount and unit. */
   inputs?: RunInput[] | null;
+  /** What came of each raw material: usable, wasted, and excess. Totals are in usableQty etc. */
+  outputs?: RunOutput[] | null;
   /** Lost in the making — shells, burnt bits. */
   wasteQty?: number;
   /** Made but not packed — powder, pellets, brandy or ice cream left over. Counted as waste. */
   excessQty?: number;
+}
+
+/** What one raw material in a production run came to. */
+export interface RunOutput {
+  materialId: string;
+  usable: number;
+  waste: number;
+  excess: number;
+  unit: string;
 }
 
 /** One raw material put into a production run. */

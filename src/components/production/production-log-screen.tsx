@@ -213,8 +213,17 @@ function RunTable({ runs, canChange, onEdit }: { runs: ProductionRun[]; canChang
                   ))}
                   {!r.inputs?.length && !(r.rawQty > 0) && <span className="block text-center text-muted-foreground">—</span>}
                 </td>
-                <td className={td}>
-                  {r.usableQty > 0 ? (
+                <td className={r.outputs?.length ? `${td} text-left` : td}>
+                  {r.outputs?.length ? (
+                    r.outputs.map((o, k) => (
+                      <span key={k} className="flex justify-between gap-2">
+                        <span className="truncate">{rawMaterials.find((m) => m.id === o.materialId)?.name ?? "—"}</span>
+                        <span className="shrink-0 font-semibold tabular-nums">
+                          {o.usable} <span className="font-normal text-muted-foreground">{o.unit}</span>
+                        </span>
+                      </span>
+                    ))
+                  ) : r.usableQty > 0 ? (
                     <>
                       <span className="block font-semibold tabular-nums">
                         {r.usableQty} {u}
@@ -257,8 +266,20 @@ function RunTable({ runs, canChange, onEdit }: { runs: ProductionRun[]; canChang
                     </span>
                   )}
                 </td>
-                <td className={`${td} tabular-nums`}>
-                  {(r.wasteQty ?? 0) > 0 || (r.excessQty ?? 0) > 0 || r.leftoverQty > 0 ? (
+                <td className={r.outputs?.length ? `${td} text-left tabular-nums` : `${td} tabular-nums`}>
+                  {r.outputs?.some((o) => o.waste > 0 || o.excess > 0) ? (
+                    r.outputs
+                      .filter((o) => o.waste > 0 || o.excess > 0)
+                      .map((o, k) => (
+                        <span key={k} className="block">
+                          <span className="font-medium">{rawMaterials.find((m) => m.id === o.materialId)?.name ?? "—"}</span>
+                          <span className="text-muted-foreground">
+                            {" "}
+                            {[o.waste > 0 ? `${o.waste} ${o.unit} waste` : null, o.excess > 0 ? `${o.excess} ${o.unit} excess` : null].filter(Boolean).join(" · ")}
+                          </span>
+                        </span>
+                      ))
+                  ) : (r.wasteQty ?? 0) > 0 || (r.excessQty ?? 0) > 0 || r.leftoverQty > 0 ? (
                     <>
                       {(r.wasteQty ?? 0) > 0 && <span className="block">{r.wasteQty} {u} waste</span>}
                       {((r.excessQty ?? 0) > 0 || r.leftoverQty > 0) && <span className="block">{r.excessQty || r.leftoverQty} {u} excess</span>}
