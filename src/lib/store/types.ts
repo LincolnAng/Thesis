@@ -621,6 +621,24 @@ export interface RunInput {
   unit: string;
 }
 
+/**
+ * A task on Today at a glance crossed out for the day — by anyone, for everyone. Today's tasks
+ * are worked out from the records (lib/reminders), so this keeps only the crossing-out: which
+ * task, which day, and who. Un-crossing removes it.
+ */
+export interface TaskTick {
+  id: string;
+  /** The reminder's id — "payment:…", "alert:low:…", the same on every device. */
+  taskId: string;
+  /** "YYYY-MM-DD" in Manila — the day it was crossed out for. */
+  day: string;
+  /** The task as it read when crossed out, for whoever reads the sheet. */
+  title: string;
+  userId: string;
+  userName: string;
+  createdAt: string;
+}
+
 /** Stock moved from one branch to another — shipped to Manila, brought back to CDO. */
 export interface StockTransfer {
   id: string;

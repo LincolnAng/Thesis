@@ -80,5 +80,7 @@ export const SHARED_TABS: Record<string, string[]> = {
     "id", "at", "userId", "userName", "action", "deletedAt", "collection", "op", "entityId", "before", "undoneAt",
     // Chat
     "role", "kind", "createdAt", "payload",
+    // Task done (Today at a glance, crossed out by anyone)
+    "taskId", "day", "title",
   ],
 };

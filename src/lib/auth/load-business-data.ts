@@ -14,6 +14,7 @@ import { calendarItemsCollection } from "@/lib/sheets/calendar-items";
 import { stockTransfersCollection } from "@/lib/sheets/stock-transfers";
 import { tingiCollection } from "@/lib/sheets/tingi";
 import { productionRunsCollection } from "@/lib/sheets/production";
+import { taskTicksCollection } from "@/lib/sheets/task-ticks";
 import { redactForEmployee, visibleCalendarItems, type BusinessData } from "@/lib/auth/permissions";
 import { assembleProduct, type ProductRow } from "@/lib/store/sheet-shapes";
 import { effectiveProductPrice, productCostPerJar, type CostContext } from "@/lib/summary/recipe-cost";
@@ -28,7 +29,7 @@ import type { Role } from "@/lib/store/types";
  * Returns null when the session's profile no longer exists (deleted on another device).
  */
 export async function loadBusinessDataFor(session: Session): Promise<{ role: Role; data: BusinessData } | null> {
-  const [entries, products, recipes, rawMaterials, suppliers, supplierPriceHistory, budgets, events, eventStock, machines, supplierPrices, businessSettings, users, activity, staff, timeRecords, payroll, calendarItems, stockTransfers, tingi, productionRuns] =
+  const [entries, products, recipes, rawMaterials, suppliers, supplierPriceHistory, budgets, events, eventStock, machines, supplierPrices, businessSettings, users, activity, staff, timeRecords, payroll, calendarItems, stockTransfers, tingi, productionRuns, taskTicks] =
     await Promise.all([
       entriesCollection.getAll(),
       productsCollection.getAll(),
@@ -51,6 +52,7 @@ export async function loadBusinessDataFor(session: Session): Promise<{ role: Rol
       stockTransfersCollection.getAll(),
       tingiCollection.getAll(),
       productionRunsCollection.getAll(),
+      taskTicksCollection.getAll(),
     ]);
 
   // The cookie says who signed in; the sheet says who they are now. A deleted profile is
@@ -81,6 +83,8 @@ export async function loadBusinessDataFor(session: Session): Promise<{ role: Rol
     stockTransfers,
     tingi,
     productionRuns,
+    // A task is crossed out for a day; only the last fortnight matters to anyone's screen.
+    taskTicks: taskTicks.filter((t) => t.day >= new Date(Date.now() - 14 * 864e5).toLocaleDateString("en-CA", { timeZone: "Asia/Manila" })),
   };
   if (me.role === "executive") return { role: me.role, data };
 

@@ -16,6 +16,7 @@ import { calendarItemsCollection } from "@/lib/sheets/calendar-items";
 import { stockTransfersCollection } from "@/lib/sheets/stock-transfers";
 import { tingiCollection } from "@/lib/sheets/tingi";
 import { productionRunsCollection } from "@/lib/sheets/production";
+import { taskTicksCollection } from "@/lib/sheets/task-ticks";
 import type { SheetCollection } from "@/lib/sheets/collection";
 import { requireSession } from "@/lib/auth/session";
 import { decideWrite, needsExistingRow } from "@/lib/auth/permissions";
@@ -43,6 +44,7 @@ const COLLECTIONS = {
   stockTransfers: stockTransfersCollection,
   tingi: tingiCollection,
   productionRuns: productionRunsCollection,
+  taskTicks: taskTicksCollection,
 } as const;
 
 type CollectionName = keyof typeof COLLECTIONS;

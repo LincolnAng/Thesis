@@ -1,4 +1,4 @@
-import type { ActivityEvent, CalendarItem, Entry, EntryType, PayrollRecord, RawMaterialStock, Role, StaffMember, StockTransfer, TimeRecord, TingiMove, ProductionRun } from "@/lib/store/types";
+import type { ActivityEvent, CalendarItem, Entry, EntryType, PayrollRecord, RawMaterialStock, Role, StaffMember, StockTransfer, TimeRecord, TingiMove, ProductionRun, TaskTick } from "@/lib/store/types";
 import type { ProductRow, RecipeRow } from "@/lib/store/sheet-shapes";
 import { entryIntegrityProblem } from "@/lib/transactions/ledger";
 import { daysIn, periodFor } from "@/lib/payroll/pay";
@@ -38,7 +38,8 @@ export type CollectionName =
   | "calendarItems"
   | "stockTransfers"
   | "tingi"
-  | "productionRuns";
+  | "productionRuns"
+  | "taskTicks";
 
 export type WriteOp = "append" | "update" | "delete" | "migrate";
 
@@ -136,6 +137,8 @@ export interface BusinessData {
   stockTransfers: StockTransfer[];
   tingi: TingiMove[];
   productionRuns: ProductionRun[];
+  /** Today at a glance's crossed-out tasks, recent days only (see loadBusinessDataFor). */
+  taskTicks: TaskTick[];
 }
 
 /**
@@ -325,6 +328,11 @@ export function decideWrite(req: WriteRequest): WriteDecision {
     case "payroll":
       // The Admin records and takes back salary payments; anyone else, no.
       return req.role === "admin" && (op === "append" || op === "delete") ? { allow: true } : deny("forbidden");
+    case "taskTicks":
+      // Today at a glance is the whole company's list: anyone crosses a task out or back in.
+      // Who did it is stamped here, whatever the browser sent.
+      if (op === "append" && item) return { allow: true, item: { ...item, userId: req.user.id, userName: req.user.name } };
+      return op === "delete" ? { allow: true } : deny("forbidden");
     case "machines":
       // The equipment the plan runs on — what each machine makes and how fast. No costs in it,
       // and the people who run the machines are the ones who set them up.

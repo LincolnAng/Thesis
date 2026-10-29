@@ -45,6 +45,7 @@ function sample(): BusinessData {
     stockTransfers: [],
     tingi: [],
     productionRuns: [],
+    taskTicks: [],
     payroll: [{ id: "pay1", staffId: "st1", kind: "regular", periodStart: "2026-10-01", periodEnd: "2026-10-15", basic: 12500, overtime: 0, deductions: 0, deductionNote: "", net: 12500, paidOn: "2026-10-15", entryId: null, createdAt: "", sss: 0, philhealth: 0, pagibig: 0 }],
   };
 }
@@ -160,6 +161,16 @@ test("everyone sets up the production plan: machines, expiring-soon days, shelf 
     for (const key of ["hourly_labor_rate", "salesTargetMonthly", "branchPrice:p1:mnl", "branchFreight:p1:mnl", "cacaoUtilizationPct"]) {
       assert.equal(decideWrite({ role, user: me, collection: "businessSettings", op: "update", item: { key } }).allow, false, `${role} ${key}`);
     }
+  }
+});
+
+test("anyone crosses a task out on Today at a glance, or back in — stamped with who did it", () => {
+  for (const role of ["employee", "admin"] as const) {
+    const add = decideWrite({ role, user: me, collection: "taskTicks", op: "append", item: { id: "t", taskId: "payment:e1", day: "2026-10-29", userName: "Someone else" } });
+    assert.equal(add.allow, true);
+    assert.equal(add.allow && add.item?.userName, me.name);
+    assert.equal(decideWrite({ role, user: me, collection: "taskTicks", op: "delete", existing: { id: "t" } }).allow, true);
+    assert.equal(decideWrite({ role, user: me, collection: "taskTicks", op: "update", item: { id: "t" }, existing: { id: "t" } }).allow, false);
   }
 });
 

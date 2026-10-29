@@ -47,6 +47,7 @@ import type {
   StockTransfer,
   TingiMove,
   ProductionRun,
+  TaskTick,
 } from "./types";
 
 export interface StoreState {
@@ -73,6 +74,8 @@ export interface StoreState {
   tingi: TingiMove[];
   /** Production runs; what they leave over goes into tingi. */
   productionRuns: ProductionRun[];
+  /** Today at a glance's crossed-out tasks — the whole company's, recent days only. */
+  taskTicks: TaskTick[];
   /** Business-level numbers the owner sets once — hourly labor rate today. */
   businessSettings: Record<string, string>;
   tokenUsage: TokenUsage;
@@ -129,6 +132,7 @@ function defaultState(): StoreState {
     stockTransfers: [],
     tingi: [],
     productionRuns: [],
+    taskTicks: [],
     businessSettings: {},
     tokenUsage: {
       totalInputTokens: 0,
@@ -323,6 +327,7 @@ const COLLECTION_NOUNS: Record<string, string> = {
   stockTransfers: "stock transfer",
   tingi: "tingi",
   productionRuns: "production run",
+  taskTicks: "task done",
 };
 
 const OP_VERBS: Record<string, string> = { append: "added", update: "changed", delete: "deleted" };
@@ -691,6 +696,7 @@ async function loadAllFromServer() {
         stockTransfers: Array.isArray(json.stockTransfers) ? mergePending(json.stockTransfers as StockTransfer[], prev.stockTransfers) : prev.stockTransfers,
         tingi: Array.isArray(json.tingi) ? mergePending(json.tingi as TingiMove[], prev.tingi) : prev.tingi,
         productionRuns: Array.isArray(json.productionRuns) ? mergePending(json.productionRuns as ProductionRun[], prev.productionRuns) : prev.productionRuns,
+        taskTicks: Array.isArray(json.taskTicks) ? mergePending(json.taskTicks as TaskTick[], prev.taskTicks) : prev.taskTicks,
         businessSettings: businessSettingRowsToRecord(businessSettingsMigration.items),
         loadedFromServer: true,
       };
@@ -1410,6 +1416,32 @@ async function saveSalaryRow(collection: "staff" | "timeRecords" | "payroll" | "
   // Once the server has it, the next poll will return it; until then keep showing ours.
   if (!ok) pendingSalaryIds.delete(item.id);
   return ok;
+}
+
+// --- Today at a glance -----------------------------------------------------------------------
+
+/**
+ * Crosses a task out for the day, for everyone, or puts it back. Who did it is stamped by the
+ * server. Kept out of the change log: the tick itself says who and when.
+ */
+export function setTaskDone(taskId: string, title: string, day: string, done: boolean) {
+  if (done) {
+    if (state.taskTicks.some((t) => t.taskId === taskId && t.day === day)) return;
+    const who = currentUser();
+    const tick: TaskTick = { id: genId("done"), taskId, day, title, userId: who?.id ?? "", userName: who?.name ?? "", createdAt: new Date().toISOString() };
+    pendingSalaryIds.add(tick.id);
+    setState((prev) => ({ ...prev, taskTicks: [...prev.taskTicks, tick] }));
+    void mirrorOp("taskTicks", "append", { item: tick }, true).then((ok) => {
+      if (!ok) pendingSalaryIds.delete(tick.id);
+    });
+    return;
+  }
+  const gone = state.taskTicks.filter((t) => t.taskId === taskId && t.day === day);
+  setState((prev) => ({ ...prev, taskTicks: prev.taskTicks.filter((t) => !(t.taskId === taskId && t.day === day)) }));
+  for (const t of gone) {
+    pendingSalaryIds.delete(t.id);
+    void mirrorOp("taskTicks", "delete", { id: t.id }, true);
+  }
 }
 
 export function addStaff(input: Omit<StaffMember, "id" | "createdAt">): StaffMember {

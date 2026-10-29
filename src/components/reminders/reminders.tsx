@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
 import { CalendarDays, Check, ChevronRight, Clock, Factory, HandCoins, ListChecks, PackageX, PartyPopper, ShoppingCart, TrendingDown, UsersRound, Wallet } from "lucide-react";
 import { useReminders } from "@/lib/reminders/use-reminders";
 import { GROUP_LABELS, GROUP_ORDER, STOCK_GROUPS, groupOf, type Reminder, type ReminderGroup } from "@/lib/reminders/reminders";
 import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
-import { updateCalendarItem } from "@/lib/store/store";
+import { setTaskDone, updateCalendarItem } from "@/lib/store/store";
+import { manilaToday } from "@/lib/payroll/pay";
 import { useStore } from "@/lib/store/use-store";
 import { formatPeso } from "@/lib/format";
 import { dayKey } from "@/lib/home/today";
@@ -19,9 +19,10 @@ import { dayKey } from "@/lib/home/today";
  * Calendar and every tab behind it, so it's personal: each person sees their own calendar items
  * and what was shared with them, and a task disappears once it's dealt with.
  *
- * Ticking one of your own calendar items marks it done for real. Ticking anything else only
- * crosses it off on this device, for today — paying, collecting or restocking is still done on
- * its own tab, which the arrow opens.
+ * It's the whole company's list: ticking a task crosses it out for today for everyone, on every
+ * device, with who did it — saved in the sheet (Logs → "Task done"). Ticking one of your own
+ * calendar items marks the item itself done. Crossing out doesn't do the task: paying,
+ * collecting or restocking is still done on its own tab, which the arrow opens.
  */
 
 const GROUP_ICON: Record<ReminderGroup, React.ReactNode> = {
@@ -37,46 +38,12 @@ const GROUP_ICON: Record<ReminderGroup, React.ReactNode> = {
   stock: <PackageX className="h-3.5 w-3.5" />,
 };
 
-const TICKED_KEY = "mangkiko.home.ticked";
-
-function todayKey(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
-}
-
-/** Crossed-off tasks for today, kept on this device only. */
-function useTicked(): [Set<string>, (id: string) => void] {
-  const [ticked, setTicked] = useState<Set<string>>(new Set());
-  useEffect(() => {
-    try {
-      const raw = JSON.parse(window.localStorage.getItem(TICKED_KEY) ?? "null");
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- reading this device's storage after mount
-      if (raw && raw.day === todayKey() && Array.isArray(raw.ids)) setTicked(new Set(raw.ids));
-    } catch {
-      // storage unavailable — start with nothing ticked
-    }
-  }, []);
-  const toggle = (id: string) =>
-    setTicked((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      try {
-        window.localStorage.setItem(TICKED_KEY, JSON.stringify({ day: todayKey(), ids: [...next] }));
-      } catch {
-        // fine — it just won't be remembered
-      }
-      return next;
-    });
-  return [ticked, toggle];
-}
-
 const dayLabel = (iso: string) => {
   const [y, m, d] = iso.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString("en-PH", { weekday: "short", month: "short", day: "numeric" });
 };
 
-function Task({ r, done, onTick }: { r: Reminder; done: boolean; onTick: () => void }) {
+function Task({ r, done, by, onTick }: { r: Reminder; done: boolean; by?: string; onTick: () => void }) {
   const urgent = !done && r.tone === "bad";
   return (
     <li className="flex min-h-12 items-center gap-2.5 border-b border-line/10 py-1.5 last:border-0">
@@ -95,6 +62,7 @@ function Task({ r, done, onTick }: { r: Reminder; done: boolean; onTick: () => v
       <span className="min-w-0 flex-1">
         <span className={`block text-[15px] font-semibold leading-snug ${done ? "text-muted-foreground line-through" : urgent ? "text-danger" : "text-foreground"}`}>{r.title}</span>
         {r.detail && !done && <span className={`block text-[12.5px] ${urgent ? "text-danger/80" : "text-muted-foreground"}`}>{r.detail}</span>}
+        {done && by && <span className="block text-[12px] text-success">Done by {by}</span>}
       </span>
       {r.href && (
         <Link href={r.href} aria-label={`Open: ${r.title}`} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary">
@@ -112,18 +80,20 @@ function Heading({ icon, children }: { icon?: React.ReactNode; children: React.R
 /** Today at a glance — the task list on Home. */
 export function TodayTasks() {
   const { today, upcoming } = useReminders();
-  const [ticked, toggle] = useTicked();
-  const { entries, calendarItems } = useStore();
+  const { entries, calendarItems, taskTicks } = useStore();
   const me = useCurrentUser();
   const exec = isExecutive(me);
 
-  // One's own calendar items are ticked off for real; anything else, on this device for today.
+  // One's own calendar items are ticked off for real; anything else is crossed out for today,
+  // for everyone (the same day everywhere: Manila's).
+  const day = manilaToday();
   const mine = (r: Reminder) => (r.itemId ? calendarItems.find((c) => c.id === r.itemId && c.ownerId === me?.id) : undefined);
-  const isDone = (r: Reminder) => ticked.has(r.id);
+  const tickOf = (r: Reminder) => taskTicks.find((t) => t.taskId === r.id && t.day === day);
+  const isDone = (r: Reminder) => Boolean(tickOf(r));
   const tick = (r: Reminder) => {
     const own = mine(r);
     if (own) updateCalendarItem(own.id, { done: !own.done });
-    else toggle(r.id);
+    else setTaskDone(r.id, r.title, day, !isDone(r));
   };
 
   // Not-done first; ticked ones sink to the bottom of their group.
@@ -156,7 +126,7 @@ export function TodayTasks() {
             <Heading icon={GROUP_ICON[g]}>{GROUP_LABELS[g]}</Heading>
             <ul>
               {items.map((r) => (
-                <Task key={r.id} r={r} done={isDone(r)} onTick={() => tick(r)} />
+                <Task key={r.id} r={r} done={isDone(r)} by={tickOf(r)?.userName} onTick={() => tick(r)} />
               ))}
             </ul>
           </div>
