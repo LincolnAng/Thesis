@@ -227,6 +227,8 @@ export function TransactionDialog({
   const kinds: Kind[] = exec ? ["sale", "expense", "investment", "spoilage", "waste"] : ["sale", "expense", "spoilage", "waste"];
   const owedKind = kind === "sale" || kind === "expense" || (kind === "investment" && invKind === "asset");
   const showPayment = exec && (owedKind || (kind === "investment" && invKind === "capital"));
+  // Everyone records how a sale or expense was paid; terms and debts stay with Executives.
+  const showMethodOnly = !exec && (kind === "sale" || kind === "expense");
 
   // --- products --------------------------------------------------------------------------
   const priceOf = (p: Product, type: Exclude<PriceType, null>, at: string = branch) => {
@@ -387,7 +389,7 @@ export function TransactionDialog({
       if (!lostMaterial) return "Pick the raw material or packaging that was lost.";
       if (!(num(lostQty) > 0)) return "How much was lost?";
     }
-    if (showPayment && method === "bank_transfer" && !bank.trim()) return "Which bank? Pick or type the bank name.";
+    if ((showPayment || showMethodOnly) && method === "bank_transfer" && !bank.trim()) return "Which bank? Pick or type the bank name.";
     if (showPayment && when === "later" && owedKind && schedule === "installments") {
       if (!(Number(instCount) >= 1 && Number(instCount) <= 240)) return "How many payments? Between 1 and 240.";
       if (!firstDue) return "When is the first payment due?";
@@ -479,8 +481,12 @@ export function TransactionDialog({
     }
 
     if (!showPayment) {
-      // Employees never see payment terms; the server keeps the real ones on an edit.
-      if (!exec) return d;
+      // Employees and the Admin record how it was paid — on the spot; payment terms are an
+      // Executive's, and the server keeps the real ones on an edit.
+      if (!exec) {
+        if (showMethodOnly) Object.assign(d, { paymentMethod: method, bankName: namesProvider(method) ? bank.trim() || null : null });
+        return d;
+      }
       Object.assign(d, { paymentTerm: null, dueDate: null, amountPaid: null, paymentStatus: null, settledAt: null, paymentMethod: null, bankName: null, payments: null });
       return d;
     }
@@ -928,6 +934,18 @@ export function TransactionDialog({
                 </p>
               )}
             </div>
+          )}
+
+          {/* How it was paid — everyone */}
+          {showMethodOnly && (
+            <fieldset className="flex flex-col gap-3 rounded-xl border border-line/15 p-3.5">
+              <legend className="px-1 text-[13px] font-semibold">Mode of payment</legend>
+              <div className="flex flex-col gap-1">
+                <span className={label}>Paid by</span>
+                {methodPicker(method, setMethod)}
+              </div>
+              {providerPicker(method, bank, setBank)}
+            </fieldset>
           )}
 
           {/* Payment */}

@@ -89,8 +89,8 @@ function dueLine(e: Entry): string {
  * How the money actually moved: cash, or a bank transfer and which bank. A receivable or payable
  * lists each way its payments came in (nothing until one has); anything else, how it was paid.
  */
-function paidBy(e: Entry, showPayment: boolean): { method: string; bank: string | null; planned?: boolean }[] {
-  if (!showPayment || !hasPayment(e)) return [];
+function paidBy(e: Entry, showMethod: boolean): { method: string; bank: string | null; planned?: boolean }[] {
+  if (!showMethod || !hasPayment(e)) return [];
   if (obligationKind(e)) {
     const seen = new Map<string, { method: string; bank: string | null; planned?: boolean }>();
     for (const p of paymentsOf(e)) if (p.method) seen.set(`${p.method}|${p.bankName ?? ""}`, { method: p.method, bank: p.bankName ?? null });
@@ -153,7 +153,7 @@ const priceTypeOf = (e: Entry) => (e.type === "SALE" && e.priceType && e.priceTy
 
 /** Whether there is anything under an order that its rows don't already show. */
 const hasDetails = (e: Entry, showPayment: boolean) =>
-  (e.lineItems?.length ?? 0) > 1 || priceTypeOf(e) !== null || Boolean(e.notes) || (showPayment && hasPayment(e) && (obligationKind(e) !== null || methodOf(e).method !== null));
+  (e.lineItems?.length ?? 0) > 1 || priceTypeOf(e) !== null || Boolean(e.notes) || (hasPayment(e) && ((showPayment && obligationKind(e) !== null) || methodOf(e).method !== null));
 
 /** A titled block in an opened row. */
 function Block({ title, aside, children }: { title: string; aside?: React.ReactNode; children: React.ReactNode }) {
@@ -197,7 +197,7 @@ function Details({
   const { products } = useStore();
   const items = productLines(e, products);
   const plan = kind && e.installments ? installmentSchedule(e) : [];
-  const spot = showPayment && !kind && hasPayment(e) ? methodOf(e) : null;
+  const spot = !kind && hasPayment(e) ? methodOf(e) : null;
   const button = "inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line/25 px-3 text-[13px] font-medium transition hover:border-cacao hover:text-cacao";
 
   return (
@@ -347,14 +347,17 @@ export interface OwedActions {
 export function TransactionTable({
   rows,
   showPayment,
+  showMethod = showPayment,
   onEdit,
   onDelete,
   carriedFrom,
   owed,
 }: {
   rows: Entry[];
-  /** Executives only — employees never see who owes what, or how anything was paid. */
+  /** Executives only — who owes what, and where each payment stands. */
   showPayment: boolean;
+  /** How each sale or expense was paid — everyone. */
+  showMethod?: boolean;
   onEdit: (entry: Entry) => void;
   /** Deletes a transaction, after asking. */
   onDelete?: (entry: Entry) => void;
@@ -386,11 +389,11 @@ export function TransactionTable({
   const rule = "border-r border-line/15 last:border-r-0";
   const th = `px-3 py-2.5 text-center text-[11px] font-bold uppercase leading-tight tracking-wide text-muted-foreground ${rule}`;
   const td = `px-3 py-3 text-center align-middle ${rule}`;
-  const colCount = showPayment ? 10 : 8;
+  const colCount = 8 + (showMethod ? 1 : 0) + (showPayment ? 1 : 0);
 
   // Product is kept narrow (long names are cut off, with the full name on hover); the columns
   // people read across — who, how much, how paid, who recorded it — get the room.
-  const widths = [108, 170, 96, 170, 56, 110, ...(showPayment ? [140, 168] : []), 150, showPayment ? 216 : 132];
+  const widths = [108, 170, 96, 170, 56, 110, ...(showMethod ? [140] : []), ...(showPayment ? [168] : []), 150, showPayment ? 216 : 132];
 
   const head = (label: string, key?: SortKey) => (
     <th scope="col" className={th}>
@@ -416,7 +419,7 @@ export function TransactionTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className={`w-full table-fixed border-collapse text-[13px] ${showPayment ? "min-w-[1384px]" : "min-w-[1010px]"}`}>
+      <table className={`w-full table-fixed border-collapse text-[13px] ${showPayment ? "min-w-[1384px]" : showMethod ? "min-w-[1150px]" : "min-w-[1010px]"}`}>
         <colgroup>
           {widths.map((w, i) => (
             <col key={i} style={w ? { width: w } : undefined} />
@@ -430,7 +433,7 @@ export function TransactionTable({
             {head("Product")}
             {head("Qty")}
             {head("Amount", "amount")}
-            {showPayment && head("Mode of payment")}
+            {showMethod && head("Mode of payment")}
             {showPayment && head("Status")}
             {head("Recorded by")}
             {head("Actions")}
@@ -489,9 +492,9 @@ export function TransactionTable({
                   <td className={`${td} whitespace-nowrap tabular-nums ${e.type === "WASTE" ? "text-muted-foreground" : "text-foreground"}`}>
                     {e.amount != null ? formatPeso(e.amount) : null}
                   </td>
-                  {showPayment && (
+                  {showMethod && (
                     <td className={td}>
-                      {paidBy(e, showPayment).map((m) => (
+                      {paidBy(e, showMethod).map((m) => (
                         <span key={`${m.method}${m.bank}`} className="block truncate leading-6" title={describePaymentMethod(m.method, m.bank)}>
                           {m.method === "bank_transfer" ? (m.bank ?? "Bank transfer") : describePaymentMethod(m.method, m.bank)}
                           {m.planned && <span className="block text-[11px] leading-4 text-muted-foreground">when paid</span>}

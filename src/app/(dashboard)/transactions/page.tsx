@@ -7,7 +7,7 @@ import { ArrowDownLeft, ArrowUpRight, CircleDollarSign, PackageX } from "lucide-
 import { isMaterialWaste } from "@/lib/transactions/waste";
 import { findProduct } from "@/lib/summary/product-match";
 import { fullName } from "@/lib/summary/product-sizes";
-import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
+import { isAdmin, isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 import { CarouselNav } from "@/components/ui/carousel-nav";
 import { Page } from "@/components/layout/page";
 import { BUTTON, toggleButton } from "@/components/ui/kit";
@@ -77,7 +77,10 @@ function monthLabel(key: string, style: "long" | "short" = "long") {
  */
 function TransactionsPageInner() {
   const { entries, categoryBudgets, businessSettings, products } = useStore();
-  const exec = isExecutive(useCurrentUser());
+  const me = useCurrentUser();
+  const exec = isExecutive(me);
+  // The Admin (Ruchel) sees the month's sales and expenses at the top; employees see no totals.
+  const admin = isAdmin(me);
   const searchParams = useSearchParams();
   // Arriving from a supplier's "See spending" link: show only what was paid to them.
   const supplierFilter = searchParams.get("supplier");
@@ -322,6 +325,12 @@ function TransactionsPageInner() {
               note={`${formatPeso(summary.spoiled)} products spoiled · ${formatPeso(summary.wasted)} materials wasted · ${periodName}`}
             />
           </section>
+        ) : admin ? (
+          <section className="grid grid-cols-1 gap-3 min-[600px]:grid-cols-2" aria-label="Sales and expenses">
+            <MoneyBox icon={<ArrowDownLeft className="h-5 w-5" />} label="Sales" value={summary.sales} tone="good" note={`Everything sold · ${periodName}`} />
+            {/* Everyday expenses only — salaries and investments aren't in the Admin's copy. */}
+            <MoneyBox icon={<ArrowUpRight className="h-5 w-5" />} label="Expenses" value={summary.expenses} tone="bad" note={`Everyday expenses · ${periodName}`} />
+          </section>
         ) : null /* Employees see no totals: what the company earns and spends stays with Executives. */}
 
         {exec && (
@@ -459,6 +468,7 @@ function TransactionsPageInner() {
           <TransactionTable
             rows={rows}
             showPayment={exec}
+            showMethod
             onEdit={setEditing}
             onDelete={(e) => deleteEntry(e.id)}
             carriedFrom={carriedFrom}
