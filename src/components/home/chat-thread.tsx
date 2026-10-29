@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { RotateCw, Sparkles } from "lucide-react";
+import { RotateCw, Sparkles, Square, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ChatMessage, ClarifyOption } from "@/lib/home/chat-types";
@@ -15,6 +15,30 @@ import { AdviceCard } from "@/components/home/advice-card";
 import { PromptGateCard } from "@/components/home/prompt-gate-card";
 import { FormOfferCard } from "@/components/home/form-offer-card";
 import { InlineText, RichText } from "@/components/home/rich-text";
+import { speak, stopSpeaking, useVoiceSupport } from "@/lib/home/use-voice";
+
+/** Reads one of BAi's replies aloud; tapped again, or another reply's, it stops. */
+function ListenButton({ id, text, playing, onPlaying }: { id: string; text: string; playing: boolean; onPlaying: (id: string | null) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (playing) {
+          stopSpeaking();
+          onPlaying(null);
+        } else {
+          onPlaying(id);
+          speak(text, () => onPlaying(null));
+        }
+      }}
+      aria-label={playing ? "Stop reading" : "Read this out loud"}
+      className="flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[12px] font-semibold text-muted-foreground transition hover:text-cacao"
+    >
+      {playing ? <Square className="h-3 w-3 fill-current" /> : <Volume2 className="h-3.5 w-3.5" />}
+      {playing ? "Stop" : "Listen"}
+    </button>
+  );
+}
 
 // A JSON-mode reply can't be streamed token by token, so there's no real progress to report —
 // this just makes the wait feel shorter than one motionless bubble does. Mounted only while a
@@ -98,6 +122,10 @@ export function ChatThread({
   isTyping?: boolean;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  /** The reply being read aloud, if any. */
+  const [speaking, setSpeaking] = useState<string | null>(null);
+  const voiceOut = useVoiceSupport().speak;
+  useEffect(() => stopSpeaking, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -140,6 +168,9 @@ export function ChatThread({
                     ))}
                   </ul>
                 </div>
+              )}
+              {m.role === "assistant" && voiceOut && !m.retryText && (
+                <ListenButton id={m.id} text={m.text} playing={speaking === m.id} onPlaying={(id) => setSpeaking((cur) => (id === null && cur !== m.id ? cur : id))} />
               )}
               {m.role === "assistant" && m.retryText && (
                 <Button size="sm" variant="secondary" className="h-7 gap-1" onClick={() => onRetry(m.retryText!)}>
