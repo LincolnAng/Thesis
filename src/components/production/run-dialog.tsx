@@ -1,27 +1,27 @@
 "use client";
 
 import { useState } from "react";
+import { Plus, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useStore } from "@/lib/store/use-store";
 import { addProductionRun, replaceProductionRun } from "@/lib/store/store";
 import { blankEntryDraft } from "@/lib/store/blank-draft";
 import { fullName } from "@/lib/summary/product-sizes";
 import { findProduct } from "@/lib/summary/product-match";
+import { resolveProduct } from "@/lib/ai/product-resolve";
 import { shelfLifeDays } from "@/lib/summary/business-config";
+import { groupOf } from "@/lib/summary/material-stock";
 import { MATERIAL_USE } from "@/lib/transactions/waste";
-import { TINGI, batchesOf, cacaoMaterials, cacaoPerUnit, tingiBalance } from "@/lib/production/runs";
-import { FinishedProducts, linePackaging, madeLines, type Made } from "@/components/production/finished-products";
-import { SearchSelect } from "@/components/ui/search-select";
-import { materialOptions } from "@/lib/summary/search-options";
-import { fieldCls, labelCls, packagingUsed } from "@/components/production/add-batch-dialog";
-import type { Entry, ProductionRun } from "@/lib/store/types";
+import { batchesOf, cacaoPerUnit } from "@/lib/production/runs";
+import { PackagingEditor, fieldCls, labelCls, packagingUsed, recipePackaging, type PackagingLine } from "@/components/production/add-batch-dialog";
+import type { Entry, Product, ProductionRun, RunInput } from "@/lib/store/types";
 
 const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const num = (s: string) => Number(s) || 0;
 const round = (n: number) => Math.round(n * 1000) / 1000;
 const decimal = (v: string) => v.replace(/[^0-9.]/g, "");
-const text = (n: number) => (n ? String(n) : "");
-
+const text = (n: number | undefined) => (n ? String(n) : "");
+const UNITS = ["kg", "g", "L", "mL", "pcs", "packs", "boxes", "sacks"];
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -32,231 +32,300 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+interface InputRow {
+  key: string;
+  materialId: string;
+  qty: string;
+  unit: string;
+}
+
+interface MadeRow {
+  key: string;
+  /** Typed; matched to a product by name. */
+  name: string;
+  qty: string;
+  /** Null until changed by hand: then it follows the recipe for how many were made. */
+  packaging: PackagingLine[] | null;
+}
+
+let seq = 0;
+const key = () => `row-${++seq}`;
+
 /**
- * Log production: one batch, start to finish — its name, the raw material put in (cacao into
- * the roaster), what was usable from it, the tablea pellets made from that, and the finished
- * products made from the pellets. The raw material comes off its shelf; the products go on
- * theirs (taking their other ingredients and packaging, but not the raw material again); and
- * the pellets left over go into the bucket.
+ * Log production: one batch, start to finish, under its lot ID —
  *
- * Given a run, it changes that run: the old one is taken back whole and this saved in its place.
+ *   1  Raw materials in   every raw material (or packaging, like boxes) put in: which, how much, the unit
+ *   2  Usable, waste, excess   what came out usable, what was lost, and what was made but not packed
+ *   3  Tablea pellets      made from the usable
+ *   4  Finished products   typed by name, how many, and the packaging each went into
+ *
+ * The raw materials come off their shelf; the products go on theirs (taking their packaging, but
+ * not the raw materials again). Waste and excess are recorded on the batch as waste — there's no
+ * leftover bucket (tingi) any more. Given a run, it changes that run: the old one is taken back
+ * whole and this saved in its place.
  */
 export function RunDialog({ existing, onClose }: { existing?: ProductionRun; onClose: () => void }) {
-  const { products, rawMaterials, entries, businessSettings, tingi } = useStore();
-  // What goes in is cacao — the raw cacao material(s) in Inventory.
-  const materials = cacaoMaterials(rawMaterials);
+  const { products, rawMaterials, entries, businessSettings } = useStore();
   const today = new Date();
   const madeToday = entries.filter((e) => e.type === "INVENTORY_IN" && e.timestamp.slice(0, 10) === isoDay(today)).length;
+  // Ingredients first, then packaging (boxes, jars) — anything can go in.
+  const materials = [...rawMaterials.filter((m) => groupOf(m) === "ingredient"), ...rawMaterials.filter((m) => groupOf(m) === "supply")];
+  const productNames = products.map((p) => fullName(p, products));
 
-  const [name, setName] = useState(existing?.name ?? "");
   const [date, setDate] = useState(existing?.date ?? isoDay(today));
-  const [lotId, setLotId] = useState(existing?.lotId ?? `LOT-${isoDay(today).replace(/-/g, "")}-${madeToday + 1}`);
-  const [materialId, setMaterialId] = useState(existing?.materialId || materials[0]?.id || "");
-  const material = materials.find((m) => m.id === materialId);
-  const unit = material?.unit || "kg";
-  const [raw, setRaw] = useState(text(existing?.rawQty ?? 0));
-  const [usable, setUsable] = useState(text(existing?.usableQty ?? 0));
-  // Null until typed: then it follows what was usable, which is usually all of it.
+  const [lotId, setLotId] = useState(existing?.lotId || existing?.name || "");
+  const suggestedLot = `LOT-${date.replace(/-/g, "")}-${madeToday + 1}`;
+  const [inputs, setInputs] = useState<InputRow[]>(() => {
+    const saved: RunInput[] = existing?.inputs?.length ? existing.inputs : existing && existing.rawQty > 0 ? [{ materialId: existing.materialId, qty: existing.rawQty, unit: existing.unit }] : [];
+    const rows = saved.map((i) => ({ key: key(), materialId: i.materialId, qty: text(i.qty), unit: i.unit || "kg" }));
+    return rows.length ? rows : [{ key: key(), materialId: materials[0]?.id ?? "", qty: "", unit: materials[0]?.unit || "kg" }];
+  });
+  const firstUnit = inputs.find((i) => num(i.qty) > 0)?.unit ?? inputs[0]?.unit ?? "kg";
+  const [usable, setUsable] = useState(text(existing?.usableQty));
+  const [waste, setWaste] = useState(text(existing?.wasteQty));
+  const [excess, setExcess] = useState(text(existing?.excessQty ?? existing?.leftoverQty));
   const [pellets, setPellets] = useState<string | null>(existing ? text(existing.pelletsQty) : null);
-  const [fromBucket, setFromBucket] = useState(text(existing?.fromBucketQty ?? 0));
-  const [made, setMade] = useState<Record<string, Made>>(() => {
-    const out: Record<string, Made> = {};
+  const [made, setMade] = useState<MadeRow[]>(() => {
+    const rows: MadeRow[] = [];
     for (const b of existing ? batchesOf(entries, new Set([existing.id])) : []) {
       const p = findProduct(products, b.sku);
-      if (!p) continue;
       const packaging = (b.packagingUsed ?? []).filter((x) => rawMaterials.find((m) => m.id === x.materialId)?.kind === "packaging");
-      out[p.id] = { qty: (out[p.id]?.qty ?? 0) + (b.quantity ?? 0), packaging: packaging.map((x) => ({ materialId: x.materialId, qty: String(x.qty) })) };
+      rows.push({ key: key(), name: p ? fullName(p, products) : (b.sku ?? ""), qty: text(b.quantity ?? 0), packaging: packaging.map((x) => ({ materialId: x.materialId, qty: String(x.qty) })) });
     }
-    return out;
+    return rows.length ? rows : [{ key: key(), name: "", qty: "", packaging: null }];
   });
-  const [into, setInto] = useState<string | null>(existing ? text(existing.intoProductsQty) : null);
   const [notes, setNotes] = useState(existing?.notes ?? "");
   const [error, setError] = useState<string | null>(null);
 
-  // When changing a run, what it took from and put into tingi goes back first.
-  const otherMoves = existing ? tingi.filter((m) => m.runId !== existing.id) : tingi;
-  const inBucket = tingiBalance(otherMoves);
-  const lines = madeLines(made, products);
-  const byRecipe = round(lines.reduce((t, l) => (material ? t + cacaoPerUnit(l.product, material.id) * l.qty : t), 0));
+  /** The product a typed name means: its full name, or a close match when there's only one. */
+  const productFor = (name: string): Product | undefined => {
+    const n = name.trim().toLowerCase();
+    if (!n) return undefined;
+    const exact = products.find((p) => fullName(p, products).toLowerCase() === n);
+    if (exact) return exact;
+    const r = resolveProduct(products, name);
+    return r.kind === "one" ? r.product : undefined;
+  };
+  const madeLines = made.filter((m) => m.name.trim() && num(m.qty) > 0).map((m) => ({ row: m, product: productFor(m.name), qty: num(m.qty) }));
+  const packagingOf = (l: (typeof madeLines)[number]) => l.row.packaging ?? recipePackaging(l.product, l.qty, rawMaterials);
+
+  const rawTotal = round(inputs.filter((i) => i.unit === firstUnit).reduce((t, i) => t + num(i.qty), 0));
   const pelletsQty = pellets === null ? num(usable) : num(pellets);
-  const available = round(pelletsQty + num(fromBucket));
-  const intoQty = into === null ? Math.min(byRecipe, available) : num(into);
-  const leftover = round(available - intoQty);
-  const yieldPct = num(raw) > 0 && num(usable) > 0 ? Math.round((num(usable) / num(raw)) * 100) : null;
+  const cacaoInput = inputs.find((i) => num(i.qty) > 0);
+  const byRecipe = round(madeLines.reduce((t, l) => (l.product && cacaoInput ? t + cacaoPerUnit(l.product, cacaoInput.materialId) * l.qty : t), 0));
+  const accounted = round(num(usable) + num(waste) + num(excess));
+  const yieldPct = rawTotal > 0 && num(usable) > 0 ? Math.round((num(usable) / rawTotal) * 100) : null;
 
   function save() {
-    if (!name.trim()) return setError("Give the batch a name.");
-    if (!(num(raw) > 0) && !(num(fromBucket) > 0) && lines.length === 0) return setError("Fill in the cacao, or what was made.");
-    if (num(raw) > 0 && !(num(usable) > 0)) return setError("How much usable cacao came out?");
-    if (num(usable) > 0 && !(num(raw) > 0)) return setError("How much cacao went in?");
-    if (num(usable) > num(raw)) return setError("More usable than raw went in — check the two amounts.");
-    if (pelletsQty > num(usable) + 1e-9) return setError("More tablea pellets than usable cacao — check the two amounts.");
-    if (num(fromBucket) > inBucket) return setError(`Only ${inBucket} ${unit} in that tingi.`);
-    if (intoQty > available + 1e-9) return setError(`Only ${available} ${unit} of pellets to work with — what was made plus what came from tingi.`);
-    if (lines.length > 0 && byRecipe > 0 && available <= 0) {
-      return setError("How many pellets went in? Fill in the cacao, or take some from tingi.");
-    }
-    if (!lotId.trim()) return setError("Give it a lot number.");
-    if (num(raw) > 0 && !material) return setError("Add your cacao under Inventory first.");
+    const lot = (lotId.trim() || suggestedLot).trim();
+    const filled = inputs.filter((i) => i.materialId && num(i.qty) > 0);
+    if (filled.length === 0 && madeLines.length === 0) return setError("Fill in the raw materials that went in, or what was made.");
+    if (inputs.some((i) => num(i.qty) > 0 && !i.materialId)) return setError("Pick which raw material each amount is.");
+    const unknown = madeLines.find((l) => !l.product);
+    if (unknown) return setError(`No product called “${unknown.row.name.trim()}” — check the name, or add it in Costing first.`);
+    if (pelletsQty > num(usable) + 1e-9 && num(usable) > 0) return setError("More tablea pellets than usable — check the two amounts.");
 
     // The time of day now, on the day picked — so a run logged late still sorts by when it was made.
     const stamp = new Date(`${date}T${today.toTimeString().slice(0, 8)}`).toISOString();
-    const lot = lotId.trim();
-    const batchName = name.trim();
-    const usesMaterial = !!material && (num(raw) > 0 || num(fromBucket) > 0);
     const out: Omit<Entry, "id" | "runId">[] = [];
-    if (num(raw) > 0 && material) {
+    for (const i of filled) {
+      const m = rawMaterials.find((x) => x.id === i.materialId)!;
       out.push({
-        ...blankEntryDraft("INVENTORY_OUT", `${batchName}: ${num(raw)} ${unit} of ${material.name} in → ${num(usable)} ${unit} usable → ${pelletsQty} ${unit} tablea pellets · lot ${lot}`),
+        ...blankEntryDraft("INVENTORY_OUT", `Lot ${lot}: ${num(i.qty)} ${i.unit} of ${m.name} in`),
         timestamp: stamp,
-        sku: material.name,
-        quantity: num(raw),
-        unit,
+        sku: m.name,
+        quantity: num(i.qty),
+        unit: i.unit,
         category: MATERIAL_USE,
         lotId: lot,
       });
     }
-    for (const l of lines) {
-      const p = l.product;
+    for (const l of madeLines) {
+      const p = l.product!;
       const u = p.unit || "jars";
       const expires = new Date(`${date}T00:00:00`);
       expires.setDate(expires.getDate() + shelfLifeDays(businessSettings, p.id));
       out.push({
-        ...blankEntryDraft("INVENTORY_IN", `${batchName}: made ${l.qty} ${u} of ${fullName(p, products)} · lot ${lot}`),
+        ...blankEntryDraft("INVENTORY_IN", `Lot ${lot}: made ${l.qty} ${u} of ${fullName(p, products)}`),
         timestamp: stamp,
         sku: p.name,
         quantity: l.qty,
         unit: u,
         lotId: lot,
         expiresOn: isoDay(expires),
-        // The raw material is named with 0: this run's own stock-out already took it.
-        packagingUsed: [...packagingUsed(linePackaging(l, rawMaterials)), ...(usesMaterial ? [{ materialId: material!.id, qty: 0 }] : [])],
+        // The raw materials are named with 0: this run's own stock-outs already took them.
+        packagingUsed: [...packagingUsed(packagingOf(l)), ...filled.map((i) => ({ materialId: i.materialId, qty: 0 }))],
       });
     }
-    const moves = [];
-    if (num(fromBucket) > 0) {
-      moves.push({ productId: TINGI.id, direction: "out" as const, qty: num(fromBucket), unit, date, lotId: lot, usedForProductId: null, note: `Used in ${batchName} · lot ${lot}` });
-    }
-    if (leftover > 0) {
-      moves.push({ productId: TINGI.id, direction: "in" as const, qty: leftover, unit, date, lotId: lot, usedForProductId: null, note: `Left over from ${batchName} · lot ${lot}` });
-    }
+    const first = filled[0];
     const run = {
-      name: batchName,
+      // The lot ID is the batch's name.
+      name: lot,
       date,
       lotId: lot,
-      materialId: material?.id ?? "",
-      unit,
-      rawQty: num(raw),
+      materialId: first?.materialId ?? "",
+      unit: first?.unit ?? firstUnit,
+      rawQty: rawTotal,
       usableQty: num(usable),
       pelletsQty: round(pelletsQty),
-      fromBucketQty: num(fromBucket),
-      intoProductsQty: round(intoQty),
-      leftoverQty: Math.max(0, leftover),
-      made: lines.map((l) => `${fullName(l.product, products)} × ${l.qty}`).join("; "),
+      fromBucketQty: 0,
+      intoProductsQty: byRecipe,
+      leftoverQty: 0,
+      made: madeLines.map((l) => `${fullName(l.product!, products)} × ${l.qty}`).join("; "),
       notes: notes.trim(),
+      inputs: filled.map((i) => ({ materialId: i.materialId, qty: num(i.qty), unit: i.unit })),
+      wasteQty: num(waste),
+      excessQty: num(excess),
     };
-    if (existing) replaceProductionRun(existing.id, run, out, moves);
-    else addProductionRun(run, out, moves);
+    if (existing) replaceProductionRun(existing.id, run, out, []);
+    else addProductionRun(run, out, []);
     onClose();
   }
 
+  const patchInput = (k: string, patch: Partial<InputRow>) => setInputs((rows) => rows.map((r) => (r.key === k ? { ...r, ...patch } : r)));
+  const patchMade = (k: string, patch: Partial<MadeRow>) => setMade((rows) => rows.map((r) => (r.key === k ? { ...r, ...patch } : r)));
+  const small = "h-11 rounded-lg border border-input bg-transparent px-2 text-[15px] outline-none focus:border-cacao";
+
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto rounded-2xl sm:max-w-lg">
+      <DialogContent className="max-h-[90vh] overflow-y-auto rounded-2xl sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{existing ? "Change production" : "Log production"}</DialogTitle>
-          <DialogDescription>Cacao in → usable cacao → tablea pellets → finished products. Pellets left over go into tingi.</DialogDescription>
+          <DialogDescription>Raw materials in → usable, waste and excess → tablea pellets → finished products.</DialogDescription>
         </DialogHeader>
+        <datalist id="run-products">
+          {productNames.map((n) => (
+            <option key={n} value={n} />
+          ))}
+        </datalist>
         <div className="flex flex-col gap-3">
-          <label className={labelCls}>
-            Batch name
-            <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Tablea for Ayala bazaar" className={fieldCls} />
-          </label>
           <div className="grid grid-cols-2 gap-3">
+            <label className={labelCls}>
+              Lot ID
+              <input autoFocus value={lotId} onChange={(e) => setLotId(e.target.value)} placeholder={suggestedLot} className={fieldCls} />
+            </label>
             <label className={labelCls}>
               Date
               <input type="date" value={date} max={isoDay(today)} onChange={(e) => setDate(e.target.value)} className={fieldCls} />
-            </label>
-            <label className={labelCls}>
-              Lot ID
-              <input value={lotId} onChange={(e) => setLotId(e.target.value)} className={fieldCls} />
             </label>
           </div>
 
           <Section title="1 · Raw materials in">
             {materials.length === 0 ? (
-              <p className="text-[13px] text-muted-foreground">No cacao set up yet — add it under Inventory (e.g. &quot;Cacao beans&quot;). You can still log what was made below.</p>
+              <p className="text-[13px] text-muted-foreground">No raw materials yet — add them in Costing → Raw materials. You can still log what was made below.</p>
             ) : (
-              <div className={materials.length > 1 ? "grid grid-cols-[1fr_7rem] gap-2" : ""}>
-                {/* Only when there's more than one kind of cacao to say which. */}
-                {materials.length > 1 && (
-                  <div className={labelCls}>
-                    Which cacao
-                    <SearchSelect value={materialId} onChange={setMaterialId} options={materialOptions(materials)} ariaLabel="Which cacao" />
-                  </div>
-                )}
-                <label className={labelCls}>
-                  Cacao ({unit})
-                  <input inputMode="decimal" value={raw} onChange={(e) => setRaw(decimal(e.target.value))} placeholder="e.g. 10" className={fieldCls} />
-                </label>
-              </div>
-            )}
-          </Section>
-
-          {materials.length > 0 && (
-            <Section title="2 · Usable Cacao">
-              <label className={labelCls}>
-                Usable cacao ({unit})
-                <input inputMode="decimal" value={usable} onChange={(e) => setUsable(decimal(e.target.value))} placeholder="e.g. 7" className={fieldCls} />
-              </label>
-              {yieldPct !== null && (
-                <p className="text-[13px]">
-                  <span className="font-semibold">{yieldPct}% usable</span>
-                  <span className="text-muted-foreground"> · {round(num(raw) - num(usable))} {unit} lost (roasting, shelling)</span>
-                </p>
-              )}
-            </Section>
-          )}
-
-          <Section title={materials.length > 0 ? "3 · Tablea pellets" : "Tablea pellets"}>
-            <label className={labelCls}>
-              Pellets made ({unit})
-              <input inputMode="decimal" value={pellets ?? usable} onChange={(e) => setPellets(decimal(e.target.value))} placeholder="e.g. 7" className={fieldCls} />
-            </label>
-            {num(usable) > 0 && pelletsQty < num(usable) && (
-              <p className="text-[13px] text-muted-foreground">
-                {round(num(usable) - pelletsQty)} {unit} of the usable cacao didn&apos;t become pellets
-              </p>
-            )}
-            {inBucket > 0 && (
-              <label className={labelCls}>
-                Also from tingi ({unit}) — {inBucket} in it
-                <input inputMode="decimal" value={fromBucket} onChange={(e) => setFromBucket(decimal(e.target.value))} placeholder="0" className={fieldCls} />
-              </label>
-            )}
-          </Section>
-
-          <Section title={materials.length > 0 ? "4 · Finished products made from the pellets" : "Finished products"}>
-            <FinishedProducts made={made} setMade={setMade} />
-          </Section>
-
-          <Section title="Tingi">
-            <div className="grid grid-cols-2 gap-3">
-              <label className={labelCls}>
-                Pellets that went in ({unit})
-                <input inputMode="decimal" value={into ?? (intoQty ? String(round(intoQty)) : "")} onChange={(e) => setInto(decimal(e.target.value))} placeholder="0" className={fieldCls} />
-              </label>
-              <div className={labelCls}>
-                Left over → tingi
-                <div className={`flex h-11 items-center rounded-lg bg-oat px-3 text-[17px] font-bold tabular-nums ${leftover < 0 ? "text-danger" : ""}`}>
-                  {Math.max(0, leftover)} {unit}
+              <>
+                <div className="grid grid-cols-[minmax(0,1fr)_90px_92px_40px] gap-2 text-[12px] font-semibold text-muted-foreground">
+                  <span>Raw material</span>
+                  <span>Quantity</span>
+                  <span>Unit</span>
+                  <span />
                 </div>
-              </div>
+                {inputs.map((i) => (
+                  <div key={i.key} className="grid grid-cols-[minmax(0,1fr)_90px_92px_40px] items-center gap-2">
+                    <select
+                      value={i.materialId}
+                      onChange={(e) => patchInput(i.key, { materialId: e.target.value, unit: rawMaterials.find((m) => m.id === e.target.value)?.unit || i.unit })}
+                      aria-label="Raw material"
+                      className={small}
+                    >
+                      <option value="">Pick one</option>
+                      <optgroup label="Raw materials">
+                        {materials.filter((m) => groupOf(m) === "ingredient").map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Packaging (boxes, jars…)">
+                        {materials.filter((m) => groupOf(m) === "supply").map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    </select>
+                    <input inputMode="decimal" value={i.qty} onChange={(e) => patchInput(i.key, { qty: decimal(e.target.value) })} placeholder="0" aria-label="Quantity" className={`${small} text-right`} />
+                    <select value={i.unit} onChange={(e) => patchInput(i.key, { unit: e.target.value })} aria-label="Unit" className={small}>
+                      {[...new Set([i.unit, ...UNITS])].filter(Boolean).map((u) => (
+                        <option key={u} value={u}>
+                          {u}
+                        </option>
+                      ))}
+                    </select>
+                    <button type="button" onClick={() => setInputs((rows) => (rows.length > 1 ? rows.filter((r) => r.key !== i.key) : rows))} aria-label="Remove" className="flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-danger">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+                <button type="button" onClick={() => setInputs((rows) => [...rows, { key: key(), materialId: "", qty: "", unit: "kg" }])} className="flex min-h-9 w-fit items-center gap-1 text-[13px] font-semibold text-cacao">
+                  <Plus className="h-4 w-4" /> Add another raw material
+                </button>
+              </>
+            )}
+          </Section>
+
+          <Section title="2 · Usable, waste and excess">
+            <div className="grid grid-cols-3 gap-2">
+              <label className={labelCls}>
+                Usable ({firstUnit})
+                <input inputMode="decimal" value={usable} onChange={(e) => setUsable(decimal(e.target.value))} placeholder="0" className={fieldCls} />
+              </label>
+              <label className={labelCls}>
+                Waste ({firstUnit})
+                <input inputMode="decimal" value={waste} onChange={(e) => setWaste(decimal(e.target.value))} placeholder="0" className={fieldCls} />
+              </label>
+              <label className={labelCls}>
+                Excess ({firstUnit})
+                <input inputMode="decimal" value={excess} onChange={(e) => setExcess(decimal(e.target.value))} placeholder="0" className={fieldCls} />
+              </label>
             </div>
             <p className="text-[12.5px] text-muted-foreground">
-              {available > 0 ? `${available} ${unit} of pellets to work with` : "No pellets yet"}
-              {byRecipe > 0 ? ` · the recipes call for ${byRecipe} ${unit}` : ""}
+              Waste is what was lost (shells, burnt bits). Excess is what was made but not packed — powder, tablea, brandy or ice cream left over — and counts as waste.
+              {yieldPct !== null && <span className="font-semibold text-foreground"> {yieldPct}% usable.</span>}
+              {rawTotal > 0 && accounted > 0 && Math.abs(accounted - rawTotal) > 1e-6 && (
+                <span> {accounted} of the {rawTotal} {firstUnit} put in are accounted for.</span>
+              )}
             </p>
+          </Section>
+
+          <Section title="3 · Tablea pellets">
+            <label className={labelCls}>
+              Pellets made ({firstUnit})
+              <input inputMode="decimal" value={pellets ?? usable} onChange={(e) => setPellets(decimal(e.target.value))} placeholder="0" className={fieldCls} />
+            </label>
+          </Section>
+
+          <Section title="4 · Finished products">
+            {made.map((m) => {
+              const product = productFor(m.name);
+              const line = madeLines.find((l) => l.row.key === m.key);
+              return (
+                <div key={m.key} className="flex flex-col gap-1.5 border-b border-line/10 pb-2.5 last:border-0 last:pb-0">
+                  <div className="grid grid-cols-[minmax(0,1fr)_96px_40px] items-center gap-2">
+                    <input list="run-products" value={m.name} onChange={(e) => patchMade(m.key, { name: e.target.value, packaging: null })} placeholder="Type the product's name" aria-label="Product" className={small} />
+                    <input inputMode="decimal" value={m.qty} onChange={(e) => patchMade(m.key, { qty: decimal(e.target.value), packaging: null })} placeholder="How many" aria-label="How many" className={`${small} text-right`} />
+                    <button type="button" onClick={() => setMade((rows) => (rows.length > 1 ? rows.filter((r) => r.key !== m.key) : [{ key: key(), name: "", qty: "", packaging: null }]))} aria-label="Remove" className="flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-danger">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                  {m.name.trim() && (
+                    <span className={`text-[12px] ${product ? "text-muted-foreground" : "font-semibold text-danger"}`}>
+                      {product ? `→ ${fullName(product, products)} · ${product.unit || "jars"}` : "Not a product yet — check the spelling, or add it in Costing."}
+                    </span>
+                  )}
+                  {line && product && (
+                    <>
+                      <span className="text-[12px] font-semibold text-muted-foreground">Packaging used</span>
+                      <PackagingEditor lines={packagingOf(line)} onChange={(pk) => patchMade(m.key, { packaging: pk })} />
+                    </>
+                  )}
+                </div>
+              );
+            })}
+            <button type="button" onClick={() => setMade((rows) => [...rows, { key: key(), name: "", qty: "", packaging: null }])} className="flex min-h-9 w-fit items-center gap-1 text-[13px] font-semibold text-cacao">
+              <Plus className="h-4 w-4" /> Add another product
+            </button>
           </Section>
 
           <label className={labelCls}>

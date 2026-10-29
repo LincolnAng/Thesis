@@ -59,6 +59,9 @@ export interface RunTotals {
   fromBucket: number;
   intoProducts: number;
   leftover: number;
+  /** Lost in the making, and made but not packed (both waste). */
+  waste: number;
+  excess: number;
   /** Usable out of raw, 0–1, over the runs that roasted anything. Null when nothing was roasted. */
   yield: number | null;
   /** Finished units made in these runs, by product. */
@@ -86,6 +89,8 @@ export function runTotals(runs: ProductionRun[], entries: Entry[], products: Pro
     fromBucket: round(runs.reduce((t, r) => t + r.fromBucketQty, 0)),
     intoProducts: round(runs.reduce((t, r) => t + r.intoProductsQty, 0)),
     leftover: round(runs.reduce((t, r) => t + r.leftoverQty, 0)),
+    waste: round(runs.reduce((t, r) => t + (r.wasteQty ?? 0), 0)),
+    excess: round(runs.reduce((t, r) => t + (r.excessQty ?? 0), 0)),
     yield: raw > 0 ? usableFromRoast / raw : null,
     made: [...made.values()].sort((a, b) => b.qty - a.qty),
   };

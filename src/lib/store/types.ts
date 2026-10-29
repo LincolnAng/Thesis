@@ -592,6 +592,19 @@ export interface ProductionRun {
   notes: string;
   loggedByName?: string | null;
   createdAt: string;
+  /** Every raw material (or packaging) put in, each with its own amount and unit. */
+  inputs?: RunInput[] | null;
+  /** Lost in the making — shells, burnt bits. */
+  wasteQty?: number;
+  /** Made but not packed — powder, pellets, brandy or ice cream left over. Counted as waste. */
+  excessQty?: number;
+}
+
+/** One raw material put into a production run. */
+export interface RunInput {
+  materialId: string;
+  qty: number;
+  unit: string;
 }
 
 /** Stock moved from one branch to another — shipped to Manila, brought back to CDO. */

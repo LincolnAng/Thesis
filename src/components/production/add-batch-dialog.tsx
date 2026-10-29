@@ -87,7 +87,7 @@ export function AddBatchDialog({ onClose }: { onClose: () => void }) {
   const product = products.find((p) => p.id === productId);
   const unit = product?.unit || "jars";
   const [finished, setFinished] = useState("");
-  const [tingi, setTingi] = useState("");
+  const tingi = ""; // Tingi is gone: leftovers are excess on the production batch.
   const madeToday = entries.filter((e) => e.type === "INVENTORY_IN" && e.timestamp.slice(0, 10) === isoDay(today)).length;
   const [lotId, setLotId] = useState(`LOT-${isoDay(today).replace(/-/g, "")}-${madeToday + 1}`);
   const defaultExpiry = (id: string) => isoDay(addDays(today, shelfLifeDays(businessSettings, id)));
@@ -151,10 +151,6 @@ export function AddBatchDialog({ onClose }: { onClose: () => void }) {
               <label className={labelCls}>
                 Finished ({unit})
                 <input autoFocus inputMode="decimal" value={finished} onChange={(e) => setFinished(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="e.g. 40" className={fieldCls} />
-              </label>
-              <label className={labelCls}>
-                Tingi ({TINGI.unit} of pellets)
-                <input inputMode="decimal" value={tingi} onChange={(e) => setTingi(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" className={fieldCls} />
               </label>
               <label className={labelCls}>
                 Lot ID

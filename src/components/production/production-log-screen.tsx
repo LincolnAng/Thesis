@@ -7,7 +7,6 @@ import { BUTTON, toggleButton } from "@/components/ui/kit";
 import { CarouselNav } from "@/components/ui/carousel-nav";
 import { ActionIcon } from "@/components/transactions/transaction-table";
 import { RunDialog } from "@/components/production/run-dialog";
-import { TingiBuckets } from "@/components/stock/tingi-buckets";
 import { useStore } from "@/lib/store/use-store";
 import { deleteProductionRun } from "@/lib/store/store";
 import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
@@ -42,7 +41,7 @@ function Step({ label, value, unit, note, tone }: { label: string; value: number
  * Production: what was actually made, laid out like Transactions — the month (or all time) and
  * the Log production button at the top, what it added up to, then one row per batch: its name,
  * the raw material put in, what was usable from it, the tablea pellets made from that, the
- * finished products made from the pellets, the pellets left over (into tingi) and the
+ * finished products made from the pellets, what was wasted or left over (excess) and the
  * packaging used. Forecast is what to make next; this
  * is what happened.
  */
@@ -98,7 +97,7 @@ export function ProductionLogScreen() {
         <section className="grid grid-cols-2 gap-3 min-[1100px]:flex min-[900px]:items-stretch min-[900px]:gap-2" aria-label="Production summary">
           <Step label="Raw materials in" value={totals.raw} unit={unit} note={`${totals.runs} ${totals.runs === 1 ? "batch" : "batches"}`} />
           <ArrowRight className="hidden h-5 w-5 shrink-0 self-center text-muted-foreground min-[1100px]:block" />
-          <Step label="Usable Cacao" value={totals.usable} unit={unit} note={totals.yield === null ? "Nothing put in" : `${Math.round(totals.yield * 100)}% of the raw`} />
+          <Step label="Usable" value={totals.usable} unit={unit} note={totals.yield === null ? "Nothing put in" : `${Math.round(totals.yield * 100)}% of the raw`} />
           <ArrowRight className="hidden h-5 w-5 shrink-0 self-center text-muted-foreground min-[1100px]:block" />
           <Step label="Tablea pellets" value={totals.pellets} unit={unit} note={totals.usable > 0 ? `${Math.round((totals.pellets / totals.usable) * 100)}% of the usable` : "Made from the usable"} />
           <ArrowRight className="hidden h-5 w-5 shrink-0 self-center text-muted-foreground min-[1100px]:block" />
@@ -106,27 +105,24 @@ export function ProductionLogScreen() {
             label="Pellets into products"
             value={totals.intoProducts}
             unit={unit}
-            note={`${madeUnits} units made${totals.fromBucket > 0 ? ` · ${totals.fromBucket} ${unit} from tingi` : ""}`}
+            note={`${madeUnits} units made`}
             tone="brand"
           />
           <ArrowRight className="hidden h-5 w-5 shrink-0 self-center text-muted-foreground min-[1100px]:block" />
-          <Step label="Tingi" value={totals.leftover} unit={unit} note="Pellets left over" />
+          <Step label="Waste & excess" value={Math.round((totals.waste + totals.excess) * 1000) / 1000} unit={unit} note={`${totals.waste} wasted · ${totals.excess} excess`} />
         </section>
 
         <div className="overflow-hidden rounded-2xl border border-line/15 bg-card">
           <RunTable runs={runs} canChange={exec} onEdit={setEditing} />
           <div className="flex flex-wrap justify-between gap-2 border-t border-line/10 px-4 py-2.5 text-xs text-muted-foreground">
-            <span>One row per batch. Packaging comes off its stock; pellets left over go into Tingi below — the same tingi as Inventory.</span>
+            <span>One row per batch, by lot. Raw materials and packaging come off their stock; waste and excess are recorded on the batch.</span>
             <span>
               Showing {runs.length} {runs.length === 1 ? "batch" : "batches"}
             </span>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 min-[1000px]:grid-cols-[1.4fr_1fr]">
-          <div className="rounded-2xl border border-line/15 bg-card p-5">
-            <TingiBuckets />
-          </div>
+        <div className="grid grid-cols-1 gap-4">
           <section className="flex flex-col gap-2 rounded-2xl border border-line/15 bg-card p-5">
             <h2 className="font-display text-[20px] font-semibold">Packaging used</h2>
             {packaging.length === 0 ? (
@@ -157,7 +153,7 @@ export function ProductionLogScreen() {
 /**
  * One row per batch, in fixed columns like the Transactions table:
  *
- *   Date · Batch name · Lot · Raw materials in · Usable cacao · Tablea pellets · Finished products · Tingi · Packaging · Recorded by · Actions
+ *   Date · Lot · Raw materials in · Usable · Tablea pellets · Finished products · Waste & excess · Packaging · Recorded by · Actions
  */
 function RunTable({ runs, canChange, onEdit }: { runs: ProductionRun[]; canChange: boolean; onEdit: (r: ProductionRun) => void }) {
   const { entries, products, rawMaterials, businessSettings } = useStore();
@@ -165,7 +161,7 @@ function RunTable({ runs, canChange, onEdit }: { runs: ProductionRun[]; canChang
   const rule = "border-r border-line/15 last:border-r-0";
   const th = `px-3 py-2.5 text-center text-[11px] font-bold uppercase leading-tight tracking-wide text-muted-foreground ${rule}`;
   const td = `px-3 py-3 text-center align-middle ${rule}`;
-  const widths = [108, 170, 120, 140, 120, 120, 0, 110, 160, 120, 96];
+  const widths = [108, 150, 200, 120, 120, 0, 130, 160, 120, 96];
 
   if (runs.length === 0) {
     return <p className="px-5 py-10 text-center text-sm text-muted-foreground">No batches logged. Use Log production after a batch is made.</p>;
@@ -173,7 +169,7 @@ function RunTable({ runs, canChange, onEdit }: { runs: ProductionRun[]; canChang
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[1480px] table-fixed border-collapse text-[13px]">
+      <table className="w-full min-w-[1400px] table-fixed border-collapse text-[13px]">
         <colgroup>
           {widths.map((w, i) => (
             <col key={i} style={w ? { width: w } : undefined} />
@@ -181,7 +177,7 @@ function RunTable({ runs, canChange, onEdit }: { runs: ProductionRun[]; canChang
         </colgroup>
         <thead className="border-b border-line/15 bg-secondary">
           <tr>
-            {["Date", "Batch name", "Lot", "Raw materials in", "Usable cacao", "Tablea pellets", "Finished products", "Tingi", "Packaging", "Recorded by", "Actions"].map((h) => (
+            {["Date", "Lot", "Raw materials in", "Usable", "Tablea pellets", "Finished products", "Waste & excess", "Packaging", "Recorded by", "Actions"].map((h) => (
               <th key={h} scope="col" className={th}>
                 {h}
               </th>
@@ -202,21 +198,20 @@ function RunTable({ runs, canChange, onEdit }: { runs: ProductionRun[]; canChang
               <tr key={r.id} className="border-b border-line/20 bg-card">
                 <td className={`${td} whitespace-nowrap`}>{formatDate(`${r.date}T00:00:00`)}</td>
                 <td className={td} title={r.notes || undefined}>
-                  <span className="block break-words font-semibold">{r.name || "—"}</span>
+                  <span className="block break-words font-semibold">{r.lotId || r.name || "—"}</span>
+                  {r.name && r.name !== r.lotId && <span className="block truncate text-[11.5px] text-muted-foreground">{r.name}</span>}
                   {r.notes && <span className="block truncate text-[11.5px] italic text-muted-foreground">{r.notes}</span>}
                 </td>
-                <td className={`${td} break-words text-muted-foreground`}>{r.lotId}</td>
-                <td className={td}>
-                  {r.rawQty > 0 ? (
-                    <>
-                      <span className="block font-semibold tabular-nums">
-                        {r.rawQty} {u}
+                <td className={`${td} text-left`}>
+                  {(r.inputs?.length ? r.inputs : r.rawQty > 0 ? [{ materialId: r.materialId, qty: r.rawQty, unit: u }] : []).map((i, k) => (
+                    <span key={k} className="flex justify-between gap-2">
+                      <span className="truncate">{rawMaterials.find((m) => m.id === i.materialId)?.name ?? "—"}</span>
+                      <span className="shrink-0 font-semibold tabular-nums">
+                        {i.qty} <span className="font-normal text-muted-foreground">{i.unit}</span>
                       </span>
-                      <span className="block truncate text-[11.5px] text-muted-foreground">{material?.name ?? "—"}</span>
-                    </>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
+                    </span>
+                  ))}
+                  {!r.inputs?.length && !(r.rawQty > 0) && <span className="block text-center text-muted-foreground">—</span>}
                 </td>
                 <td className={td}>
                   {r.usableQty > 0 ? (
@@ -238,7 +233,6 @@ function RunTable({ runs, canChange, onEdit }: { runs: ProductionRun[]; canChang
                       <span className="block font-semibold tabular-nums">
                         {r.pelletsQty} {u}
                       </span>
-                      {r.fromBucketQty > 0 && <span className="block text-[11.5px] text-muted-foreground">+{r.fromBucketQty} from tingi</span>}
                     </>
                   ) : (
                     <span className="text-muted-foreground">—</span>
@@ -263,8 +257,15 @@ function RunTable({ runs, canChange, onEdit }: { runs: ProductionRun[]; canChang
                     </span>
                   )}
                 </td>
-                <td className={`${td} tabular-nums ${r.leftoverQty > 0 ? "font-semibold" : "text-muted-foreground"}`}>
-                  {r.leftoverQty > 0 ? `${r.leftoverQty} ${u}` : "—"}
+                <td className={`${td} tabular-nums`}>
+                  {(r.wasteQty ?? 0) > 0 || (r.excessQty ?? 0) > 0 || r.leftoverQty > 0 ? (
+                    <>
+                      {(r.wasteQty ?? 0) > 0 && <span className="block">{r.wasteQty} {u} waste</span>}
+                      {((r.excessQty ?? 0) > 0 || r.leftoverQty > 0) && <span className="block">{r.excessQty || r.leftoverQty} {u} excess</span>}
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
                 </td>
                 <td className={`${td} text-left text-[12.5px]`}>
                   {packaging.length === 0 ? (
@@ -290,7 +291,7 @@ function RunTable({ runs, canChange, onEdit }: { runs: ProductionRun[]; canChang
                       title={canChange ? "Delete this batch" : "Only an Executive can delete a batch"}
                       enabled={canChange}
                       onClick={() => {
-                        if (window.confirm(`Delete ${r.name || "this batch"}? The raw materials, the products made and the tingi all go back to how they were.`)) deleteProductionRun(r.id);
+                        if (window.confirm(`Delete lot ${r.lotId || r.name || "this batch"}? The raw materials and the products made go back to how they were.`)) deleteProductionRun(r.id);
                       }}
                     />
                   </div>

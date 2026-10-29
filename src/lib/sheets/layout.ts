@@ -46,6 +46,8 @@ export const SHARED_TABS: Record<string, string[]> = {
     "direction", "runId", "purpose",
     // Production run, later
     "pelletsQty",
+    // Production run: every raw material in, and what was wasted and left over
+    "inputs", "wasteQty", "excessQty",
   ],
   "People & Payroll": [
     "section",

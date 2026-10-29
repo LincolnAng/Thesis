@@ -19,7 +19,6 @@ import { cacaoUtilizationPct, expiringWithinDays, shelfLifeDays } from "@/lib/su
 import { allStandings, groupOf } from "@/lib/summary/material-stock";
 import { BRANCHES_KEY, branchesOf, mainBranch, newBranchId, stockByBranch, type Branch } from "@/lib/inventory/branches";
 import { pluralize } from "@/lib/format";
-import { TingiBuckets } from "@/components/stock/tingi-buckets";
 import type { Product, RawMaterialStock } from "@/lib/store/types";
 
 /**
@@ -28,7 +27,7 @@ import type { Product, RawMaterialStock } from "@/lib/store/types";
  * beneath it. Raw materials and packaging are listed after. Tap a picture to add a photo.
  *
  * Stock comes in with Add stock (a batch made, or stock received) and moves between branches
- * with Move stock. Sales, spoilage and waste recorded on Transactions take it off at their
+ * with Transfer stock (CDO to Manila: off CDO, onto Manila). Sales, spoilage and waste recorded on Transactions take it off at their
  * branch. Executives also set each item's unit and the list of branches.
  */
 
@@ -149,7 +148,7 @@ export function InventoryScreen() {
           )}
           {branches.length > 1 && (
             <button type="button" onClick={() => setDialog("move")} className={BUTTON.secondary}>
-              <ArrowRightLeft className="h-4 w-4" /> Move stock
+              <ArrowRightLeft className="h-4 w-4" /> {branches.length === 2 ? `Transfer ${branches[0].name} → ${branches[1].name}` : "Transfer stock"}
             </button>
           )}
           <button type="button" onClick={() => setDialog("add")} className={BUTTON.primary}>
@@ -237,8 +236,6 @@ export function InventoryScreen() {
             </ul>
           )}
         </section>
-
-        <TingiBuckets />
 
         {(["ingredient", "supply"] as const).map((group) => {
           const list = materials(group);
@@ -398,8 +395,8 @@ function MoveStock({ branches, byBranch, onClose }: { branches: Branch[]; byBran
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="rounded-2xl sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>Move stock</DialogTitle>
-          <DialogDescription>Shipped from one branch to another. The total stays the same.</DialogDescription>
+          <DialogTitle>Transfer stock</DialogTitle>
+          <DialogDescription>Stock shipped from one branch to another: it comes off the first and goes onto the second. The total stays the same.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
           <div className={labelCls}>
@@ -421,7 +418,7 @@ function MoveStock({ branches, byBranch, onClose }: { branches: Branch[]; byBran
           {error && <p className="text-[13px] font-semibold text-danger">{error}</p>}
           <div className="flex gap-2">
             <button type="button" onClick={save} className="min-h-11 flex-1 rounded-[10px] bg-cacao text-[14px] font-semibold text-ivory">
-              Move
+              Transfer
             </button>
             <button type="button" onClick={onClose} className="min-h-11 rounded-[10px] border border-line/20 px-4 text-[14px] font-semibold">
               Cancel
