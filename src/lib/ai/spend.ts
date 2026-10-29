@@ -1,4 +1,6 @@
 import { addMonthSpendUsd, getAiSettings, getMonthSpendUsd } from "@/lib/sheets/settings";
+import { aiUsageCollection } from "@/lib/sheets/ai-usage";
+import type { AiFeature } from "@/lib/ai/usage-summary";
 
 /**
  * The hard stop on AI spending. Every AI request checks this month's spend against the limit
@@ -7,7 +9,8 @@ import { addMonthSpendUsd, getAiSettings, getMonthSpendUsd } from "@/lib/sheets/
  * until the limit is raised.
  *
  * Cost is worked out from the token counts each response reports, at Anthropic's list prices
- * (US dollars per million tokens), and shown in pesos at an approximate rate.
+ * (US dollars per million tokens), and shown in pesos at an approximate rate. Each request is
+ * also logged on its own (lib/sheets/ai-usage) for the AI costs tab's breakdown.
  */
 
 /** Approximate pesos per US dollar, for showing the limit and spend in pesos. */
@@ -61,11 +64,39 @@ export async function aiBudgetOpen(): Promise<boolean> {
   }
 }
 
-/** Adds what a response cost to this month's spend. Never throws. */
-export async function recordAiUsage(model: string, usage: Usage | null | undefined): Promise<void> {
-  try {
-    await addMonthSpendUsd(costUsd(model, usage));
-  } catch {
-    // A missed tally is better than a failed answer.
-  }
+/** Who an AI request was for and what for. Requests made for one message share a requestId. */
+export interface AiUseTag {
+  feature: AiFeature;
+  requestId: string;
+  userId?: string | null;
+  userName?: string | null;
+}
+
+/** A fresh id for one message's AI requests. */
+export const newAiRequestId = () => `ai-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+/** Adds what a response cost to this month's spend, and logs the request. Never throws. */
+export async function recordAiUsage(model: string, usage: Usage | null | undefined, tag?: AiUseTag): Promise<void> {
+  const usd = costUsd(model, usage);
+  // Both at once, so logging adds no wait to the answer. A missed tally is better than a failed answer.
+  await Promise.all([
+    addMonthSpendUsd(usd).catch(() => undefined),
+    aiUsageCollection
+      .append({
+        id: `${tag?.requestId ?? newAiRequestId()}-${Math.random().toString(36).slice(2, 6)}`,
+        at: new Date().toISOString(),
+        requestId: tag?.requestId ?? "",
+        userId: tag?.userId ?? "",
+        userName: tag?.userName ?? "",
+        feature: tag?.feature ?? "other",
+        model,
+        inputTokens: usage?.input_tokens ?? 0,
+        outputTokens: usage?.output_tokens ?? 0,
+        cacheWriteTokens: usage?.cache_creation_input_tokens ?? 0,
+        cacheReadTokens: usage?.cache_read_input_tokens ?? 0,
+        searches: usage?.server_tool_use?.web_search_requests ?? 0,
+        costUsd: usd,
+      })
+      .catch(() => undefined),
+  ]);
 }

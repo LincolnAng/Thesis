@@ -93,6 +93,7 @@ export async function POST(req: NextRequest) {
     .join("\n");
 
   const result = await callClaude({
+    use: { feature: "season", userId: auth.session.userId, userName: auth.session.name },
     // The reason is shown to her under "What to expect each month", so it follows Bot language.
     system: [{ type: "text", text: `${SYSTEM}\n\nWrite the reason this way: ${languageRule(language)}`, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: facts }],

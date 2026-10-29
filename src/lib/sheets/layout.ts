@@ -82,5 +82,7 @@ export const SHARED_TABS: Record<string, string[]> = {
     "role", "kind", "createdAt", "payload",
     // Task done (Today at a glance, crossed out by anyone)
     "taskId", "day", "title",
+    // AI use (one row per AI request, for the AI costs tab)
+    "requestId", "feature", "model", "inputTokens", "outputTokens", "cacheWriteTokens", "cacheReadTokens", "searches", "costUsd",
   ],
 };

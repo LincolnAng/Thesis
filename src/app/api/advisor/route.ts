@@ -113,6 +113,7 @@ export async function POST(req: NextRequest) {
 
   const today = new Date().toISOString().slice(0, 10);
   const result = await callClaude({
+    use: { feature: "advisor", userId: auth.session.userId, userName: auth.session.name },
     system,
     messages: [{ role: "user", content: advisorUserPrompt(question, today) }],
     // Short answers, but web search and any thinking blocks share this budget.

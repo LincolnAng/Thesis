@@ -216,7 +216,15 @@ export async function POST(req: NextRequest) {
 
   // Pulling fields out of "sold 10 jars to Nena" is extraction, not reasoning. Low effort is
   // both cheaper and faster on the thing the owner does many times a day.
-  const result = await callClaude({ system, messages, maxTokens: 600, apiKey, model, effort: "low" });
+  const result = await callClaude({
+    system,
+    messages,
+    maxTokens: 600,
+    apiKey,
+    model,
+    effort: "low",
+    use: { feature: "assistant", userId: auth.session.userId, userName: auth.session.name },
+  });
 
   if (!result.ok) {
     // The caller only ever sees "ai_error", which is all the owner can act on — but without

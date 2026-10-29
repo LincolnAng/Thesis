@@ -1,6 +1,7 @@
 "use client";
 
 import { AiLimitCard } from "@/components/settings/ai-limit-card";
+import { AiCostsPanel } from "@/components/settings/ai-costs-panel";
 import { isExecutive, useCurrentUser } from "@/lib/auth/current-user";
 import { useEffect, useState, type ChangeEvent } from "react";
 import { useTheme } from "next-themes";
@@ -71,7 +72,7 @@ export default function SettingsPageInner() {
   const [backupMessage, setBackupMessage] = useState<string | null>(null);
   const [keyTest, setKeyTest] = useState<{ ok: boolean; message: string } | null>(null);
   const [testing, setTesting] = useState(false);
-  const [tab, setTab] = useState<"general" | "people" | "activity" | "ai" | "sheet">("general");
+  const [tab, setTab] = useState<"general" | "people" | "activity" | "ai" | "costs" | "sheet">("general");
   const [textSize, setTextSize] = useTextSize();
 
   // next-themes resolves the real theme synchronously on the client's first render
@@ -302,7 +303,7 @@ export default function SettingsPageInner() {
     <Page title="Settings">
     <div className="w-full max-w-4xl">
       <p className="mb-4 text-sm text-muted-foreground">
-        Your name and how the app looks, who did what, the AI assistant, and where your data is kept.
+        Your name and how the app looks, who did what, the AI assistant and what it costs, and where your data is kept.
       </p>
 
       <div className="mb-5">
@@ -312,6 +313,7 @@ export default function SettingsPageInner() {
             ["people", "People"],
             ["activity", "History"],
             ["ai", "AI assistant"],
+            ["costs", "AI costs"],
             ["sheet", "Google Sheet"],
           ]}
           value={tab}
@@ -474,7 +476,13 @@ export default function SettingsPageInner() {
         </CardContent>
       </Card>
 
-      <AiLimitCard />
+        </div>
+      )}
+
+      {tab === "costs" && (
+        <div className="flex flex-col gap-4">
+          <AiCostsPanel />
+          <AiLimitCard />
         </div>
       )}
 

@@ -73,6 +73,7 @@ export async function POST(req: NextRequest) {
     .join("\n\n");
 
   const result = await callClaude({
+    use: { feature: "sharpen", userId: auth.session.userId, userName: auth.session.name },
     // She types in her own language, so the questions she picks from are written in it too.
     system: [{ type: "text", text: `${SYSTEM}\n\nWrite the four suggestions this way: ${languageRule(language)}`, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: userPrompt }],

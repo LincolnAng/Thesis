@@ -1,4 +1,4 @@
-import { LIMIT_REACHED, aiBudgetOpen, recordAiUsage, type Usage } from "@/lib/ai/spend";
+import { LIMIT_REACHED, aiBudgetOpen, newAiRequestId, recordAiUsage, type AiUseTag, type Usage } from "@/lib/ai/spend";
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 export const CLAUDE_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
 /** Advice is the one genuinely hard reasoning job here, so it gets the stronger model.
@@ -56,6 +56,8 @@ export async function callClaude(params: {
   maxSearches?: number;
   /** How hard to think. "low" for extraction, "high" for advice. */
   effort?: "low" | "medium" | "high" | "xhigh";
+  /** Who asked and for which feature, for the AI costs tab. */
+  use?: Omit<AiUseTag, "requestId">;
 }): Promise<AnthropicCallResult> {
   const apiKey = params.apiKey || process.env.ANTHROPIC_API_KEY;
   const model = params.model || CLAUDE_MODEL;
@@ -99,6 +101,7 @@ export async function callClaude(params: {
     let text = "";
     const sources: WebSource[] = [];
     const usage: AnthropicUsage = { input_tokens: 0, output_tokens: 0 };
+    const tag: AiUseTag = { feature: "other", ...params.use, requestId: newAiRequestId() };
 
     for (let turn = 0; turn < 4; turn++) {
       const res = await fetch(ANTHROPIC_API_URL, {
@@ -142,7 +145,7 @@ export async function callClaude(params: {
       collectSources(content, sources);
 
       const u = (json?.usage ?? {}) as Record<string, number>;
-      await recordAiUsage(model, json?.usage as Usage);
+      await recordAiUsage(model, json?.usage as Usage, tag);
       usage.input_tokens +=
         (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0);
       usage.output_tokens += u.output_tokens ?? 0;

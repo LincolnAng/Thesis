@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { LIMIT_MESSAGE, aiBudgetOpen, recordAiUsage, type Usage } from "@/lib/ai/spend";
+import { LIMIT_MESSAGE, aiBudgetOpen, newAiRequestId, recordAiUsage, type Usage } from "@/lib/ai/spend";
 import Anthropic from "@anthropic-ai/sdk";
 import { requireSession } from "@/lib/auth/session";
 import { costContextOf, loadBusinessDataFor } from "@/lib/auth/load-business-data";
@@ -192,6 +192,8 @@ export async function POST(req: NextRequest) {
   let proposal: Proposal | null = null;
   let finalText = "";
   const started = Date.now();
+  // Every request this message takes is logged under one id, as one prompt, on the AI costs tab.
+  const use = { feature: "chat" as const, requestId: newAiRequestId(), userId, userName: auth.session.name };
 
   try {
     for (let step = 0; step < MAX_STEPS; step++) {
@@ -209,7 +211,7 @@ export async function POST(req: NextRequest) {
         ...(FALLBACK_MODELS.test(model) ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" } : {}),
       } as Anthropic.Beta.MessageCreateParamsNonStreaming);
 
-      await recordAiUsage(response.model ?? model, response.usage as Usage);
+      await recordAiUsage(response.model ?? model, response.usage as Usage, use);
       collectSources(response.content, sources);
       if (response.content.some((b) => b.type === "server_tool_use")) usedWeb = true;
       const text = response.content

@@ -102,3 +102,12 @@ export async function addMonthSpendUsd(usd: number, month = currentMonth()): Pro
   cachedSpend = { month, usd: total, expiresAt: Date.now() + SPEND_CACHE_TTL_MS };
   await aiSettingsCollection.update(spendKey(month), { key: spendKey(month), value: total.toFixed(6) });
 }
+
+/** Every month with AI spend recorded, oldest first, in US dollars — the AI costs tab's history. */
+export async function listMonthSpendUsd(): Promise<{ month: string; usd: number }[]> {
+  return (await aiSettingsCollection.getAll())
+    .filter((s) => s.key.startsWith("ai_spend:"))
+    .map((s) => ({ month: s.key.slice("ai_spend:".length), usd: Number(s.value) || 0 }))
+    .filter((m) => /^\d{4}-\d{2}$/.test(m.month))
+    .sort((a, b) => a.month.localeCompare(b.month));
+}

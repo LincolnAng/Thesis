@@ -66,6 +66,7 @@ export async function POST(req: NextRequest) {
     : `Her message:\n"""${text}"""`;
 
   const result = await callClaude({
+    use: { feature: "triage", userId: auth.session.userId, userName: auth.session.name },
     system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: userPrompt }],
     maxTokens: 20,
