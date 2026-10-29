@@ -38,10 +38,55 @@ const GROUP_ICON: Record<ReminderGroup, React.ReactNode> = {
   stock: <PackageX className="h-3.5 w-3.5" />,
 };
 
-const dayLabel = (iso: string) => {
+const dateOf = (iso: string) => {
   const [y, m, d] = iso.split("-").map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString("en-PH", { weekday: "short", month: "short", day: "numeric" });
+  return new Date(y, m - 1, d);
 };
+
+/** "Holiday: All Saints' Day" reads as just the name under a red holiday circle. */
+const upcomingTitle = (r: Reminder) => (r.category === "holidays" ? r.title.replace(/^Holiday:\s*/i, "") : r.title);
+
+/**
+ * Coming up, a card per day: the weekday and month, the date in a circle — filled red with a
+ * white number on a holiday — and that day's entries under it. The cards wrap and stretch to
+ * fill each row, so two days or seven sit evenly instead of leaving a gap.
+ */
+function ComingUp({ upcoming }: { upcoming: Reminder[] }) {
+  const days = new Map<string, Reminder[]>();
+  for (const r of upcoming) days.set(r.date, [...(days.get(r.date) ?? []), r]);
+  return (
+    <ul className="flex flex-wrap gap-2">
+      {[...days].map(([date, items]) => {
+        const d = dateOf(date);
+        const holiday = items.some((r) => r.category === "holidays");
+        // Holidays first: they're why the circle is red.
+        const sorted = [...items].sort((a, b) => Number(b.category === "holidays") - Number(a.category === "holidays"));
+        return (
+          <li key={date} className="flex min-w-[104px] flex-[1_1_104px] flex-col items-center gap-1.5 rounded-xl border border-line/10 bg-secondary/30 px-2.5 py-2.5 text-center">
+            <span className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+              {d.toLocaleDateString("en-PH", { weekday: "short" })} · {d.toLocaleDateString("en-PH", { month: "short" })}
+            </span>
+            <span
+              className={`flex h-10 w-10 items-center justify-center rounded-full text-[17px] font-bold tabular-nums ${
+                holiday ? "bg-danger text-white" : "bg-card text-foreground ring-1 ring-line/20"
+              }`}
+              aria-label={holiday ? `${d.getDate()}, a holiday` : undefined}
+            >
+              {d.getDate()}
+            </span>
+            <ul className="flex w-full flex-col gap-1 text-[13px] leading-snug">
+              {sorted.map((r) => (
+                <li key={r.id} className={r.category === "holidays" ? "font-semibold text-danger" : "text-foreground"}>
+                  {upcomingTitle(r)}
+                </li>
+              ))}
+            </ul>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 
 function Task({ r, done, by, onTick }: { r: Reminder; done: boolean; by?: string; onTick: () => void }) {
   const urgent = !done && r.tone === "bad";
@@ -136,15 +181,15 @@ export function TodayTasks() {
 
       {upcoming.length > 0 && (
         <div className="mt-4">
-          <Heading>Coming up</Heading>
-          <ul className="flex flex-col">
-            {upcoming.map((r) => (
-              <li key={r.id} className="flex items-baseline justify-between gap-3 border-b border-line/10 py-1.5 text-[14px] last:border-0">
-                <span className="min-w-0">{r.title}</span>
-                <span className="shrink-0 text-[12.5px] text-muted-foreground">{dayLabel(r.date)}</span>
-              </li>
-            ))}
-          </ul>
+          <div className="flex items-baseline justify-between gap-2">
+            <Heading>Coming up</Heading>
+            {upcoming.some((r) => r.category === "holidays") && (
+              <span className="flex items-center gap-1 text-[11.5px] font-semibold text-muted-foreground">
+                <span className="h-2.5 w-2.5 rounded-full bg-danger" /> Holiday
+              </span>
+            )}
+          </div>
+          <ComingUp upcoming={upcoming} />
         </div>
       )}
 
