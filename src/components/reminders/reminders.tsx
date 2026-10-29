@@ -47,14 +47,35 @@ const dateOf = (iso: string) => {
 const upcomingTitle = (r: Reminder) => (r.category === "holidays" ? r.title.replace(/^Holiday:\s*/i, "") : r.title);
 
 /**
- * Coming up, a card per day: the weekday and month, the date in a circle — filled red with a
- * white number on a day nobody works (a holiday or a day off) — and that day's entries under it.
- * Days off show through the end of next month; everything else, the next few days. The cards wrap and stretch to
- * fill each row, so two days or seven sit evenly instead of leaving a gap.
+ * Coming up, grouped under a heading per month — so October's 31 and November's 1 can't be mixed
+ * up — with a card per day: the weekday, the date in a circle (filled red with a white number on
+ * a day nobody works: a holiday or a day off) and that day's entries under it. Days off show
+ * through the end of next month; everything else, the next few days. The cards wrap and stretch
+ * to fill each row, so two days or seven sit evenly instead of leaving a gap.
  */
 function ComingUp({ upcoming }: { upcoming: Reminder[] }) {
-  const days = new Map<string, Reminder[]>();
-  for (const r of upcoming) days.set(r.date, [...(days.get(r.date) ?? []), r]);
+  const months = new Map<string, Map<string, Reminder[]>>();
+  for (const r of upcoming) {
+    const month = months.get(r.date.slice(0, 7)) ?? new Map<string, Reminder[]>();
+    month.set(r.date, [...(month.get(r.date) ?? []), r]);
+    months.set(r.date.slice(0, 7), month);
+  }
+  return (
+    <div className="flex flex-col gap-3">
+      {[...months].map(([month, days]) => (
+        <section key={month} aria-label={dateOf(`${month}-01`).toLocaleDateString("en-PH", { month: "long", year: "numeric" })}>
+          <h4 className="mb-1.5 flex items-center gap-2 font-display text-[17px] font-semibold text-cacao">
+            {dateOf(`${month}-01`).toLocaleDateString("en-PH", { month: "long" })}
+            <span className="h-px flex-1 bg-cacao/20" />
+          </h4>
+          <DayCards days={days} />
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function DayCards({ days }: { days: Map<string, Reminder[]> }) {
   return (
     <ul className="flex flex-wrap gap-2">
       {[...days].map(([date, items]) => {
@@ -64,9 +85,7 @@ function ComingUp({ upcoming }: { upcoming: Reminder[] }) {
         const sorted = [...items].sort((a, b) => Number(isNoWork(b)) - Number(isNoWork(a)));
         return (
           <li key={date} className="flex min-w-[104px] flex-[1_1_104px] flex-col items-center gap-1.5 rounded-xl border border-line/10 bg-secondary/30 px-2.5 py-2.5 text-center">
-            <span className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-              {d.toLocaleDateString("en-PH", { weekday: "short" })} · {d.toLocaleDateString("en-PH", { month: "short" })}
-            </span>
+            <span className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{d.toLocaleDateString("en-PH", { weekday: "short" })}</span>
             <span
               className={`flex h-10 w-10 items-center justify-center rounded-full text-[17px] font-bold tabular-nums ${
                 noWork ? "bg-danger text-white" : "bg-card text-foreground ring-1 ring-line/20"
