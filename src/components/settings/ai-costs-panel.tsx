@@ -170,7 +170,7 @@ export function AiCostsPanel() {
       )}
 
       <p className="text-xs text-muted-foreground">
-        {`Worked out from the tokens each request used, at Anthropic's list prices and about ₱${data.phpPerUsd} to the dollar, so it's an estimate. The exact bill is in the Anthropic Console under Usage and Cost. Talking to BAi by voice is free: the phone or browser turns speech into text.`}
+        {`Worked out from the tokens each request used, at Anthropic's list prices (or the cost xAI reports, when Grok answers) and about ₱${data.phpPerUsd} to the dollar, so it's an estimate. The exact bill is in the Anthropic Console under Usage and Cost, or xAI's console for Grok. Talking to BAi by voice is free: the phone or browser turns speech into text.`}
       </p>
     </div>
   );

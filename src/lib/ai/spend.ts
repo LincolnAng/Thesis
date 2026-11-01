@@ -8,16 +8,17 @@ import type { AiFeature } from "@/lib/ai/usage-summary";
  * Once the month's spend reaches the limit, every AI feature stops until the next month or
  * until the limit is raised.
  *
- * Cost is worked out from the token counts each response reports, at Anthropic's list prices
- * (US dollars per million tokens), and shown in pesos at an approximate rate. Each request is
+ * Cost is worked out from the token counts each response reports, at Anthropic's or xAI's list
+ * prices (US dollars per million tokens) — or taken as given when the provider states it, as
+ * Grok does — and shown in pesos at an approximate rate. Each request is
  * also logged on its own (lib/sheets/ai-usage) for the AI costs tab's breakdown.
  */
 
 /** Approximate pesos per US dollar, for showing the limit and spend in pesos. */
 export const PHP_PER_USD = 58;
 
-/** List prices, US dollars per million tokens: [input, output]. */
-const PRICES: [RegExp, number, number][] = [
+/** List prices, US dollars per million tokens: [input, output, cached input when not a tenth of input]. */
+const PRICES: [RegExp, number, number, number?][] = [
   [/^claude-haiku-5/, 0.1, 0.5],
   [/^claude-haiku-4/, 1, 5],
   [/^claude-sonnet-5/, 2, 10],
@@ -25,9 +26,13 @@ const PRICES: [RegExp, number, number][] = [
   [/^claude-opus-5-5/, 4, 20],
   [/^claude-opus/, 5, 25],
   [/^claude-(fable|mythos)/, 10, 50],
+  [/^grok-4\.(6|7)/, 2, 6, 0.5],
+  [/^grok-4\.5/, 2, 6, 0.3],
+  [/^grok-(4\.3|4\.20)/, 1.25, 2.5, 0.2],
+  [/^grok-build/, 1, 2, 0.2],
 ];
 /** Each web search, in US dollars. */
-const WEB_SEARCH_USD = 0.01;
+const webSearchUsd = (model: string) => (model.startsWith("grok-") ? 0.005 : 0.01);
 
 export interface Usage {
   input_tokens?: number | null;
@@ -35,19 +40,22 @@ export interface Usage {
   cache_creation_input_tokens?: number | null;
   cache_read_input_tokens?: number | null;
   server_tool_use?: { web_search_requests?: number | null } | null;
+  /** What the provider says the request cost, when it says (Grok does). Used instead of the table. */
+  cost_usd?: number | null;
 }
 
 export function costUsd(model: string, usage: Usage | null | undefined): number {
   if (!usage) return 0;
+  if (typeof usage.cost_usd === "number") return usage.cost_usd;
   // An unknown model is priced as the most expensive one, so the limit errs on the safe side.
-  const [, input, output] = PRICES.find(([re]) => re.test(model)) ?? [null, 10, 50];
+  const [, input, output, cached = input * 0.1] = PRICES.find(([re]) => re.test(model)) ?? [null, 10, 50];
   const perToken = (usd: number) => usd / 1_000_000;
   return (
     (usage.input_tokens ?? 0) * perToken(input) +
     (usage.cache_creation_input_tokens ?? 0) * perToken(input) * 1.25 +
-    (usage.cache_read_input_tokens ?? 0) * perToken(input) * 0.1 +
+    (usage.cache_read_input_tokens ?? 0) * perToken(cached) +
     (usage.output_tokens ?? 0) * perToken(output) +
-    (usage.server_tool_use?.web_search_requests ?? 0) * WEB_SEARCH_USD
+    (usage.server_tool_use?.web_search_requests ?? 0) * webSearchUsd(model)
   );
 }
 

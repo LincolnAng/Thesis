@@ -9,6 +9,7 @@ import { modelFor, tierFor } from "@/lib/ai/route-model";
 import { habitsOf, runTool, toolsFor, type AgentView, type Proposal } from "@/lib/ai/agent-tools";
 import { aiMemoryCollection, MAX_NOTES, type AiMemoryNote } from "@/lib/sheets/ai-memory";
 import { NAV_ITEMS, SECONDARY_ITEMS } from "@/lib/nav-items";
+import { grokModelFor, grokRespond, grokTools, providerOf, type ToolDef } from "@/lib/ai/grok";
 import { fullName } from "@/lib/summary/product-sizes";
 
 /**
@@ -22,7 +23,9 @@ import { fullName } from "@/lib/summary/product-sizes";
  * Web pages and tool results are treated as information, never as instructions.
  *
  * Each message goes to the model it needs (lib/ai/route-model): Haiku for admin — small talk,
- * logging, edits and looking up a figure — and Opus for everything else. BAi replies in
+ * logging, edits and looking up a figure — and Opus for everything else. With an xAI key saved
+ * in Settings the same loop runs on Grok instead (lib/ai/grok), its quick and flagship models
+ * standing in for Haiku and Opus. BAi replies in
  * the language the person wrote in, and keeps short notes on how each person works (AI Memory)
  * along with their habits from their own records, so it fits itself to them over time.
  */
@@ -150,9 +153,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, reason: "records_unavailable" }, { status: 502 });
   }
 
-  // The smallest model that can do the job, by what was just asked.
+  // The smallest model that can do the job, by what was just asked. A model set in Settings
+  // only counts when it belongs to the provider the key is for.
+  const provider = providerOf(apiKey);
+  const settingsModel = settings.model && settings.model.startsWith("grok-") === (provider === "grok") ? settings.model : null;
   const lastUser = turns[turns.length - 1].text;
-  const { model, effort } = modelFor(tierFor(lastUser), settings.model);
+  const { model, effort } = modelFor(tierFor(lastUser), settingsModel);
 
   // What BAi has learned about this person.
   const userId = auth.session.userId;
@@ -186,7 +192,6 @@ export async function POST(req: NextRequest) {
   }
   if (messages[0]?.role !== "user") messages.shift();
 
-  const tools: Anthropic.Beta.BetaToolUnion[] = [...(toolsFor(view.role) as Anthropic.Beta.BetaToolUnion[]), webSearchTool(model)];
   const sources = new Map<string, AgentSource>();
   let usedWeb = false;
   let proposal: Proposal | null = null;
@@ -194,6 +199,44 @@ export async function POST(req: NextRequest) {
   const started = Date.now();
   // Every request this message takes is logged under one id, as one prompt, on the AI costs tab.
   const use = { feature: "chat" as const, requestId: newAiRequestId(), userId, userName: auth.session.name };
+  const call = (name: string, input: Record<string, unknown>) =>
+    name === "remember" || name === "forget" ? memoryTool(name, input, userId, notes) : Promise.resolve(runTool(name, input, view));
+
+  if (provider === "grok") {
+    // The same steps on Grok: ask, run the tools it calls, hand back what they found, until it answers.
+    const grokModel = grokModelFor(model);
+    const grokToolList = grokTools(toolsFor(view.role) as ToolDef[], true);
+    let input: unknown[] = [{ role: "system", content: `${SYSTEM}\n\n${context}` }, ...messages];
+    let previous: string | undefined;
+    for (let step = 0; step < MAX_STEPS; step++) {
+      const left = DEADLINE_MS - (Date.now() - started);
+      if (left <= 0) break;
+      const r = await grokRespond({ apiKey, model: grokModel, input, tools: grokToolList, maxTokens: 8000, previousResponseId: previous, signal: AbortSignal.timeout(left) });
+      if (!r.ok) {
+        if (r.status === 401 || r.status === 403) return NextResponse.json({ success: false, reason: "bad_api_key" }, { status: 503 });
+        if (r.status === 429) return NextResponse.json({ success: false, reason: "busy" }, { status: 503 });
+        // Out of time after some steps: answer with what there is, below.
+        if (!r.status && step > 0) break;
+        return NextResponse.json({ success: false, reason: r.status ? "ai_error" : "unreachable", detail: r.error }, { status: 502 });
+      }
+      await recordAiUsage(grokModel, r.usage, use);
+      for (const src of r.sources) if (!sources.has(src.url)) sources.set(src.url, src);
+      if (r.usedWeb) usedWeb = true;
+      if (r.text) finalText = r.text;
+      if (r.calls.length === 0) break;
+      const outputs: unknown[] = [];
+      for (const c of r.calls) {
+        const outcome = await call(c.name, c.input);
+        if (outcome.proposal) proposal = outcome.proposal;
+        outputs.push({ type: "function_call_output", call_id: c.callId, output: outcome.result });
+      }
+      previous = r.id;
+      input = outputs;
+    }
+    return NextResponse.json(finish());
+  }
+
+  const tools: Anthropic.Beta.BetaToolUnion[] = [...(toolsFor(view.role) as Anthropic.Beta.BetaToolUnion[]), webSearchTool(model)];
 
   try {
     for (let step = 0; step < MAX_STEPS; step++) {
@@ -235,9 +278,7 @@ export async function POST(req: NextRequest) {
       const results: Anthropic.Beta.BetaToolResultBlockParam[] = [];
       for (const block of response.content) {
         if (block.type !== "tool_use") continue;
-        const input = (block.input ?? {}) as Record<string, unknown>;
-        const outcome =
-          block.name === "remember" || block.name === "forget" ? await memoryTool(block.name, input, userId, notes) : runTool(block.name, input, view);
+        const outcome = await call(block.name, (block.input ?? {}) as Record<string, unknown>);
         if (outcome.proposal) proposal = outcome.proposal;
         results.push({ type: "tool_result", tool_use_id: block.id, content: outcome.result, ...(outcome.isError ? { is_error: true } : {}) });
       }
@@ -250,14 +291,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, reason: "unreachable" }, { status: 502 });
   }
 
-  if (!finalText) {
-    finalText = proposal
-      ? "Here it is — check the details and press Log to save it."
-      : "Sorry, I couldn't finish that just now. Please try again.";
-  }
+  return NextResponse.json(finish());
 
-  const reply: AgentReply = { success: true, reply: finalText, sources: usedWeb ? [...sources.values()].slice(0, 6) : [], usedWeb, proposal };
-  return NextResponse.json(reply);
+  function finish(): AgentReply {
+    if (!finalText) {
+      finalText = proposal
+        ? "Here it is — check the details and press Log to save it."
+        : "Sorry, I couldn't finish that just now. Please try again.";
+    }
+    return { success: true, reply: finalText, sources: usedWeb ? [...sources.values()].slice(0, 6) : [], usedWeb, proposal };
+  }
 }
 
 /** Saving or dropping a note about this person. Their notes only — never anyone else's. */

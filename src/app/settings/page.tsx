@@ -22,16 +22,16 @@ import { UnitsCard } from "@/components/settings/units-card";
 import { cn } from "@/lib/utils";
 import { Page, PageTabs } from "@/components/layout/page";
 
-/** Turns Anthropic's wording into something the owner can act on. */
+/** Turns Anthropic's or xAI's wording into something the owner can act on. */
 function readableAiError(detail: unknown): string {
   const text = typeof detail === "string" ? detail : "";
   if (text.includes("not scoped to a workspace")) {
     return "This key belongs to the whole organization, not to a workspace. In the Anthropic Console, open a workspace and create the key there, then paste that one.";
   }
-  if (text.includes("authentication_error") || text.includes("invalid x-api-key")) {
+  if (text.includes("authentication_error") || text.includes("invalid x-api-key") || /incorrect api key|grok_error_40[13]/i.test(text)) {
     return "The key was rejected — check it was copied in full, and that it hasn't been revoked.";
   }
-  if (text.includes("credit") || text.includes("billing")) {
+  if (/credit|billing|spending limit/i.test(text)) {
     return "The key works, but the account is out of credit.";
   }
   if (text.includes("not_found_error") || text.includes("model")) {
@@ -381,16 +381,15 @@ export default function SettingsPageInner() {
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
             This lets Mang Kiko&apos;s Cacao use AI to understand what you type and answer your questions. You&apos;ll
-            need a Claude API key from Anthropic —{" "}
-            <a
-              href="https://console.anthropic.com/"
-              target="_blank"
-              rel="noreferrer"
-              className="underline decoration-dotted"
-            >
-              get one here
-            </a>
-            .
+            need an API key: a Claude key from{" "}
+            <a href="https://console.anthropic.com/" target="_blank" rel="noreferrer" className="underline decoration-dotted">
+              Anthropic
+            </a>{" "}
+            (starts with sk-ant-) or a Grok key from{" "}
+            <a href="https://console.x.ai/" target="_blank" rel="noreferrer" className="underline decoration-dotted">
+              xAI
+            </a>{" "}
+            (starts with xai-). The key decides which AI answers.
           </p>
 
           {loadError && (
@@ -403,6 +402,7 @@ export default function SettingsPageInner() {
             <div className="flex items-center justify-between gap-2 rounded-xl border border-border p-2.5">
               <span className="text-sm text-foreground">
                 Saved: <span className="font-mono">{settings.keyPreview}</span>
+                {settings.keyPreview && <span className="ml-1.5 text-muted-foreground">· {settings.keyPreview.startsWith("xai-") ? "Grok" : "Claude"}</span>}
               </span>
               <Button size="sm" variant="secondary" onClick={() => setEditingKey(true)}>
                 Change
@@ -410,11 +410,11 @@ export default function SettingsPageInner() {
             </div>
           ) : (
             <div className="space-y-2">
-              <Label className="text-xs">Claude API key</Label>
+              <Label className="text-xs">Claude or Grok API key</Label>
               <div className="flex items-center gap-2">
                 <Input
                   type="password"
-                  placeholder="sk-ant-..."
+                  placeholder="sk-ant-... or xai-..."
                   value={keyDraft}
                   onChange={(e) => setKeyDraft(e.target.value)}
                   className="flex-1"
@@ -462,7 +462,7 @@ export default function SettingsPageInner() {
               </p>
               <div className="flex items-center gap-2">
                 <Input
-                  placeholder="claude-sonnet-5"
+                  placeholder="claude-sonnet-5 or grok-4.7"
                   value={modelDraft}
                   onChange={(e) => setModelDraft(e.target.value)}
                   className="flex-1"

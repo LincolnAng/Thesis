@@ -71,7 +71,7 @@ export function AiLimitCard() {
                 <div className={reached ? "h-full bg-danger" : "h-full bg-cacao"} style={{ width: `${pct}%` }} />
               </div>
             ) : null}
-            <p className="text-xs text-muted-foreground">Worked out from Anthropic&apos;s list prices at about ₱58 to the dollar.</p>
+            <p className="text-xs text-muted-foreground">Worked out from Anthropic&apos;s or xAI&apos;s prices at about ₱58 to the dollar.</p>
           </div>
         )}
         {message && <p className="text-xs text-muted-foreground">{message}</p>}

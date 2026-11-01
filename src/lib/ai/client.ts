@@ -1,4 +1,5 @@
 import { LIMIT_REACHED, aiBudgetOpen, newAiRequestId, recordAiUsage, type AiUseTag, type Usage } from "@/lib/ai/spend";
+import { grokModelFor, grokRespond, grokTools, providerOf } from "@/lib/ai/grok";
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 export const CLAUDE_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
 /** Advice is the one genuinely hard reasoning job here, so it gets the stronger model.
@@ -60,7 +61,9 @@ export async function callClaude(params: {
   use?: Omit<AiUseTag, "requestId">;
 }): Promise<AnthropicCallResult> {
   const apiKey = params.apiKey || process.env.ANTHROPIC_API_KEY;
-  const model = params.model || CLAUDE_MODEL;
+  const chosen = params.model || CLAUDE_MODEL;
+  // A Grok model left in Settings from an xAI key means nothing to Claude.
+  const model = chosen.startsWith("grok-") ? CLAUDE_MODEL : chosen;
 
   if (!apiKey) {
     return {
@@ -75,6 +78,8 @@ export async function callClaude(params: {
   if (!(await aiBudgetOpen())) {
     return { ok: false, text: "", usage: { input_tokens: 0, output_tokens: 0 }, error: LIMIT_REACHED };
   }
+
+  if (providerOf(apiKey) === "grok") return callGrok({ ...params, apiKey, model: chosen });
 
   // Without this a hung Anthropic response leaves the request (and the chat UI's typing
   // indicator) spinning indefinitely, with no way back to the manual-entry fallback.
@@ -162,6 +167,37 @@ export async function callClaude(params: {
       text: "",
       usage: { input_tokens: 0, output_tokens: 0 },
       error: timedOut ? "network_error: request timed out" : `network_error: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
+ * The same call on Grok, when the saved key is an xAI one. A Claude model named by the caller
+ * becomes its Grok counterpart (lib/ai/grok); effort is left to the model.
+ */
+async function callGrok(params: Parameters<typeof callClaude>[0] & { apiKey: string; model: string }): Promise<AnthropicCallResult> {
+  const model = grokModelFor(params.model);
+  const system = typeof params.system === "string" ? params.system : params.system.map((b) => b.text).join("\n\n");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), params.webSearch ? SEARCH_TIMEOUT_MS : REQUEST_TIMEOUT_MS);
+  try {
+    const r = await grokRespond({
+      apiKey: params.apiKey,
+      model,
+      input: [{ role: "system", content: system }, ...params.messages],
+      tools: params.webSearch ? grokTools([], true) : undefined,
+      maxTokens: params.maxTokens ?? 1000,
+      signal: controller.signal,
+    });
+    if (!r.ok) return { ok: false, text: "", usage: { input_tokens: 0, output_tokens: 0 }, error: r.error };
+    await recordAiUsage(model, r.usage, { feature: "other", ...params.use, requestId: newAiRequestId() });
+    return {
+      ok: true,
+      text: r.text,
+      usage: { input_tokens: (r.usage.input_tokens ?? 0) + (r.usage.cache_read_input_tokens ?? 0), output_tokens: r.usage.output_tokens ?? 0 },
+      sources: r.sources.length > 0 ? r.sources : undefined,
     };
   } finally {
     clearTimeout(timeout);

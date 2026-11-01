@@ -88,8 +88,10 @@ const MANILA_MS = 8 * 3_600_000;
 /** The Manila calendar day of an instant, "2026-10-29". */
 export const manilaDay = (iso: string) => new Date(new Date(iso).getTime() + MANILA_MS).toISOString().slice(0, 10);
 
-/** Readable model names: "claude-haiku-5-5" → "Haiku 5.5". */
+/** Readable model names: "claude-haiku-5-5" → "Haiku 5.5", "grok-4.7" → "Grok 4.7". */
 export function modelLabel(model: string): string {
+  const g = /^grok-([\d.]+)(-0309)?(-non-reasoning|-reasoning)?/.exec(model);
+  if (g) return `Grok ${g[1]}${g[3] === "-non-reasoning" ? " (quick)" : ""}`;
   const m = /^claude-([a-z]+)-(\d+)(?:-(\d+))?/.exec(model);
   if (!m) return model || "Unknown";
   return `${m[1][0].toUpperCase()}${m[1].slice(1)} ${m[2]}${m[3] && m[3].length <= 2 ? `.${m[3]}` : ""}`;
