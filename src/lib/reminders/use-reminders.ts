@@ -17,6 +17,6 @@ export function useReminders(): Reminders {
   const contributionsFrom = useContributionsFrom();
   return useMemo(() => {
     const salaries = salaryReminders({ role: me?.role ?? "employee", userId: me?.id ?? null, staff, timeRecords, payroll, today: manilaToday(), contributionsFrom });
-    return buildReminders(all, entries, today, salaries);
+    return buildReminders(all, entries, today, salaries, me?.id);
   }, [all, entries, today, staff, timeRecords, payroll, me?.role, me?.id, contributionsFrom]);
 }

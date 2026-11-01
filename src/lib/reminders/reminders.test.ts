@@ -75,3 +75,10 @@ test("holidays and days off show in Coming up through the end of next month; eve
   );
   assert.deepEqual(r.upcoming.map((x) => x.id), ["hol-soon", "off-later", "hol-later"]);
 });
+
+test("a shared calendar item says who it's from, except to the person who added it", () => {
+  const item = { id: "c1", title: "Call the jar supplier", kind: "task", date: "2026-10-22", endDate: null, startTime: null, endTime: null, location: "", notes: "", ownerId: "u-lin", ownerName: "Lincoln", visibility: "everyone", sharedWith: [], done: false, createdAt: "" };
+  const entry = cal({ id: "agenda:c1", category: "agenda", title: item.title, item: item as CalendarEntry["item"] });
+  assert.equal(buildReminders([entry], [], "2026-10-22", undefined, "u-khent").today[0].detail, "from Lincoln");
+  assert.equal(buildReminders([entry], [], "2026-10-22", undefined, "u-lin").today[0].detail, undefined);
+});

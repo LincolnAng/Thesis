@@ -128,7 +128,7 @@ const split = (title: string): [string, string] => {
 };
 
 /** A calendar entry, said as the thing to do about it. */
-function taskFor(e: CalendarEntry, today: string): Pick<Reminder, "title" | "detail"> {
+function taskFor(e: CalendarEntry, today: string, meId?: string | null): Pick<Reminder, "title" | "detail"> {
   const [kind, what] = split(e.title);
   const sub = e.subtitle ?? "";
   switch (e.category) {
@@ -163,7 +163,7 @@ function taskFor(e: CalendarEntry, today: string): Pick<Reminder, "title" | "det
       const verb: Record<string, string> = { event: "", task: "", meeting: "Meet: ", delivery: "Deliver: ", receivable: "Collect: ", payable: "Pay: ", reminder: "" };
       return {
         title: `${verb[it.kind] ?? ""}${e.title}${at ? ` at ${at}` : ""}`,
-        detail: [late ? "Late" : null, it.location || null, it.ownerName && it.visibility !== "private" ? `from ${it.ownerName}` : null].filter(Boolean).join(" · ") || undefined,
+        detail: [late ? "Late" : null, it.location || null, it.ownerName && it.visibility !== "private" && it.ownerId !== meId ? `from ${it.ownerName}` : null].filter(Boolean).join(" · ") || undefined,
       };
     }
     case "alerts":
@@ -180,7 +180,7 @@ function taskFor(e: CalendarEntry, today: string): Pick<Reminder, "title" | "det
 
 const coversToday = (e: CalendarEntry, today: string) => coversDay(e, today);
 
-function fromCalendar(e: CalendarEntry, today: string): Reminder {
+function fromCalendar(e: CalendarEntry, today: string, meId?: string | null): Reminder {
   let tone = TONE[e.tone];
   if (e.category === "payments") tone = e.date < today ? "bad" : e.date === today ? "warn" : "info";
   if (e.category === "events" || e.category === "leaves" || e.category === "holidays") tone = "info";
@@ -192,7 +192,7 @@ function fromCalendar(e: CalendarEntry, today: string): Reminder {
     id: e.id,
     category: e.category,
     tone,
-    ...taskFor(e, today),
+    ...taskFor(e, today, meId),
     date: e.date,
     href: e.href ?? (["events", "leaves", "agenda", "holidays"].includes(e.category) ? "/calendar" : undefined),
     itemId: e.item?.id,
@@ -213,6 +213,8 @@ export function buildReminders(
   today: string,
   /** Reminders from elsewhere — salaries (lib/payroll/reminders). */
   extra: { today: Reminder[]; upcoming: Reminder[] } = { today: [], upcoming: [] },
+  /** Who's looking: their own shared items don't say "from" them. */
+  meId?: string | null,
 ): Reminders {
   const todays: Reminder[] = [...extra.today];
   const upcoming: Reminder[] = [...extra.upcoming];
@@ -225,21 +227,21 @@ export function buildReminders(
     if (e.category === "shipments") continue;
     if (e.category === "payments") {
       // Overdue payments stay on "today" until they're paid.
-      if (e.date <= today) todays.push(fromCalendar(e, today));
-      else if (e.date <= horizon) upcoming.push(fromCalendar(e, today));
+      if (e.date <= today) todays.push(fromCalendar(e, today, meId));
+      else if (e.date <= horizon) upcoming.push(fromCalendar(e, today, meId));
       continue;
     }
     if (e.category === "agenda" && e.item) {
       // Done items drop off. A task or deadline not done stays on today until it is.
       if (e.item.done) continue;
       const lingers = e.item.kind !== "event" && e.item.kind !== "meeting";
-      if (coversDay(e, today) || (lingers && (e.endDate ?? e.date) < today)) todays.push(fromCalendar(e, today));
-      else if (e.date > today && e.date <= horizon) upcoming.push(fromCalendar(e, today));
+      if (coversDay(e, today) || (lingers && (e.endDate ?? e.date) < today)) todays.push(fromCalendar(e, today, meId));
+      else if (e.date > today && e.date <= horizon) upcoming.push(fromCalendar(e, today, meId));
       continue;
     }
-    if (coversDay(e, today)) todays.push(fromCalendar(e, today));
-    else if (e.date > today && e.date <= noWorkHorizon && isNoWork(e)) upcoming.push(fromCalendar(e, today));
-    else if (e.date > today && e.date <= horizon && (e.category === "events" || e.category === "dayoffs" || e.category === "alerts" || e.category === "leaves" || e.category === "holidays")) upcoming.push(fromCalendar(e, today));
+    if (coversDay(e, today)) todays.push(fromCalendar(e, today, meId));
+    else if (e.date > today && e.date <= noWorkHorizon && isNoWork(e)) upcoming.push(fromCalendar(e, today, meId));
+    else if (e.date > today && e.date <= horizon && (e.category === "events" || e.category === "dayoffs" || e.category === "alerts" || e.category === "leaves" || e.category === "holidays")) upcoming.push(fromCalendar(e, today, meId));
   }
 
   // Money a customer owes with no due date set: nudge once it has waited two weeks.
