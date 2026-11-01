@@ -3,7 +3,7 @@
 import { Fragment, useMemo, useState } from "react";
 import { ArrowDownLeft, ArrowUpRight, HandCoins, History as HistoryIcon, Pencil, Trash2 } from "lucide-react";
 import { ENTRY_TYPE_LABELS, EXPENSE_CATEGORY_LABELS, PRICE_TYPE_LABELS, describePaymentMethod, formatDate, formatPeso } from "@/lib/format";
-import { currentDueDate, termsLabel, dueInfo, FREQUENCY_LABELS, installmentSchedule, methodOf, obligationInfo, obligationKind, outstanding, paymentsOf } from "@/lib/transactions/ledger";
+import { currentDueDate, termsLabel, dueInfo, frequencyLabel, installmentSchedule, methodOf, obligationInfo, obligationKind, outstanding, paymentsOf } from "@/lib/transactions/ledger";
 import { isMaterialWaste } from "@/lib/transactions/waste";
 import { fullName } from "@/lib/summary/product-sizes";
 import { findProduct } from "@/lib/summary/product-match";
@@ -70,7 +70,7 @@ function productLines(e: Entry, products: Product[] = []): ProductLine[] {
   return [{ name: current(null, e.sku), qty: e.type === "SALE" || e.type === "WASTE" ? e.quantity : null, amount: e.amount }];
 }
 
-/** Where a receivable or payable stands against its due date, in words. With instalments, the next one. */
+/** Where a receivable or payable stands against its due date, in words. With installments, the next one. */
 function dueLine(e: Entry): string {
   const due = dueInfo(e, new Date());
   const next = currentDueDate(e);
@@ -82,7 +82,7 @@ function dueLine(e: Entry): string {
       : `in ${due.daysLeft} day${due.daysLeft === 1 ? "" : "s"}`;
   const plan = e.installments ? installmentSchedule(e) : [];
   const n = plan.find((i) => !i.paid)?.n;
-  return `${n ? `Instalment ${n} of ${plan.length} due` : "Due"} ${formatDate(next)} · ${when}`;
+  return `${n ? `Installment ${n} of ${plan.length} due` : "Due"} ${formatDate(next)} · ${when}`;
 }
 
 /**
@@ -239,7 +239,7 @@ function Details({
           {plan.length > 0 && (
             <div className="flex flex-col gap-0.5 py-1">
               <span className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-                {plan.length} {FREQUENCY_LABELS[e.installments!.frequency].toLowerCase()} instalments{e.paymentMethod === "check" ? " · post-dated cheques" : ""}
+                {plan.length} installments, {frequencyLabel(e.installments!).toLowerCase()}{e.paymentMethod === "check" ? " · post-dated cheques" : ""}
               </span>
               {plan.map((i) => (
                 <span key={i.n} className={`flex justify-between gap-3 tabular-nums ${i.paid ? "text-muted-foreground line-through" : ""}`}>

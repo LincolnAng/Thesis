@@ -278,7 +278,7 @@ function TransactionsPageInner() {
         {/* Three cards. Cash that actually moved sits beside what is still owed, each in its own
             labelled figure — never added together — and the third is earnings, as before. */}
         {exec ? (
-          <section className="grid grid-cols-1 gap-3 min-[900px]:grid-cols-2 min-[1300px]:grid-cols-[1.25fr_1.25fr_0.8fr_0.7fr]" aria-label="Money summary">
+          <section className="grid grid-cols-1 gap-3 min-[900px]:grid-cols-2 min-[1300px]:grid-cols-[1.25fr_1.25fr_0.7fr_0.8fr]" aria-label="Money summary">
             <SplitCard
               icon={<ArrowDownLeft className="h-4 w-4" />}
               title="Money in & receivables"
@@ -316,6 +316,13 @@ function TransactionsPageInner() {
               }}
             />
             <MoneyBox
+              icon={<PackageX className="h-5 w-5" />}
+              label="Spoilage & waste"
+              value={summary.spoiled + summary.wasted}
+              tone={summary.spoiled + summary.wasted > 0 ? "spoiled" : "neutral"}
+              note={`${formatPeso(summary.spoiled)} products spoiled · ${formatPeso(summary.wasted)} materials wasted · ${periodName}`}
+            />
+            <MoneyBox
               icon={<CircleDollarSign className="h-5 w-5" />}
               heading={period === "all" ? "All time" : monthLabel(period)}
               label="Money earned"
@@ -323,13 +330,6 @@ function TransactionsPageInner() {
               tone={summary.earned >= 0 ? "good" : "bad"}
               filled
               note={summary.spoiled > 0 ? `Sales − expenses − ${formatPeso(summary.spoiled)} spoiled` : "Sales − expenses"}
-            />
-            <MoneyBox
-              icon={<PackageX className="h-5 w-5" />}
-              label="Spoilage & waste"
-              value={summary.spoiled + summary.wasted}
-              tone={summary.spoiled + summary.wasted > 0 ? "spoiled" : "neutral"}
-              note={`${formatPeso(summary.spoiled)} products spoiled · ${formatPeso(summary.wasted)} materials wasted · ${periodName}`}
             />
           </section>
         ) : null /* Employees see no totals: what the company earns and spends stays with Executives. */}
@@ -376,28 +376,8 @@ function TransactionsPageInner() {
           </section>
         )}
 
-        {/* One list: filter by kind, with the add button beside it. */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {/* Every kind as its own tab, so Receivables and Payables are always in sight. */}
-          <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Kind of transaction">
-            {kinds.map(([k, label]) => (
-              <button
-                key={k}
-                type="button"
-                role="tab"
-                aria-selected={effectiveKind === k}
-                onClick={() => setKind(k)}
-                className={`min-h-10 rounded-full border px-4 text-[13.5px] font-semibold transition ${
-                  effectiveKind === k ? "border-cacao bg-cacao text-ivory" : "border-line/20 bg-card text-foreground hover:border-cacao/50"
-                }`}
-              >
-                {label}
-                {(k === "RECEIVABLE" || k === "PAYABLE") && openCount(k) > 0 && (
-                  <span className={`ml-1.5 rounded-full px-1.5 text-[11px] ${effectiveKind === k ? "bg-ivory/25" : "bg-[var(--status-warning)]/15 text-[var(--status-warning)]"}`}>{openCount(k)}</span>
-                )}
-              </button>
-            ))}
-          </div>
+        {/* One list, with the add button above it; the kind tabs sit in the filter box. */}
+        <div className="flex flex-wrap items-center justify-end gap-3">
           <span className="flex flex-wrap gap-2">
             {exec && (
               <button type="button" onClick={() => setImporting(true)} className={BUTTON.secondary}>
@@ -420,6 +400,28 @@ function TransactionsPageInner() {
         </div>
 
         <TransactionSearch
+          kinds={
+            // Every kind as its own tab, so Receivables and Payables are always in sight.
+            <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Kind of transaction">
+              {kinds.map(([k, label]) => (
+                <button
+                  key={k}
+                  type="button"
+                  role="tab"
+                  aria-selected={effectiveKind === k}
+                  onClick={() => setKind(k)}
+                  className={`min-h-9 rounded-full border px-3.5 text-[13px] font-semibold transition ${
+                    effectiveKind === k ? "border-cacao bg-cacao text-ivory" : "border-line/20 bg-card text-foreground hover:border-cacao/50"
+                  }`}
+                >
+                  {label}
+                  {(k === "RECEIVABLE" || k === "PAYABLE") && openCount(k) > 0 && (
+                    <span className={`ml-1.5 rounded-full px-1.5 text-[11px] ${effectiveKind === k ? "bg-ivory/25" : "bg-[var(--status-warning)]/15 text-[var(--status-warning)]"}`}>{openCount(k)}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          }
           value={filters}
           onChange={setFilters}
           products={choices.products}

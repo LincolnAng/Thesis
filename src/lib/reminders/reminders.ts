@@ -134,7 +134,7 @@ function taskFor(e: CalendarEntry, today: string): Pick<Reminder, "title" | "det
   switch (e.category) {
     case "payments": {
       // "To collect: ₱800" / "from Ana · 3 days overdue"
-      // "from Ana · 3 days overdue · instalment 2 of 6"
+      // "from Ana · 3 days overdue · installment 2 of 6"
       const [whoPart, ...rest] = sub.split(" · ");
       const who = whoPart.replace(/^(from|to) /, "");
       const notes = rest.map((r) => r.replace("overdue", "late"));

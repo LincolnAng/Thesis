@@ -41,7 +41,7 @@ const HEADER = [
   "paymentTerms",
   "dueDateHistory",
   "defaultedAt",
-  // Instalment plans, and the branch it happened at.
+  // Installment plans, and the branch it happened at.
   "installments",
   "branch",
   // A batch's lot, expiry, the packaging it used and whether it was repacked tingi.

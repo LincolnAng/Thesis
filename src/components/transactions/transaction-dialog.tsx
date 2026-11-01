@@ -15,7 +15,7 @@ import { spoiledValue } from "@/lib/summary/spoilage";
 import { allExpenseCategories } from "@/lib/summary/expenses-summary";
 import { familiesOf, fullName, sizeName } from "@/lib/summary/product-sizes";
 import { findProduct } from "@/lib/summary/product-match";
-import { addPayment, dueFromTerms, FREQUENCY_LABELS, installmentSchedule, outstanding, paidSoFar, PAYMENT_TERMS } from "@/lib/transactions/ledger";
+import { addPayment, dueFromTerms, FREQUENCY_LABELS, frequencyLabel, installmentSchedule, outstanding, paidSoFar, PAYMENT_TERMS, UNIT_WORDS } from "@/lib/transactions/ledger";
 import { describeOrder, lineSubtotal, orderQuantity, orderTotal } from "@/lib/transactions/order-lines";
 import { COMMON_BANKS, COMMON_EWALLETS, EXPENSE_CATEGORY_LABELS, describePaymentMethod, formatDate, formatPeso, namesProvider } from "@/lib/format";
 import { PAYROLL_CATEGORIES } from "@/lib/auth/permissions";
@@ -25,7 +25,7 @@ import { cacaoUtilizationPct } from "@/lib/summary/business-config";
 import { branchesOf, mainBranch } from "@/lib/inventory/branches";
 import { suggestedPriceAtBranch as priceAtBranch } from "@/lib/inventory/branch-prices";
 import { currentUser } from "@/lib/auth/current-user";
-import type { Entry, InstallmentFrequency, OrderLine, PaymentMethod, PriceType, Product } from "@/lib/store/types";
+import type { Entry, InstallmentFrequency, InstallmentUnit, OrderLine, PaymentMethod, PriceType, Product } from "@/lib/store/types";
 import type { EntryDraft } from "@/lib/home/describe-entry";
 
 /** The big decisions: equal tiles, icon over label, one row. */
@@ -66,8 +66,8 @@ const METHOD_CHOICES: Choice<PaymentMethod>[] = [
   { value: "ewallet", label: "E-wallet", icon: Smartphone },
   { value: "check", label: "Cheque", icon: FileText },
 ];
-const FREQUENCIES: InstallmentFrequency[] = ["weekly", "monthly", "quarterly", "yearly"];
-const PERIOD_WORD: Record<InstallmentFrequency, [string, string]> = { weekly: ["week", "weeks"], monthly: ["month", "months"], quarterly: ["quarter", "quarters"], yearly: ["year", "years"] };
+const FREQUENCIES: InstallmentFrequency[] = ["weekly", "monthly", "quarterly", "yearly", "custom"];
+const UNITS: InstallmentUnit[] = ["day", "week", "month"];
 
 /** A payment the ledger refused (more than is owed, a future date…), shown to the person as is. */
 class PaymentRefused extends Error {}
@@ -202,12 +202,15 @@ export function TransactionDialog({
   const [method, setMethod] = useState<PaymentMethod>(e?.paymentMethod ?? "cash");
   const [bank, setBank] = useState(e?.bankName ?? "");
   const [dueDate, setDueDate] = useState(e?.installments ? "" : (e?.dueDate ?? ""));
-  // Paid in one go by a due date, or in instalments (monthly, yearly…), each with its own date.
+  // Paid in one go by a due date, or in installments (monthly, yearly…), each with its own date.
   const [schedule, setSchedule] = useState<"once" | "installments">(e?.installments ? "installments" : "once");
   // The arrangement (within 30 days…), which sets the deadline from the transaction's date.
   const [terms, setTerms] = useState(e?.paymentTerms && PAYMENT_TERMS.some(([k]) => k === e.paymentTerms) ? e.paymentTerms : "date");
   const [frequency, setFrequency] = useState<InstallmentFrequency>(e?.installments?.frequency ?? "monthly");
   const [instCount, setInstCount] = useState(e?.installments ? String(e.installments.count) : "3");
+  // A custom schedule: every N days, weeks or months.
+  const [every, setEvery] = useState(String(e?.installments?.every ?? 2));
+  const [unit, setUnit] = useState<InstallmentUnit>(e?.installments?.unit ?? "week");
   const [firstDue, setFirstDue] = useState(e?.installments?.firstDue ?? "");
   const [defaulted, setDefaulted] = useState(e?.paymentStatus === "defaulted");
   // A payment made now, against something owed
@@ -363,7 +366,12 @@ export function TransactionDialog({
   // A "within N days" arrangement counts its deadline from the transaction's date.
   const termsDue = dueFromTerms(terms, date);
   const effectiveDue = termsDue ?? dueDate;
-  const plan = schedule === "installments" && Number(instCount) >= 1 && firstDue ? { frequency, count: Math.floor(Number(instCount)), firstDue } : null;
+  const custom = frequency === "custom";
+  const everyN = Math.min(365, Math.max(1, Math.floor(Number(every) || 1)));
+  const plan =
+    schedule === "installments" && Number(instCount) >= 1 && firstDue
+      ? { frequency, count: Math.floor(Number(instCount)), firstDue, ...(custom ? { every: everyN, unit } : {}) }
+      : null;
   const planPreview = plan ? installmentSchedule({ amount: total, amountPaid: null, paymentStatus: null, installments: plan, payments: [] }) : [];
   const [initialSnapshot] = useState(snapshot);
   const dirty = snapshot !== initialSnapshot;
@@ -504,7 +512,7 @@ export function TransactionDialog({
       const wasOwed = e?.paymentTerm === term;
       Object.assign(d, {
         paymentTerm: term,
-        // With instalments, the due date is the last one's; each instalment has its own date.
+        // With installments, the due date is the last one's; each installment has its own date.
         dueDate: plan ? (planPreview.at(-1)?.date ?? null) : effectiveDue || null,
         paymentTerms: plan ? null : terms,
         installments: plan,
@@ -979,12 +987,12 @@ export function TransactionDialog({
                   <div className="flex flex-col gap-1">
                     <span className={label}>{kind === "sale" ? "How will they pay?" : "How will we pay?"}</span>
                     <Segmented
-                      ariaLabel="One payment or instalments"
+                      ariaLabel="One payment or installments"
                       value={schedule}
                       onChange={setSchedule}
                       choices={[
                         { value: "once", label: "One payment", icon: CalendarCheck },
-                        { value: "installments", label: "Instalments", icon: CalendarRange },
+                        { value: "installments", label: "Installments", icon: CalendarRange },
                       ]}
                     />
                   </div>
@@ -1031,6 +1039,21 @@ export function TransactionDialog({
                           <span className={label}>Number of payments</span>
                           <input inputMode="numeric" value={instCount} onChange={(ev) => setInstCount(ev.target.value.replace(/[^0-9]/g, ""))} className={field} />
                         </label>
+                        {custom && (
+                          <div className="col-span-2 flex flex-col gap-1">
+                            <span className={label}>One payment every</span>
+                            <div className="grid grid-cols-2 gap-2">
+                              <input inputMode="numeric" aria-label="How many" value={every} onChange={(ev) => setEvery(ev.target.value.replace(/[^0-9]/g, ""))} className={field} />
+                              <select value={unit} onChange={(ev) => setUnit(ev.target.value as InstallmentUnit)} aria-label="Days, weeks or months" className={field}>
+                                {UNITS.map((u) => (
+                                  <option key={u} value={u}>
+                                    {UNIT_WORDS[u][everyN === 1 ? 0 : 1]}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        )}
                         <label className="col-span-2 flex flex-col gap-1">
                           <span className={label}>First deadline</span>
                           <input type="date" value={firstDue} onChange={(ev) => setFirstDue(ev.target.value)} className={field} />
@@ -1038,8 +1061,8 @@ export function TransactionDialog({
                       </div>
                       {Number(instCount) >= 1 && (
                         <p className="text-[13px] font-semibold">
-                          {instCount} {FREQUENCY_LABELS[frequency].toLowerCase()} payments
-                          {Number(instCount) > 1 && ` over ${instCount} ${PERIOD_WORD[frequency][Number(instCount) === 1 ? 0 : 1]}`}
+                          {instCount} payments, {frequencyLabel({ frequency, every: everyN, unit }).toLowerCase()}
+                          {planPreview.length > 1 && `, until ${formatDate(planPreview.at(-1)!.date)}`}
                           {total > 0 && ` · about ${formatPeso(Math.round((total / Number(instCount)) * 100) / 100)} each`}
                         </p>
                       )}

@@ -43,20 +43,25 @@ export interface OrderLine {
 }
 
 /** How money changed hands. The bank is named, never an account number or balance. A check
- *  (often post-dated, one per instalment) names the bank it's drawn on. */
+ *  (often post-dated, one per installment) names the bank it's drawn on. */
 export type PaymentMethod = "cash" | "bank_transfer" | "ewallet" | "check";
 
-export type InstallmentFrequency = "weekly" | "monthly" | "quarterly" | "yearly";
+export type InstallmentFrequency = "weekly" | "monthly" | "quarterly" | "yearly" | "custom";
+/** A custom schedule's step: every `every` days, weeks or months. */
+export type InstallmentUnit = "day" | "week" | "month";
 
 /**
- * Paying (or being paid) in instalments: `count` equal payments, one each `frequency`, the first
- * due on `firstDue`. Each instalment's due date is worked out from these (lib/transactions/
+ * Paying (or being paid) in installments: `count` equal payments, one each `frequency`, the first
+ * due on `firstDue`. Each installment's due date is worked out from these (lib/transactions/
  * ledger installmentSchedule), and payments made are applied to the earliest first.
  */
 export interface InstallmentPlan {
   frequency: InstallmentFrequency;
   count: number;
   firstDue: string;
+  /** Custom schedules only: one payment every `every` `unit`s — every 2 weeks, every 6 months. */
+  every?: number;
+  unit?: InstallmentUnit;
 }
 
 /**
@@ -149,7 +154,7 @@ export interface Entry {
   dueDateHistory?: DueDateChange[] | null;
   /** When the owner confirmed it defaulted. Kept after it is paid, as part of its history. */
   defaultedAt?: string | null;
-  /** A payable or receivable paid in instalments. `dueDate` is then the last instalment's. */
+  /** A payable or receivable paid in installments. `dueDate` is then the last installment's. */
   installments?: InstallmentPlan | null;
   /** The branch it happened at (lib/inventory/locations). Empty means the main branch. */
   branch?: string | null;

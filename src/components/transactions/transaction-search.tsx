@@ -1,7 +1,7 @@
 "use client";
 
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from "@/lib/format";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ChevronDown, Search, SlidersHorizontal, X } from "lucide-react";
 import { SearchSelect } from "@/components/ui/search-select";
 
@@ -77,8 +77,10 @@ const MORE_KEYS: (keyof TransactionFilters)[] = ["status", "method", "bank", "pr
  * category, a range of dates and a range of amounts. Every choice combines with the others.
  *
  * The payment filters are executives' only: an employee's copy has no payment data to filter by.
+ * The kind tabs (All, Sales, Expenses…) sit along the top, as the first filter.
  */
 export function TransactionSearch({
+  kinds,
   value,
   onChange,
   products,
@@ -89,6 +91,8 @@ export function TransactionSearch({
   categories,
   showPayment,
 }: {
+  /** The kind tabs, shown as the box's top row. */
+  kinds?: ReactNode;
   value: TransactionFilters;
   onChange: (next: TransactionFilters) => void;
   /** [product id, name] */
@@ -106,7 +110,9 @@ export function TransactionSearch({
   const [moreOpen, setMoreOpen] = useState(moreCount > 0);
 
   return (
-    <div className="flex flex-col overflow-hidden rounded-2xl border border-line/20 bg-card shadow-sm">
+    // No overflow-hidden here: it clipped the filter dropdowns to the box, so they opened blank.
+    <div className="flex flex-col rounded-2xl border border-line/20 bg-card shadow-sm">
+      {kinds && <div className="border-b border-line/15 px-3 py-2.5">{kinds}</div>}
       <div className="flex flex-col min-[1000px]:flex-row min-[1000px]:items-stretch">
         <label className="flex min-w-0 flex-[1.4] items-center gap-2 px-4 py-2.5">
           <Search className="h-4 w-4 shrink-0 text-muted-foreground" />

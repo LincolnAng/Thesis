@@ -231,7 +231,7 @@ export function buildCalendarEntries(input: CalendarInput): CalendarEntry[] {
     });
   }
 
-  // Payments still owed, on their due date — or, for instalments, each unpaid instalment on its
+  // Payments still owed, on their due date — or, for installments, each unpaid installment on its
   // own date. Read-only: they live in Transactions.
   for (const e of input.entries) {
     const term = termOf(e);
@@ -242,7 +242,7 @@ export function buildCalendarEntries(input: CalendarInput): CalendarEntry[] {
     const who = e.counterparty || (receivable ? "a customer" : "a supplier");
     const plan = e.installments ? installmentSchedule(e).filter((i) => !i.paid) : null;
     const dues = plan
-      ? plan.map((i) => ({ date: i.date, amount: cents2(i.amount - i.covered), label: `instalment ${i.n} of ${e.installments!.count}` }))
+      ? plan.map((i) => ({ date: i.date, amount: cents2(i.amount - i.covered), label: `installment ${i.n} of ${e.installments!.count}` }))
       : e.dueDate
         ? [{ date: e.dueDate, amount: owed, label: "" }]
         : [];
@@ -256,7 +256,7 @@ export function buildCalendarEntries(input: CalendarInput): CalendarEntry[] {
         subtitle: `${receivable ? "from" : "to"} ${who}${daysLate > 0 ? ` · ${plural(daysLate, "day")} overdue` : ""}${due.label ? ` · ${due.label}` : ""}`,
         details: [
           { label: receivable ? "Owed to you by" : "You owe", value: who },
-          { label: due.label ? "This instalment" : "Still owed", value: peso(due.amount) },
+          { label: due.label ? "This installment" : "Still owed", value: peso(due.amount) },
           ...(due.label ? [{ label: "Still owed in all", value: peso(owed) }] : []),
           ...(e.amount != null ? [{ label: "Original amount", value: peso(e.amount) }] : []),
           { label: "Deadline", value: due.date },

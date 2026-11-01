@@ -1,5 +1,5 @@
 import { PAYMENT_METHODS, namesProvider } from "@/lib/format";
-import type { DueDateChange, Entry, InstallmentFrequency, InstallmentPlan, PaymentRecord, PaymentStatus } from "@/lib/store/types";
+import type { DueDateChange, Entry, InstallmentFrequency, InstallmentPlan, InstallmentUnit, PaymentRecord, PaymentStatus } from "@/lib/store/types";
 
 /**
  * The money on the Transactions page, kept apart by what kind of number it is:
@@ -231,14 +231,14 @@ export interface DueInfo {
   overdue: boolean;
 }
 
-// ── Instalments ────────────────────────────────────────────────────────────
+// ── Installments ────────────────────────────────────────────────────────────
 
 export interface Installment {
   /** 1-based. */
   n: number;
   date: string;
   amount: number;
-  /** How much of this instalment the payments so far cover. */
+  /** How much of this installment the payments so far cover. */
   covered: number;
   paid: boolean;
 }
@@ -252,17 +252,38 @@ function addMonths(day: string, months: number): string {
   return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
 }
 
-const STEP: Record<InstallmentFrequency, (day: string, i: number) => string> = {
-  weekly: (day, i) => addDays(day, 7 * i),
-  monthly: (day, i) => addMonths(day, i),
-  quarterly: (day, i) => addMonths(day, 3 * i),
-  yearly: (day, i) => addMonths(day, 12 * i),
+/** The fixed schedules as a custom one would say them: weekly is every 1 week, and so on. */
+const FIXED_STEP: Record<Exclude<InstallmentFrequency, "custom">, [number, InstallmentUnit]> = {
+  weekly: [1, "week"],
+  monthly: [1, "month"],
+  quarterly: [3, "month"],
+  yearly: [12, "month"],
 };
 
-export const FREQUENCY_LABELS: Record<InstallmentFrequency, string> = { weekly: "Weekly", monthly: "Monthly", quarterly: "Every 3 months", yearly: "Yearly" };
+/** How far apart a plan's payments are: [how many, of what]. */
+function stepOf(plan: InstallmentPlan): [number, InstallmentUnit] {
+  if (plan.frequency !== "custom") return FIXED_STEP[plan.frequency];
+  return [Math.max(1, Math.floor(plan.every ?? 1)), plan.unit ?? "month"];
+}
+
+/** The day the i-th payment (0-based) of a plan is due. */
+function nthDue(plan: InstallmentPlan, i: number): string {
+  const [n, unit] = stepOf(plan);
+  return unit === "month" ? addMonths(plan.firstDue, n * i) : addDays(plan.firstDue, (unit === "week" ? 7 : 1) * n * i);
+}
+
+export const FREQUENCY_LABELS: Record<InstallmentFrequency, string> = { weekly: "Weekly", monthly: "Monthly", quarterly: "Every 3 months", yearly: "Yearly", custom: "Custom / others" };
+export const UNIT_WORDS: Record<InstallmentUnit, [string, string]> = { day: ["day", "days"], week: ["week", "weeks"], month: ["month", "months"] };
+
+/** A plan's schedule in words: "Monthly", "Every 2 weeks". */
+export function frequencyLabel(plan: Pick<InstallmentPlan, "frequency" | "every" | "unit">): string {
+  if (plan.frequency !== "custom") return FREQUENCY_LABELS[plan.frequency];
+  const [n, unit] = stepOf(plan as InstallmentPlan);
+  return n === 1 ? `Every ${UNIT_WORDS[unit][0]}` : `Every ${n} ${UNIT_WORDS[unit][1]}`;
+}
 
 /**
- * An instalment plan's payments, each with its date and amount — equal parts, the last one
+ * An installment plan's payments, each with its date and amount — equal parts, the last one
  * taking any rounding — and how much of each the payments so far cover, earliest first.
  */
 export function installmentSchedule(e: Pick<Entry, "amount" | "amountPaid" | "paymentStatus" | "installments"> & { payments?: PaymentRecord[] | null }): Installment[] {
@@ -276,17 +297,17 @@ export function installmentSchedule(e: Pick<Entry, "amount" | "amountPaid" | "pa
     const amount = i === count - 1 ? cents(total - each * (count - 1)) : each;
     const covered = Math.min(amount, Math.max(0, paid));
     paid = cents(paid - covered);
-    return { n: i + 1, date: STEP[plan.frequency](plan.firstDue, i), amount, covered: cents(covered), paid: covered >= amount - 0.005 };
+    return { n: i + 1, date: nthDue(plan, i), amount, covered: cents(covered), paid: covered >= amount - 0.005 };
   });
 }
 
-/** The date the next payment is due: the first instalment not fully paid, or the one due date. */
+/** The date the next payment is due: the first installment not fully paid, or the one due date. */
 export function currentDueDate(e: Pick<Entry, "dueDate" | "amount" | "amountPaid" | "paymentStatus" | "installments"> & { payments?: PaymentRecord[] | null }): string | null {
   if (e.installments) return installmentSchedule(e).find((i) => !i.paid)?.date ?? e.dueDate ?? null;
   return e.dueDate ?? null;
 }
 
-/** How far off the due date is, counted in whole calendar days. With instalments, the next one. */
+/** How far off the due date is, counted in whole calendar days. With installments, the next one. */
 export function dueInfo(e: Owed & Pick<Entry, "dueDate"> & { installments?: InstallmentPlan | null }, now: Date): DueInfo {
   const dueDate = currentDueDate(e);
   if (!dueDate || outstanding(e) <= 0) return { daysLeft: null, overdue: false };
@@ -739,7 +760,8 @@ export function entryIntegrityProblem(e: Partial<Entry>): string | null {
   if (e.paymentMethod && !(PAYMENT_METHODS as readonly string[]).includes(e.paymentMethod)) return "invalid_payment_method";
   if (e.installments) {
     const p = e.installments;
-    if (!["weekly", "monthly", "quarterly", "yearly"].includes(p.frequency) || !(p.count >= 1 && p.count <= 240) || !DAY_RE.test(p.firstDue)) return "invalid_installments";
+    if (!["weekly", "monthly", "quarterly", "yearly", "custom"].includes(p.frequency) || !(p.count >= 1 && p.count <= 240) || !DAY_RE.test(p.firstDue)) return "invalid_installments";
+    if (p.frequency === "custom" && (!Number.isInteger(p.every) || !(p.every! >= 1 && p.every! <= 365) || !["day", "week", "month"].includes(p.unit ?? ""))) return "invalid_installments";
     if (e.paymentTerm !== "receivable" && e.paymentTerm !== "payable") return "installments_need_a_receivable_or_payable";
   }
   if (e.paymentMethod === "bank_transfer" && !e.bankName?.trim()) return "bank_name_required";

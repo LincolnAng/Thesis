@@ -379,7 +379,7 @@ test("overpaying never counts more cash than was owed", () => {
   assert.equal(cashInPeriod(sale, "2026-10"), 1000);
 });
 
-test("instalments: equal parts on a schedule, paid earliest first, the next unpaid one is what's due", async () => {
+test("installments: equal parts on a schedule, paid earliest first, the next unpaid one is what's due", async () => {
   const { installmentSchedule, currentDueDate, dueInfo, entryIntegrityProblem } = await import("./ledger.ts");
   const e = { amount: 1000, amountPaid: null, paymentStatus: null, paymentTerm: "receivable" as const, dueDate: "2026-04-30", installments: { frequency: "monthly" as const, count: 3, firstDue: "2026-01-31" }, payments: [] as { id: string; date: string; amount: number; method: string | null; bankName: string | null; note: string | null }[] };
   const s = installmentSchedule(e);
@@ -394,4 +394,23 @@ test("instalments: equal parts on a schedule, paid earliest first, the next unpa
   assert.equal(entryIntegrityProblem({ type: "SALE", paymentTerm: "receivable", paymentMethod: "check", installments: e.installments }), null);
   assert.equal(entryIntegrityProblem({ type: "SALE", paymentMethod: "ewallet", bankName: "GCash" }), null);
   assert.equal(entryIntegrityProblem({ type: "SALE", paymentMethod: "crypto" as never }), "invalid_payment_method");
+});
+
+test("custom installments: one payment every N days, weeks or months", async () => {
+  const { installmentSchedule, frequencyLabel, entryIntegrityProblem } = await import("./ledger.ts");
+  const every2Weeks = { frequency: "custom" as const, count: 3, firstDue: "2026-11-01", every: 2, unit: "week" as const };
+  assert.deepEqual(
+    installmentSchedule({ amount: 300, amountPaid: null, paymentStatus: null, installments: every2Weeks }).map((i) => i.date),
+    ["2026-11-01", "2026-11-15", "2026-11-29"],
+  );
+  const every6Months = { ...every2Weeks, every: 6, unit: "month" as const };
+  assert.deepEqual(
+    installmentSchedule({ amount: 300, amountPaid: null, paymentStatus: null, installments: every6Months }).map((i) => i.date),
+    ["2026-11-01", "2027-05-01", "2027-11-01"],
+  );
+  assert.equal(frequencyLabel(every2Weeks), "Every 2 weeks");
+  assert.equal(frequencyLabel({ frequency: "custom", every: 1, unit: "day" }), "Every day");
+  assert.equal(frequencyLabel({ frequency: "monthly" }), "Monthly");
+  const sale = { type: "SALE", amount: 300, paymentTerm: "receivable", installments: { ...every2Weeks, every: 0 } };
+  assert.equal(entryIntegrityProblem(sale as never), "invalid_installments");
 });
