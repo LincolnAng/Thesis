@@ -302,7 +302,7 @@ export function runTool(name: string, input: Record<string, unknown>, view: Agen
       const cat = input.category ? String(input.category).toLowerCase() : null;
       const exp = entries.filter((e) => e.type === "EXPENSE" && inPeriod(e, p) && (!cat || (e.category ?? "").toLowerCase() === cat || (EXPENSE_CATEGORY_LABELS[e.category ?? ""] ?? "").toLowerCase() === cat));
       const byCat = new Map<string, number>();
-      for (const e of exp) byCat.set(EXPENSE_CATEGORY_LABELS[e.category ?? ""] ?? e.category ?? "Uncategorised", r2((byCat.get(EXPENSE_CATEGORY_LABELS[e.category ?? ""] ?? e.category ?? "Uncategorised") ?? 0) + (e.amount ?? 0)));
+      for (const e of exp) byCat.set(EXPENSE_CATEGORY_LABELS[e.category ?? ""] ?? e.category ?? "Uncategorized", r2((byCat.get(EXPENSE_CATEGORY_LABELS[e.category ?? ""] ?? e.category ?? "Uncategorised") ?? 0) + (e.amount ?? 0)));
       const top = [...exp].sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0)).slice(0, 10).map((e) => row(e, view));
       const assets = entries.filter((e) => e.type === "ASSET" && inPeriod(e, p)).map((e) => row(e, view));
       return { result: json({ period: p, total_expenses: r2(exp.reduce((s, e) => s + (e.amount ?? 0), 0)), by_category: Object.fromEntries(byCat), largest: top, long_term_assets_not_expenses: assets }) };
