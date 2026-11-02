@@ -33,38 +33,12 @@ function recognitionCtor(): RecognitionCtor | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
-/** What the mic listens for. Filipino copes with Taglish; Bisaya has no browser model yet. */
-export const VOICE_LANGS = [
-  { value: "en-PH", label: "EN" },
-  { value: "fil-PH", label: "FIL" },
-] as const;
-export type VoiceLang = (typeof VOICE_LANGS)[number]["value"];
-
-const LANG_KEY = "bai-voice-lang";
-
-// The language choice, remembered on this device and shared by every message box.
-const langListeners = new Set<() => void>();
-function readLang(): VoiceLang {
-  try {
-    const saved = localStorage.getItem(LANG_KEY);
-    if (VOICE_LANGS.some((l) => l.value === saved)) return saved as VoiceLang;
-  } catch {
-    // No storage (private window): English it is.
-  }
-  return "en-PH";
-}
-function writeLang(l: VoiceLang) {
-  try {
-    localStorage.setItem(LANG_KEY, l);
-  } catch {
-    // Remembering is a convenience only.
-  }
-  langListeners.forEach((f) => f());
-}
-const subscribeLang = (f: () => void) => {
-  langListeners.add(f);
-  return () => langListeners.delete(f);
-};
+/**
+ * What the mic listens for. There's no language switch: Filipino copes with Taglish and with
+ * plain English, Bisaya has no browser model yet, and BAi answers in whatever language it's
+ * written to anyway.
+ */
+const VOICE_LANG = "fil-PH";
 const noSubscribe = () => () => {};
 
 /** Whether this browser can hear (speech to text) and speak (text to speech). False on the server. */
@@ -89,7 +63,6 @@ export function useDictation(value: string, onChange: (v: string) => void) {
   const supported = useVoiceSupport().hear;
   const [listening, setListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const lang = useSyncExternalStore(subscribeLang, readLang, () => "en-PH" as VoiceLang);
   const rec = useRef<Recognition | null>(null);
   const latest = useRef({ value, onChange });
   useEffect(() => {
@@ -103,7 +76,7 @@ export function useDictation(value: string, onChange: (v: string) => void) {
     setError(null);
     const base = latest.current.value.trimEnd();
     const r = new Ctor();
-    r.lang = lang;
+    r.lang = VOICE_LANG;
     r.continuous = true;
     r.interimResults = true;
     r.onresult = (e) => {
@@ -127,7 +100,7 @@ export function useDictation(value: string, onChange: (v: string) => void) {
     rec.current?.stop();
   }
 
-  return { supported, listening, error, lang, setLang: writeLang, toggle: () => (listening ? stop() : start()), stop };
+  return { supported, listening, error, toggle: () => (listening ? stop() : start()), stop };
 }
 
 /** Markdown and links read out loud as symbols; this leaves just the words. */

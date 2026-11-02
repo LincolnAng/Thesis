@@ -24,11 +24,12 @@ import type { StockLot } from "@/lib/summary/product-lots";
  * carries no payment terms, so it simply produces no payment entries.
  */
 
-export type CalendarCategory = "agenda" | "production" | "events" | "shipments" | "dayoffs" | "leaves" | "payments" | "alerts" | "holidays";
+export type CalendarCategory = "agenda" | "production" | "events" | "tasks" | "shipments" | "dayoffs" | "leaves" | "payments" | "alerts" | "holidays";
 
 export const CATEGORY_LABELS: Record<CalendarCategory, string> = {
   production: "Production",
   events: "Events & orders",
+  tasks: "Tasks",
   shipments: "Shipments",
   agenda: "Calendar",
   holidays: "Holidays",
@@ -61,17 +62,32 @@ export interface CalendarEntry {
   item?: CalendarItem;
 }
 
-/** Each kind's colour, from the same earthy palette as the calendar's categories. */
-export const AGENDA_KINDS: { kind: AgendaKind; label: string; color: string }[] = [
-  { kind: "event", label: "Event", color: "#558A42" },
-  { kind: "task", label: "Task", color: "#2F7D6B" },
-  { kind: "meeting", label: "Meeting", color: "#C4622D" },
-  { kind: "delivery", label: "Delivery deadline", color: "#3F6E8C" },
-  { kind: "receivable", label: "Collect payment", color: "#9A6B12" },
-  { kind: "payable", label: "Payment due", color: "#B3261E" },
-  { kind: "reminder", label: "Reminder", color: "#8A7F70" },
+/**
+ * The three things people put on the calendar, each its own colour and its own filter. Items
+ * saved before these were merged keep their kind — a meeting or a reminder is an event, a
+ * delivery deadline a task — and simply show under their group.
+ */
+export type AgendaGroup = "event" | "task" | "payment";
+export const AGENDA_GROUPS: { group: AgendaGroup; label: string; hint: string; color: string }[] = [
+  { group: "event", label: "Event", hint: "A meeting, a reminder, anything happening that day", color: "#558A42" },
+  { group: "task", label: "Task", hint: "Something to get done by a day, deliveries too", color: "#2F7D6B" },
+  { group: "payment", label: "Payment", hint: "Money to collect or to pay on a day", color: "#9A6B12" },
 ];
-export const agendaKind = (k: AgendaKind) => AGENDA_KINDS.find((a) => a.kind === k) ?? AGENDA_KINDS[0];
+const PAY_OUT_COLOR = "#B3261E";
+
+export const groupOfKind = (k: AgendaKind): AgendaGroup =>
+  k === "task" || k === "delivery" ? "task" : k === "receivable" || k === "payable" ? "payment" : "event";
+export const agendaGroup = (g: AgendaGroup) => AGENDA_GROUPS.find((x) => x.group === g) ?? AGENDA_GROUPS[0];
+/** The filter an item falls under on the calendar. */
+export const filterOfGroup = (g: AgendaGroup): CalendarCategory => (g === "task" ? "tasks" : g === "payment" ? "payments" : "events");
+
+/** How an item reads on the calendar: its group, and for a payment, which way the money goes. */
+export function agendaKind(k: AgendaKind): { label: string; color: string } {
+  const g = agendaGroup(groupOfKind(k));
+  if (k === "receivable") return { label: "Payment to collect", color: g.color };
+  if (k === "payable") return { label: "Payment to make", color: PAY_OUT_COLOR };
+  return { label: g.label, color: g.color };
+}
 
 /** "14:30" → "2:30 PM" */
 export function clock(hhmm: string | null | undefined): string {

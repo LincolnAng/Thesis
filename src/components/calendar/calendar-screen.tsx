@@ -10,7 +10,7 @@ import { EventPlanDialog } from "@/components/inventory/event-plan-dialog";
 import { LeaveDialog, type LeaveRun } from "@/components/calendar/leave-dialog";
 import { AgendaDialog } from "@/components/calendar/agenda-dialog";
 import { updateCalendarItem } from "@/lib/store/store";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ChevronDown, Plus } from "lucide-react";
 import type { AgendaKind } from "@/lib/store/types";
 import { PlanSettingsDialog } from "@/components/inventory/plan-settings-dialog";
@@ -20,7 +20,9 @@ import { useCalendarEntries } from "@/lib/calendar/use-calendar-entries";
 import { toIsoDate } from "@/lib/summary/production-schedule";
 import { eventPlan } from "@/lib/summary/business-config";
 import {
-  AGENDA_KINDS,
+  AGENDA_GROUPS,
+  filterOfGroup,
+  groupOfKind,
   CATEGORY_LABELS,
   coversDay,
   type CalendarCategory,
@@ -40,11 +42,13 @@ import {
 type View = "month" | "week" | "day";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-// What the calendar shows. Production, day-offs and stock alerts stay on Production and Home;
-// what people add themselves (events, tasks, meetings, deadlines) shows with Events.
-const ALL_CATEGORIES: CalendarCategory[] = ["events", "holidays", "leaves", "payments", "shipments"];
-/** The filter an entry falls under: people's own items sit with Events. */
-const filterOf = (c: CalendarCategory): CalendarCategory => (c === "agenda" ? "events" : c);
+// What the calendar shows, as the same three things the Create menu makes — events, tasks,
+// payments — plus leaves and holidays. Production, day-offs and stock alerts stay on Production
+// and Home.
+const ALL_CATEGORIES: CalendarCategory[] = ["events", "tasks", "payments", "leaves", "holidays"];
+/** The filter an entry falls under: people's own items by what they are; stock sent to an event with Events. */
+const filterOf = (e: CalendarEntry): CalendarCategory =>
+  e.category === "agenda" ? (e.item ? filterOfGroup(groupOfKind(e.item.kind)) : "events") : e.category === "shipments" ? "events" : e.category;
 
 /** One colour per category, from the design tokens' palette, used for dots and chip edges. */
 const CATEGORY_COLOR: Record<CalendarCategory, string> = {
@@ -52,6 +56,7 @@ const CATEGORY_COLOR: Record<CalendarCategory, string> = {
   holidays: "#C2185B",
   production: "#7B4B2A",
   events: "#558A42",
+  tasks: "#2F7D6B",
   shipments: "#3F6E8C",
   dayoffs: "#9C9A92",
   leaves: "#7A5C99",
@@ -87,6 +92,19 @@ const colorOf = (e: CalendarEntry) => e.color ?? CATEGORY_COLOR[e.category];
 /** Who put a calendar item on the calendar — "you", or their name. */
 const addedBy = (e: CalendarEntry, meId: string | undefined) =>
   e.item ? (e.item.ownerId === meId ? "you" : e.item.ownerName || "someone") : null;
+
+/** One choice in the Create menu: its colour, what it is, and a line saying what it's for. */
+function MenuChoice({ color, label, hint, onSelect }: { color: string; label: string; hint: string; onSelect: () => void }) {
+  return (
+    <DropdownMenuItem className="min-h-12 items-start gap-2.5 py-2" onSelect={onSelect}>
+      <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
+      <span className="flex flex-col">
+        <span className="text-[14px] font-semibold">{label}</span>
+        <span className="text-[12px] text-muted-foreground">{hint}</span>
+      </span>
+    </DropdownMenuItem>
+  );
+}
 
 /** A compact line in a month cell. */
 function Chip({ entry, meId }: { entry: CalendarEntry; meId?: string }) {
@@ -144,8 +162,8 @@ export function CalendarScreen() {
 
   const [view, setView] = useState<View>("month");
   const [cursor, setCursor] = useState(today);
-  // Payments are an executive's; an employee's data has none, so the filter isn't offered.
-  const categories = exec ? ALL_CATEGORIES : ALL_CATEGORIES.filter((c) => c !== "payments");
+  // Everyone can put a payment on the calendar; only an Executive's also has what's owed from Transactions.
+  const categories = ALL_CATEGORIES;
   const [hidden, setHidden] = useState<Set<CalendarCategory>>(new Set());
   const [open, setOpen] = useState<CalendarEntry | null>(null);
   const [eventDialog, setEventDialog] = useState<{ eventId?: string; date?: string } | null>(null);
@@ -164,7 +182,7 @@ export function CalendarScreen() {
     [events, businessSettings],
   );
 
-  const visible = all.filter((e) => categories.includes(filterOf(e.category)) && !hidden.has(filterOf(e.category)));
+  const visible = all.filter((e) => categories.includes(filterOf(e)) && !hidden.has(filterOf(e)));
   // A day's entries: all-day ones first, then by time, like Google Calendar.
   const on = (date: string) =>
     visible.filter((e) => coversDay(e, date)).sort((a, b) => (a.startTime ?? "").localeCompare(b.startTime ?? "") || Number(a.category !== "holidays") - Number(b.category !== "holidays"));
@@ -206,7 +224,7 @@ export function CalendarScreen() {
   }
 
   const countIn = (c: CalendarCategory) =>
-    all.filter((e) => filterOf(e.category) === c && rangeDays.some((d) => coversDay(e, d))).length;
+    all.filter((e) => filterOf(e) === c && rangeDays.some((d) => coversDay(e, d))).length;
 
   return (
     <Page
@@ -220,24 +238,18 @@ export function CalendarScreen() {
               <ChevronDown className="h-3.5 w-3.5 opacity-80" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-60">
-              <DropdownMenuLabel className="text-[12px] text-muted-foreground">On the calendar</DropdownMenuLabel>
-              {AGENDA_KINDS.map((k) => (
-                <DropdownMenuItem key={k.kind} className="min-h-10" onSelect={() => setAgendaDialog({ date: view === "month" ? today : cursor, kind: k.kind })}>
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: k.color }} />
-                  {k.label}
-                </DropdownMenuItem>
+              {AGENDA_GROUPS.map((g) => (
+                <MenuChoice
+                  key={g.group}
+                  color={g.color}
+                  label={g.label}
+                  hint={g.hint}
+                  onSelect={() => setAgendaDialog({ date: view === "month" ? today : cursor, kind: g.group === "payment" ? "receivable" : g.group })}
+                />
               ))}
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="min-h-10" onSelect={() => setEventDialog({ date: view === "day" ? cursor : undefined })}>
-                <span className="h-2.5 w-2.5 rounded-full" style={{ background: CATEGORY_COLOR.events }} />
-                Bazaar or event with stock to bring
-              </DropdownMenuItem>
-              {exec && (
-                <DropdownMenuItem className="min-h-10" onSelect={() => setLeaveDialog({ date: view === "month" ? today : cursor })}>
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: CATEGORY_COLOR.leaves }} />
-                  Staff leave
-                </DropdownMenuItem>
-              )}
+              <MenuChoice color={CATEGORY_COLOR.events} label="Bazaar" hint="An event you bring stock to" onSelect={() => setEventDialog({ date: view === "day" ? cursor : undefined })} />
+              {exec && <MenuChoice color={CATEGORY_COLOR.leaves} label="Staff leave" hint="Days someone is off work" onSelect={() => setLeaveDialog({ date: view === "month" ? today : cursor })} />}
             </DropdownMenuContent>
           </DropdownMenu>
         </>
@@ -471,7 +483,7 @@ export function CalendarScreen() {
                   >
                     Edit
                   </button>
-                  {open.item.kind !== "event" && open.item.kind !== "meeting" && (
+                  {groupOfKind(open.item.kind) !== "event" && (
                     <button
                       type="button"
                       onClick={() => {

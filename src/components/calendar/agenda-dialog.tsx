@@ -6,12 +6,12 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useStore } from "@/lib/store/use-store";
 import { useCurrentUser } from "@/lib/auth/current-user";
 import { addCalendarItem, deleteCalendarItem, updateCalendarItem } from "@/lib/store/store";
-import { AGENDA_KINDS } from "@/lib/calendar/entries";
+import { AGENDA_GROUPS, agendaKind, groupOfKind, type AgendaGroup } from "@/lib/calendar/entries";
 import type { AgendaKind, AgendaVisibility, CalendarItem } from "@/lib/store/types";
 
 /**
- * Putting anything on the calendar, the way Google Calendar does it: a title, what kind of thing
- * it is (each kind its own colour), when — all day or from a time to a time, over one day or
+ * Putting anything on the calendar, the way Google Calendar does it: a title, what it is — an
+ * event, a task or a payment (to collect or to pay), each its own colour — when — all day or from a time to a time, over one day or
  * several — where, notes, and who sees it: only me, everyone, or the people picked. Nothing
  * here is limited to a list: a task can be anything.
  */
@@ -30,9 +30,13 @@ export function AgendaDialog({
   const me = useCurrentUser();
   const [title, setTitle] = useState(existing?.title ?? "");
   const [kind, setKind] = useState<AgendaKind>(existing?.kind ?? defaultKind);
+  const group = groupOfKind(kind);
+  // Switching group keeps an older item's own kind when it goes back to it; a payment starts as one to collect.
+  const pickGroup = (g: AgendaGroup) =>
+    setKind(g === groupOfKind(existing?.kind ?? "event") && existing ? existing.kind : g === "payment" ? "receivable" : g);
   const [date, setDate] = useState(existing?.date ?? defaultDate);
   const [endDate, setEndDate] = useState(existing?.endDate ?? "");
-  const [allDay, setAllDay] = useState(existing ? !existing.startTime : defaultKind !== "meeting");
+  const [allDay, setAllDay] = useState(existing ? !existing.startTime : true);
   const [startTime, setStartTime] = useState(existing?.startTime ?? "09:00");
   const [endTime, setEndTime] = useState(existing?.endTime ?? "10:00");
   const [location, setLocation] = useState(existing?.location ?? "");
@@ -43,15 +47,14 @@ export function AgendaDialog({
   const [error, setError] = useState<string | null>(null);
 
   const others = users.filter((u) => u.id !== me?.id);
-  const placeholder: Record<AgendaKind, string> = {
-    event: "e.g. Christmas bazaar at SM",
-    task: "e.g. Call the jar supplier",
-    meeting: "e.g. Meet Aling Nena about bulk order",
-    delivery: "e.g. Deliver 50 jars to Robinsons",
-    receivable: "e.g. Collect ₱5,000 from King Kong",
-    payable: "e.g. Pay rent",
-    reminder: "e.g. Renew business permit",
-  };
+  const placeholder =
+    kind === "receivable"
+      ? "e.g. Collect ₱5,000 from Vjandep"
+      : kind === "payable"
+        ? "e.g. Pay rent"
+        : group === "task"
+          ? "e.g. Deliver 50 packs to OTOP"
+          : "e.g. Meet Aling Nena about a bulk order";
 
   function save() {
     if (!title.trim()) return setError("Add a title.");
@@ -92,20 +95,35 @@ export function AgendaDialog({
 
         <label className={label}>
           What
-          <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder={placeholder[kind]} className={field} />
+          <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder={placeholder} className={field} />
         </label>
 
         <div className={label}>
-          Kind
-          <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Kind">
-            {AGENDA_KINDS.map((k) => (
-              <button key={k.kind} type="button" role="radio" aria-checked={kind === k.kind} onClick={() => setKind(k.kind)} className={chip(kind === k.kind)}>
+          What it is
+          <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="What it is">
+            {AGENDA_GROUPS.map((g) => (
+              <button key={g.group} type="button" role="radio" aria-checked={group === g.group} onClick={() => pickGroup(g.group)} className={chip(group === g.group)}>
                 {/* The colour it takes on the calendar. */}
-                <span className="h-2.5 w-2.5 rounded-full ring-1 ring-card" style={{ background: k.color }} />
-                {k.label}
+                <span className="h-2.5 w-2.5 rounded-full ring-1 ring-card" style={{ background: g.color }} />
+                {g.label}
               </button>
             ))}
           </div>
+          {group === "payment" && (
+            <div className="mt-1 flex gap-1.5" role="radiogroup" aria-label="Which way">
+              {(
+                [
+                  ["receivable", "To collect"],
+                  ["payable", "To pay"],
+                ] as const
+              ).map(([k, l]) => (
+                <button key={k} type="button" role="radio" aria-checked={kind === k} onClick={() => setKind(k)} className={chip(kind === k)}>
+                  <span className="h-2.5 w-2.5 rounded-full ring-1 ring-card" style={{ background: agendaKind(k).color }} />
+                  {l}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -198,7 +216,7 @@ export function AgendaDialog({
           </span>
         </div>
 
-        {existing && (kind === "task" || kind === "delivery" || kind === "receivable" || kind === "payable" || kind === "reminder") && (
+        {existing && group !== "event" && (
           <label className="flex min-h-11 items-center gap-2 text-[14px]">
             <input type="checkbox" checked={done} onChange={(e) => setDone(e.target.checked)} className="h-5 w-5 accent-[var(--color-cacao)]" />
             Done

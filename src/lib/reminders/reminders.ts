@@ -1,5 +1,5 @@
 import type { CalendarCategory, CalendarEntry } from "@/lib/calendar/entries";
-import { clock, coversDay } from "@/lib/calendar/entries";
+import { clock, coversDay, groupOfKind } from "@/lib/calendar/entries";
 import { dayOf, outstanding, termOf } from "@/lib/transactions/ledger";
 import type { Entry } from "@/lib/store/types";
 
@@ -63,6 +63,7 @@ export function groupOf(r: Reminder): ReminderGroup {
     case "salaries":
       return "salaries";
     case "agenda":
+    case "tasks":
       return "agenda";
     case "production":
     case "dayoffs":
@@ -160,9 +161,11 @@ function taskFor(e: CalendarEntry, today: string, meId?: string | null): Pick<Re
       if (!it) return { title: e.title };
       const at = it.startTime ? clock(it.startTime) : "";
       const late = !it.done && (it.endDate ?? it.date) < today;
-      const verb: Record<string, string> = { event: "", task: "", meeting: "Meet: ", delivery: "Deliver: ", receivable: "Collect: ", payable: "Pay: ", reminder: "" };
+      // A payment says which way the money goes — unless its title already does ("Collect from PDA").
+      const verb = it.kind === "receivable" ? "Collect" : it.kind === "payable" ? "Pay" : "";
+      const lead = verb && !e.title.toLowerCase().startsWith(verb.toLowerCase()) ? `${verb}: ` : "";
       return {
-        title: `${verb[it.kind] ?? ""}${e.title}${at ? ` at ${at}` : ""}`,
+        title: `${lead}${e.title}${at ? ` at ${at}` : ""}`,
         detail: [late ? "Late" : null, it.location || null, it.ownerName && it.visibility !== "private" && it.ownerId !== meId ? `from ${it.ownerName}` : null].filter(Boolean).join(" · ") || undefined,
       };
     }
@@ -203,7 +206,7 @@ function fromCalendar(e: CalendarEntry, today: string, meId?: string | null): Re
 export const isStockAlert = (r: Reminder) => r.category === "alerts";
 
 const RANK: Record<ReminderTone, number> = { bad: 0, warn: 1, info: 2 };
-const ORDER: Record<Reminder["category"], number> = { payments: 0, salaries: 1, followup: 2, agenda: 3, alerts: 4, events: 5, holidays: 6, leaves: 7, production: 8, shipments: 9, dayoffs: 10 };
+const ORDER: Record<Reminder["category"], number> = { payments: 0, salaries: 1, followup: 2, agenda: 3, tasks: 3, alerts: 4, events: 5, holidays: 6, leaves: 7, production: 8, shipments: 9, dayoffs: 10 };
 const sortReminders = (list: Reminder[]) =>
   [...list].sort((a, b) => RANK[a.tone] - RANK[b.tone] || ORDER[a.category] - ORDER[b.category] || a.date.localeCompare(b.date));
 
@@ -234,7 +237,7 @@ export function buildReminders(
     if (e.category === "agenda" && e.item) {
       // Done items drop off. A task or deadline not done stays on today until it is.
       if (e.item.done) continue;
-      const lingers = e.item.kind !== "event" && e.item.kind !== "meeting";
+      const lingers = groupOfKind(e.item.kind) !== "event";
       if (coversDay(e, today) || (lingers && (e.endDate ?? e.date) < today)) todays.push(fromCalendar(e, today, meId));
       else if (e.date > today && e.date <= horizon) upcoming.push(fromCalendar(e, today, meId));
       continue;

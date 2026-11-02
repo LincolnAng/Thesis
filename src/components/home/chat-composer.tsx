@@ -3,7 +3,7 @@
 import { forwardRef } from "react";
 import { ArrowUp, Mic, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { VOICE_LANGS, useDictation } from "@/lib/home/use-voice";
+import { useDictation } from "@/lib/home/use-voice";
 
 /**
  * The message box, shaped like a card rather than a toolbar: the text area and the send
@@ -57,24 +57,6 @@ export const ChatComposer = forwardRef<
         <div className="flex shrink-0 items-center gap-1.5">
           {voice.supported && (
             <>
-              {/* Which language the mic listens for. */}
-              <div className="flex rounded-full border border-line/15 p-0.5" role="group" aria-label="Voice language">
-                {VOICE_LANGS.map((l) => (
-                  <button
-                    key={l.value}
-                    type="button"
-                    aria-pressed={voice.lang === l.value}
-                    disabled={voice.listening}
-                    onClick={() => voice.setLang(l.value)}
-                    className={cn(
-                      "h-6 rounded-full px-2 text-[11px] font-semibold transition",
-                      voice.lang === l.value ? "bg-cacao text-ivory" : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {l.label}
-                  </button>
-                ))}
-              </div>
               <button
                 type="button"
                 aria-label={voice.listening ? "Stop listening" : "Speak instead of typing"}
