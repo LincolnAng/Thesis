@@ -10,11 +10,16 @@ import {
 import type { Entry, Product } from "@/lib/store/types";
 
 /**
- * Demand forecasting from past sales: a moving average of the last few complete months.
+ * Demand forecasting from past sales, product by product (Holt-Winters: a level, a gentle trend
+ * and each product's season), then three rules chosen by testing every past month against
+ * what actually sold:
  *
- * Next month is expected to sell what the recent months sold on average. It's simple on
- * purpose — with a handful of months on record, fitting a trend line mostly fits the noise —
- * and it's easy for the owner to check by hand against the Transactions list.
+ *   1. Months after a product's last sale count as zero, not as missing records.
+ *   2. Two quiet months in a row and the product is retired: forecast at 0 until it sells again.
+ *   3. Each month's units are scaled so that, at each product's usual price, they add up to one
+ *      forecast of the shop's sales in pesos — steadier than the products added up.
+ *
+ * pastForecast shows what this said for any month gone by, beside what sold.
  *
  * The month in progress is never averaged in: it's partial by definition, and including it
  * would drag every forecast down as a month begins.
@@ -54,6 +59,8 @@ export interface ProductForecast {
   trendPerMonth: number;
   /** Share the forecast was lowered by because product spoiled unsold lately, 0–0.5. */
   spoilageTrim: number;
+  /** No sales in the last two full months, so forecast at 0 (RETIRE_AFTER_QUIET_MONTHS). */
+  retired: boolean;
 }
 
 export interface ForecastReliability {
@@ -109,6 +116,33 @@ function nextMonthKey(key: string): string {
   const date = new Date(year, month, 1);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
+
+function prevMonthKey(key: string): string {
+  const [year, month] = key.split("-").map(Number);
+  const date = new Date(year, month - 2, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/**
+ * The months after the last sale, up to last month, as months that sold nothing.
+ *
+ * monthlyDemand stops at the last sale, and the fit used to read the months after it as
+ * missing — so a product that stopped selling in June was still forecast at its spring pace in
+ * October. Tested month by month on the shop's own sales, counting them as zero is what lets a
+ * product that has stopped fade out.
+ */
+function throughLastMonth(history: MonthlyDemandPoint[], now: Date): MonthlyDemandPoint[] {
+  if (history.length === 0) return history;
+  const lastFull = prevMonthKey(currentMonthKey(now));
+  const out = [...history];
+  for (let key = nextMonthKey(out[out.length - 1].month); key <= lastFull; key = nextMonthKey(key)) {
+    out.push({ month: key, label: monthLabel(key), qty: 0 });
+  }
+  return out;
+}
+
+/** No sales in either of the last two full months: treated as no longer sold, forecast at 0. */
+export const RETIRE_AFTER_QUIET_MONTHS = 2;
 
 export function currentMonthKey(now = new Date()): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -340,7 +374,11 @@ export function forecastProduct(
   /** Twelve seasonal multipliers for this product. Omitted means no seasonality is applied. */
   multipliers?: number[],
 ): ProductForecast {
-  const history = monthlyDemand(product.id, entries, products, now);
+  const history = throughLastMonth(monthlyDemand(product.id, entries, products, now), now);
+  // Two quiet months in a row and the product is taken as no longer sold — one quiet month is
+  // as likely a slow month or a gap in the records. It comes back the month it sells again.
+  const retired =
+    history.length >= RETIRE_AFTER_QUIET_MONTHS && history.slice(-RETIRE_AFTER_QUIET_MONTHS).every((h) => h.qty === 0);
 
   // One estimator, always. Seasonality is a multiplier ON this forecast, never a different
   // way of producing it — so turning a pattern on changes the shape across the year and
@@ -384,7 +422,7 @@ export function forecastProduct(
 
     const fitted = projectHoltWinters(history, season, offset + 13);
     const { fit } = fitted;
-    const series = fitted.series.map((u) => u * (1 - trim));
+    const series = fitted.series.map((u) => (retired ? 0 : u * (1 - trim)));
     level = fit.level;
     trendPerMonth = fit.trend;
     qty = series[offset + 1] ?? 0;
@@ -426,8 +464,13 @@ export function forecastProduct(
   // `measured.usable` is the honest test of whether the season rests on her sales: a stored
   // "measured" pattern came from this same data, and a stored suggestion did not.
   const base = reliabilityOf(history, season, forecastQty, measured.usable);
-  const reliability =
-    trim > 0
+  const reliability: ForecastReliability = retired
+    ? {
+        ...base,
+        reason: `No sales in the last ${RETIRE_AFTER_QUIET_MONTHS} months, so it's taken as no longer sold. It comes back as soon as it sells again.`,
+        range: null,
+      }
+    : trim > 0
       ? {
           ...base,
           reason: `${base.reason} Lowered ${Math.round(trim * 100)}% because ${Math.round(spoilage.spoiled)} spoiled unsold in the last ${SPOILAGE_WINDOW_MONTHS} months.`,
@@ -449,6 +492,7 @@ export function forecastProduct(
     level,
     trendPerMonth,
     spoilageTrim: trim,
+    retired,
   };
 }
 
@@ -459,9 +503,138 @@ export function forecastAll(
   /** Per-product seasonal multipliers, keyed by product id. Missing ids stay unseasonal. */
   multipliersFor?: (productId: string) => number[] | undefined,
 ): ProductForecast[] {
-  return products
-    .map((p) => forecastProduct(p, entries, products, now, multipliersFor?.(p.id)))
-    .sort((a, b) => a.stockCover - b.stockCover || b.forecastQty - a.forecastQty);
+  const forecasts = products.map((p) => forecastProduct(p, entries, products, now, multipliersFor?.(p.id)));
+  return matchToRevenue(forecasts, products, entries, now).sort((a, b) => a.stockCover - b.stockCover || b.forecastQty - a.forecastQty);
+}
+
+/**
+ * The shop's sales in pesos, month by month from this one: a Holt-Winters trend on the monthly
+ * totals, no season. Empty when nothing has been sold before this month.
+ *
+ * One forecast of the whole shop is steadier than nine small ones added up, and it follows
+ * the business through new products and dropped ones on its own.
+ */
+export function revenueForecast(entries: Entry[], now = new Date(), months = 12): number[] {
+  const thisMonth = currentMonthKey(now);
+  const byMonth = new Map<string, number>();
+  for (const e of entries) {
+    if (e.type !== "SALE") continue;
+    const key = monthKey(e.timestamp);
+    if (key < thisMonth) byMonth.set(key, (byMonth.get(key) ?? 0) + (e.amount ?? 0));
+  }
+  if (byMonth.size === 0) return [];
+  const keys = [...byMonth.keys()].sort();
+  const totals: MonthlyDemandPoint[] = [];
+  for (let key = keys[0]; key <= keys[keys.length - 1]; key = nextMonthKey(key)) totals.push({ month: key, label: monthLabel(key), qty: byMonth.get(key) ?? 0 });
+  return projectHoltWinters(throughLastMonth(totals, now), FLAT_MULTIPLIERS, months).series;
+}
+
+/** What each product has sold for per unit, on average, before this month. */
+function pricesPerUnit(products: Product[], entries: Entry[], now: Date): Map<string, number> {
+  const thisMonth = currentMonthKey(now);
+  const totals = new Map<string, { amount: number; qty: number }>();
+  for (const e of expandOrderLines(entries)) {
+    if (e.type !== "SALE" || !e.quantity || monthKey(e.timestamp) >= thisMonth) continue;
+    const id = resolveProductId(products, e.sku);
+    if (!id) continue;
+    const t = totals.get(id) ?? { amount: 0, qty: 0 };
+    t.amount += e.amount ?? 0;
+    t.qty += e.quantity;
+    totals.set(id, t);
+  }
+  return new Map([...totals].map(([id, t]) => [id, t.qty > 0 ? t.amount / t.qty : 0]));
+}
+
+/**
+ * Each month's units, scaled so that at each product's usual price they add up to the shop's
+ * revenue forecast for that month (revenueForecast). The products keep their shares of the
+ * month; the total comes from the steadier forecast. Units and pesos then tell one story, and
+ * so do the production plan and the Forecast tab that are built on them.
+ *
+ * Tested month by month on the shop's own sales (forecast from the months before only), this,
+ * with quiet months counted and retired products at zero, missed least — per product and in
+ * total — of the ways tried.
+ */
+function matchToRevenue(forecasts: ProductForecast[], products: Product[], entries: Entry[], now: Date): ProductForecast[] {
+  const revenue = revenueForecast(entries, now);
+  if (revenue.length === 0) return forecasts;
+  const price = pricesPerUnit(products, entries, now);
+  const scaleOf = (i: number) => {
+    const pesos = forecasts.reduce((sum, f) => sum + (f.monthly[i]?.units ?? 0) * (price.get(f.productId) ?? 0), 0);
+    return pesos > 0 && revenue[i] !== undefined ? revenue[i] / pesos : 1;
+  };
+  const scales = Array.from({ length: 12 }, (_, i) => scaleOf(i));
+  const scaledRange = (range: { low: number; high: number } | null, k: number) =>
+    range ? { low: Math.max(0, Math.round(range.low * k)), high: Math.round(range.high * k) } : null;
+  return forecasts.map((f) => {
+    if (f.monthly.length === 0 || f.retired) return f;
+    const monthly = f.monthly.map((m, i) => ({ ...m, units: m.units * scales[i], baseline: m.baseline * scales[i], range: scaledRange(m.range, scales[i]) }));
+    // forecastQty is next month's figure (monthly[1]); this month is monthly[0].
+    const forecastQty = Math.round(monthly[1]?.units ?? f.forecastQty * scales[1]);
+    return {
+      ...f,
+      monthly,
+      forecastQty,
+      suggestedProduction: Math.max(0, forecastQty - f.currentStock),
+      stockCover: forecastQty > 0 ? f.currentStock / forecastQty : 1,
+      reliability: {
+        ...f.reliability,
+        range: scaledRange(f.reliability.range, scales[1]),
+        reason: `${f.reliability.reason} Matched to the shop's sales trend in pesos.`,
+      },
+    };
+  });
+}
+
+export interface PastForecastRow {
+  productId: string;
+  productName: string;
+  /** What the forecast said for the month, on its first day. */
+  forecast: number;
+  sold: number;
+}
+
+/**
+ * What the forecast would have said for a past month on its first day — worked out from the
+ * sales before it only — beside what actually sold. The way to see how far it can be trusted.
+ */
+export function pastForecast(
+  month: string,
+  products: Product[],
+  entries: Entry[],
+  multipliersFor?: (productId: string) => number[] | undefined,
+): { rows: PastForecastRow[]; forecast: number; sold: number; missed: number; revenueForecast: number | null; revenueSold: number } {
+  const [y, m] = month.split("-").map(Number);
+  const before = entries.filter((e) => monthKey(e.timestamp) < month);
+  const forecasts = forecastAll(products, before, new Date(y, m - 1, 1, 12), multipliersFor);
+  const after = new Date(y, m, 1, 12);
+  const rows = products
+    .map((p) => ({
+      productId: p.id,
+      productName: p.name,
+      forecast: forecasts.find((f) => f.productId === p.id)?.monthly[0]?.units ?? 0,
+      sold: monthlyDemand(p.id, entries, products, after).find((h) => h.month === month)?.qty ?? 0,
+    }))
+    .filter((r) => r.sold > 0 || r.forecast >= 0.5)
+    .sort((a, b) => b.sold + b.forecast - (a.sold + a.forecast));
+  const revenue = revenueForecast(before, new Date(y, m - 1, 1, 12), 1);
+  return {
+    rows,
+    forecast: rows.reduce((sum, r) => sum + r.forecast, 0),
+    sold: rows.reduce((sum, r) => sum + r.sold, 0),
+    missed: rows.reduce((sum, r) => sum + Math.abs(r.forecast - r.sold), 0),
+    revenueForecast: revenue[0] ?? null,
+    revenueSold: entries.filter((e) => e.type === "SALE" && monthKey(e.timestamp) === month).reduce((sum, e) => sum + (e.amount ?? 0), 0),
+  };
+}
+
+/** The months a past forecast can be shown for: from the second month with sales to this one. */
+export function pastForecastMonths(entries: Entry[], now = new Date()): string[] {
+  const first = entries.filter((e) => e.type === "SALE").map((e) => monthKey(e.timestamp)).sort()[0];
+  if (!first) return [];
+  const out: string[] = [];
+  for (let key = nextMonthKey(first); key <= currentMonthKey(now); key = nextMonthKey(key)) out.push(key);
+  return out;
 }
 
 /** The id the combined all-products forecast carries, so callers can tell it apart. */
@@ -525,7 +698,9 @@ export function aggregateForecast(forecasts: ProductForecast[]): ProductForecast
 
   const bars = Math.max(0, Math.floor(usable.reduce((sum, f) => sum + f.reliability.bars * weightOf(f), 0)));
   const level: ForecastConfidence = bars === 0 ? "none" : bars <= 2 ? "low" : bars <= 3 ? "medium" : "high";
-  const everyRange = usable.every((f) => f.reliability.range);
+  // A retired product adds nothing and has no band, so it can't leave the total without one.
+  const selling = usable.filter((f) => !f.retired);
+  const everyRange = selling.length > 0 && selling.every((f) => f.reliability.range);
 
   return {
     productId: AGGREGATE_ID,
@@ -540,7 +715,7 @@ export function aggregateForecast(forecasts: ProductForecast[]): ProductForecast
     stockCover: 0,
     reliability: {
       level,
-      reason: `Across all ${usable.length} products, weighted by how much each one sells.`,
+      reason: `Across the ${selling.length} product${selling.length === 1 ? "" : "s"} still selling, weighted by how much each one sells.`,
       range: everyRange
         ? {
             low: usable.reduce((sum, f) => sum + (f.reliability.range?.low ?? 0), 0),
@@ -554,5 +729,6 @@ export function aggregateForecast(forecasts: ProductForecast[]): ProductForecast
     level: usable.reduce((sum, f) => sum + f.level, 0),
     trendPerMonth: usable.reduce((sum, f) => sum + f.trendPerMonth, 0),
     spoilageTrim: Math.max(...usable.map((f) => f.spoilageTrim)),
+    retired: usable.every((f) => f.retired),
   };
 }

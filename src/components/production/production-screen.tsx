@@ -9,6 +9,7 @@ import { ProcessPlan } from "@/components/production/process-plan";
 import { EventPlanDialog } from "@/components/inventory/event-plan-dialog";
 import { PlanSettingsDialog } from "@/components/inventory/plan-settings-dialog";
 import { SeasonalBreakdown } from "@/components/inventory/seasonal-breakdown";
+import { PastForecasts } from "@/components/inventory/past-forecasts";
 import { SeasonalityCard } from "@/components/settings/seasonality-card";
 import { PlanFixes } from "@/components/inventory/plan-fixes";
 import { CarouselNav } from "@/components/ui/carousel-nav";
@@ -383,6 +384,8 @@ export function ProductionScreen({ section }: { section: "forecast" | "calendar"
                 </div>
               </div>
             } onPickProduct={(id) => setEditingProductId(id)} />}
+
+        {section === "forecast" && <PastForecasts />}
 
         {tab === "plan" ? (
           <div className="flex flex-col gap-4 rounded-2xl border border-line/15 bg-card p-5">

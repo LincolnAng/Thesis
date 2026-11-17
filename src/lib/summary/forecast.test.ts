@@ -30,3 +30,47 @@ test("spoilage outside the last three months doesn't count, and the trim is capp
   assert.equal(spoilageTrim("p1", [...sales, entry("WASTE", "2026-05", 100)], [spread], now).trim, 0);
   assert.equal(spoilageTrim("p1", [...sales, entry("WASTE", "2026-09", 500)], [spread], now).trim, 0.5);
 });
+
+// Decision E: quiet months count as zero, two of them retire a product, and the units are
+// matched to the shop's revenue trend.
+const priced = (month: string, quantity: number, amount: number, sku = "Spread") =>
+  ({ id: `s${sku}${month}`, timestamp: `${month}-15T00:00:00Z`, type: "SALE", amount, quantity, unit: "jars", sku, counterparty: null, location: null, priceType: null, category: null, rawText: "", confidence: 1 }) as never;
+
+test("no sales in the last two full months: retired, forecast at 0", async () => {
+  const { forecastAll } = await import("./forecast.ts");
+  const stopped = ["2026-04", "2026-05", "2026-06", "2026-07"].map((m) => priced(m, 30, 300));
+  const [f] = forecastAll([spread], stopped, now); // October: August and September were quiet
+  assert.equal(f.retired, true);
+  assert.equal(f.forecastQty, 0);
+  assert.ok(f.monthly.every((m) => m.units === 0));
+  assert.match(f.reliability.reason, /no longer sold/);
+});
+
+test("one quiet month isn't enough to retire a product", async () => {
+  const { forecastAll } = await import("./forecast.ts");
+  const paused = ["2026-04", "2026-05", "2026-06", "2026-07", "2026-08"].map((m) => priced(m, 30, 300));
+  const [f] = forecastAll([spread], paused, now); // only September quiet
+  assert.equal(f.retired, false);
+  assert.ok(f.forecastQty > 0);
+});
+
+test("units are scaled so that, at each product's price, they add up to the revenue forecast", async () => {
+  const { forecastAll, revenueForecast } = await import("./forecast.ts");
+  const jam = { ...(spread as object), id: "p2", name: "Jam" } as never;
+  const sales = ["2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-09"].flatMap((m, i) => [priced(m, 10 + i, (10 + i) * 100), priced(m, 5, 250, "Jam")]);
+  const forecasts = forecastAll([spread, jam], sales, now);
+  const revenue = revenueForecast(sales, now);
+  const pesos = (i: number) => forecasts.reduce((t, f) => t + f.monthly[i].units * (f.productId === "p1" ? 100 : 50), 0);
+  assert.ok(Math.abs(pesos(0) - revenue[0]) < 0.01);
+  assert.ok(Math.abs(pesos(5) - revenue[5]) < 0.01);
+});
+
+test("a past month's forecast uses only the sales before it", async () => {
+  const { pastForecast, pastForecastMonths } = await import("./forecast.ts");
+  const sales = ["2026-04", "2026-05", "2026-06"].map((m) => priced(m, 20, 200));
+  const before = pastForecast("2026-06", [spread], sales);
+  const withMore = pastForecast("2026-06", [spread], [...sales, priced("2026-07", 500, 5000)]);
+  assert.equal(before.rows[0].forecast, withMore.rows[0].forecast); // July can't change June's forecast
+  assert.equal(before.sold, 20);
+  assert.deepEqual(pastForecastMonths(sales, new Date(2026, 6, 10)), ["2026-05", "2026-06", "2026-07"]);
+});
