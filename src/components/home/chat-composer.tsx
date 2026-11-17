@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { ArrowUp, Mic, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useDictation } from "@/lib/home/use-voice";
@@ -23,6 +23,13 @@ export const ChatComposer = forwardRef<
   }
 >(function ChatComposer({ value, onChange, onSubmit, disabled, placeholder, autoFocus, className }, ref) {
   const canSend = !disabled && value.trim() !== "";
+  const box = useRef<HTMLTextAreaElement>(null);
+  useImperativeHandle(ref, () => box.current as HTMLTextAreaElement);
+  // Ready to type on a computer. On a phone, focusing on load throws the keyboard up over the
+  // page before anyone asked to type — they tap the box when they want it.
+  useEffect(() => {
+    if (autoFocus && window.matchMedia("(pointer: fine)").matches) box.current?.focus();
+  }, [autoFocus]);
   const voice = useDictation(value, onChange);
   const send = () => {
     voice.stop();
@@ -36,8 +43,7 @@ export const ChatComposer = forwardRef<
       )}
     >
       <textarea
-        ref={ref}
-        autoFocus={autoFocus}
+        ref={box}
         value={value}
         rows={1}
         placeholder={placeholder ?? "Tell me what you sold, bought or made — or ask anything"}

@@ -52,7 +52,7 @@ export function Segmented<T extends string>({
           aria-pressed={value === o.value}
           title={o.title}
           onClick={() => onChange(o.value)}
-          className={`h-8 shrink-0 rounded-full px-3.5 text-[13px] transition ${
+          className={`h-8 shrink-0 rounded-full px-3.5 text-[13px] transition duration-100 active:scale-[0.96] ${
             value === o.value ? "bg-cacao font-semibold text-ivory" : "font-medium text-muted-foreground hover:text-foreground"
           } ${o.className ?? ""}`}
         >
@@ -65,14 +65,14 @@ export function Segmented<T extends string>({
 
 /** Buttons: one size for a page's actions, primary (filled) or secondary (outlined). */
 export const BUTTON = {
-  primary: "inline-flex items-center justify-center gap-1.5 rounded-[10px] bg-cacao px-4 py-2.5 text-[13px] font-semibold text-ivory transition hover:bg-cacao/90 disabled:opacity-50",
+  primary: "inline-flex items-center justify-center gap-1.5 rounded-[10px] bg-cacao px-4 py-2.5 text-[13px] font-semibold text-ivory transition duration-100 hover:bg-cacao/90 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100",
   secondary:
-    "inline-flex items-center justify-center gap-1.5 rounded-[10px] border border-line/20 bg-card px-4 py-2.5 text-[13px] font-semibold transition hover:border-cacao/50 disabled:opacity-50",
+    "inline-flex items-center justify-center gap-1.5 rounded-[10px] border border-line/20 bg-card px-4 py-2.5 text-[13px] font-semibold transition duration-100 hover:border-cacao/50 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100",
 };
 
 /** A rounded on/off button beside a carousel — "All time", "Today". The carousel's own height. */
 export function toggleButton(on = false) {
-  return `inline-flex h-[38px] items-center rounded-full border px-4 text-[13px] font-semibold transition ${
+  return `inline-flex h-[38px] items-center rounded-full border px-4 text-[13px] font-semibold transition duration-100 active:scale-[0.97] ${
     on ? "border-cacao bg-cacao text-ivory" : "border-line/15 bg-card text-muted-foreground hover:text-foreground"
   }`;
 }

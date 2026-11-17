@@ -27,7 +27,7 @@ export function Page({
 }) {
   return (
     <div className="flex min-h-svh flex-col">
-      <header className="sticky top-0 z-30 flex min-h-[76px] shrink-0 flex-wrap items-center justify-between gap-3 border-b border-line/10 bg-ivory/95 px-4 py-3 backdrop-blur min-[1024px]:px-8">
+      <header className="page-header sticky top-0 z-30 flex min-h-[76px] shrink-0 flex-wrap items-center justify-between gap-3 border-b border-line/10 bg-ivory/95 px-4 py-3 backdrop-blur min-[1024px]:px-8">
         <h1 className="font-display text-[24px] font-semibold">{title}</h1>
         <div className="flex flex-wrap items-center gap-2.5">
           {right}

@@ -17,7 +17,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <LowCreditBanner />
         <SyncErrorBanner />
-        <main className="min-w-0 flex-1 pb-16 min-[900px]:pb-0">{children}</main>
+        <main className="min-w-0 flex-1 pb-[calc(4.5rem+env(safe-area-inset-bottom))] min-[900px]:pb-0">{children}</main>
       </div>
       <BottomTabBar />
     </div>

@@ -245,3 +245,42 @@
 html {
   scrollbar-gutter: stable;
 }
+
+/*
+ * Accessibility settings the phone or computer already knows. "Reduce motion" keeps the fades
+ * that explain what changed but drops the zooms, slides, presses and pulses that move things
+ * across the screen. "Reduce transparency" turns the see-through header and tab bar solid.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    --tw-enter-scale: 1 !important;
+    --tw-exit-scale: 1 !important;
+    --tw-enter-translate-x: 0 !important;
+    --tw-enter-translate-y: 0 !important;
+    --tw-exit-translate-x: 0 !important;
+    --tw-exit-translate-y: 0 !important;
+    scroll-behavior: auto !important;
+  }
+  [class*="active:scale"]:active,
+  [class*="active:translate"]:active {
+    scale: none !important;
+    translate: none !important;
+  }
+  .animate-pulse,
+  .animate-bounce,
+  .animate-ping {
+    animation: none !important;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .tab-bar {
+    background-color: var(--color-card) !important;
+    backdrop-filter: none !important;
+  }
+  .page-header {
+    background-color: var(--color-ivory) !important;
+    backdrop-filter: none !important;
+  }
+}

@@ -71,7 +71,8 @@ export function PastForecasts() {
             <Figure
               label="Missed, product by product"
               value={Math.round(result.missed).toLocaleString()}
-              note={result.sold > 0 ? `${Math.round((result.missed / result.sold) * 100)}% of what sold` : undefined}
+              // A share of a handful of sales reads as thousands of percent and means nothing.
+              note={result.sold >= 20 ? `${Math.round((result.missed / result.sold) * 100)}% of what sold` : result.sold > 0 ? "Too few sales recorded to compare" : undefined}
             />
             <Figure
               label={inProgress ? "Sales forecast · so far" : "Sales forecast · actual"}
