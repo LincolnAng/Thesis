@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ChatComposer } from "@/components/home/chat-composer";
 import { useCurrentUser } from "@/lib/auth/current-user";
+import { IS_DEMO } from "@/lib/demo/mode";
 
 /**
  * The start screen: a greeting for whoever is signed in, and one message box — nothing else. There is no Ask or
@@ -24,7 +25,8 @@ export function ChatLanding({ onSubmit, disabled }: { onSubmit: (text: string) =
   return (
     <div className="mx-auto flex w-full max-w-[760px] flex-col items-center px-4">
       <h1 className="mb-6 font-display text-[34px] font-semibold tracking-tight text-foreground">
-        {user ? `Hello, ${user.name}` : "Hello"}
+        {/* The demo's profiles are made up, so visitors get a plain hello rather than a stranger's name. */}
+        {IS_DEMO ? "Hello!" : user ? `Hello, ${user.name}` : "Hello"}
       </h1>
 
       <ChatComposer
