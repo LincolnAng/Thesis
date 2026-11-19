@@ -1,5 +1,5 @@
 import { installmentSchedule, outstanding, termOf } from "@/lib/transactions/ledger";
-import { describePaymentMethod } from "@/lib/format";
+import { describePaymentMethod, pluralize } from "@/lib/format";
 import type { AgendaKind, BusinessEvent, CalendarItem, Entry, EventStockMovement, Product, TimeRecord } from "@/lib/store/types";
 import type { Holiday } from "@/lib/calendar/holidays";
 import type { PlanDay } from "@/lib/summary/production-schedule";
@@ -144,7 +144,7 @@ export function leaveRuns(records: TimeRecord[]): { staffId: string; start: stri
   return runs;
 }
 
-const plural = (n: number, word: string, many = `${word}s`) => `${n} ${n === 1 ? word : many}`;
+const plural = (n: number, word: string) => pluralize(n, word);
 const cents2 = (n: number) => Math.round(n * 100) / 100;
 const peso = (n: number) => `₱${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 

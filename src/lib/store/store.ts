@@ -1,9 +1,11 @@
+import "@/lib/demo/boot";
 import {
   initialEntries,
   initialProducts,
   initialRawMaterials,
   initialSuppliers,
 } from "./initial-data";
+import "@/lib/demo/boot";
 import {
   assembleProduct,
   assembleSupplier,

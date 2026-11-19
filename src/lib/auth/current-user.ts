@@ -1,5 +1,6 @@
 "use client";
 
+import "@/lib/demo/boot";
 import { useSyncExternalStore } from "react";
 import type { Role } from "@/lib/store/types";
 

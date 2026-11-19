@@ -5,6 +5,8 @@ import { LowCreditBanner } from "@/components/chatbot/low-credit-banner";
 import { SyncErrorBanner } from "@/components/nav/sync-error-banner";
 import { SignInGate } from "@/components/auth/sign-in-gate";
 import { TextSizeEffect } from "@/components/layout/text-size-effect";
+import { DemoBar } from "@/components/demo/demo-bar";
+import { IS_DEMO } from "@/lib/demo/mode";
 
 export function AppShell({ children }: { children: ReactNode }) {
   // The gate wraps the navigation too: before anyone says who they are there's nothing on
@@ -15,6 +17,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="flex min-h-svh min-w-0 flex-1">
       <SidebarNav />
       <div className="flex min-w-0 flex-1 flex-col">
+        {IS_DEMO && <DemoBar />}
         <LowCreditBanner />
         <SyncErrorBanner />
         <main className="min-w-0 flex-1 pb-[calc(4.5rem+env(safe-area-inset-bottom))] min-[900px]:pb-0">{children}</main>

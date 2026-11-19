@@ -26,9 +26,15 @@ export function formatSignedPeso(amount: number | null | undefined, moneyIn: boo
 /**
  * "1 jar" / "2 jars" — one place that decides the noun form, so quantity renders can't
  * drift back into "1 jars". Pass an explicit plural for words that don't just take -s.
+ *
+ * Product units are often saved already plural ("packs", "bottles"), so a word ending in a
+ * single s is taken as the plural: "1 pack", "9 packs" — not "9 packss".
  */
-export function pluralize(count: number, singular: string, plural = `${singular}s`): string {
-  return `${formatNumber(count)} ${count === 1 ? singular : plural}`;
+export function pluralize(count: number, singular: string, plural?: string): string {
+  const alreadyPlural = plural === undefined && /[^s]s$/i.test(singular);
+  const one = alreadyPlural ? singular.slice(0, -1) : singular;
+  const many = plural ?? (alreadyPlural ? singular : /ss$/i.test(singular) ? `${singular}es` : `${singular}s`);
+  return `${formatNumber(count)} ${count === 1 ? one : many}`;
 }
 
 export function formatNumber(value: number | null | undefined): string {
