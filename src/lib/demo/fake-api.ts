@@ -4,6 +4,7 @@ import { effectiveProductPrice, productCostPerJar, type CostContext } from "@/li
 import { summarizeAiUse } from "@/lib/ai/usage-summary";
 import type { StaffMember } from "@/lib/store/types";
 import { buildDemoData } from "./demo-data";
+import { demoAgentReply } from "./demo-agent";
 import { DEMO_KEYS, DEMO_PROFILES, IS_DEMO, type DemoProfile } from "./mode";
 
 /**
@@ -73,14 +74,55 @@ function writeJson(key: string, value: unknown) {
 
 /** Who the visitor is viewing as — kept alongside the app's own signed-in copy. */
 export function demoProfile(): DemoProfile {
+  let base = DEMO_PROFILES.executive;
   try {
     const raw = window.localStorage.getItem("mang-kikos-cocoa-current-user-v2");
     const user = raw ? (JSON.parse(raw) as { id?: string }) : null;
-    if (user?.id === DEMO_PROFILES.employee.id) return DEMO_PROFILES.employee;
+    if (user?.id === DEMO_PROFILES.employee.id) base = DEMO_PROFILES.employee;
   } catch {
     // fall through
   }
-  return DEMO_PROFILES.executive;
+  // A name changed under Settings sticks, like it would on the real site.
+  const saved = (load().data.users as { id: string; name: string }[]).find((u) => u.id === base.id);
+  return saved ? { ...base, name: saved.name } : base;
+}
+
+type DemoUser = { id: string; name: string; role: string; color: string; hasPin: boolean; createdAt: string };
+
+/** Adding, renaming and removing people under Settings → People, kept in this browser. */
+function profiles(method: string, body: unknown): { status?: number; json: unknown } {
+  const db = load();
+  const users = db.data.users as DemoUser[];
+  if (method === "GET") return { json: { success: true, profiles: users } };
+  const me = demoProfile();
+  const b = (body ?? {}) as { id?: string; name?: string; role?: string; color?: string };
+  if (me.role !== "executive" && !(method === "PATCH" && b.id === me.id)) return { status: 403, json: { success: false, reason: "forbidden" } };
+  if (method === "POST") {
+    const name = String(b.name ?? "").trim();
+    if (!name) return { status: 400, json: { success: false, reason: "missing_name" } };
+    if (users.some((u) => u.name.toLowerCase() === name.toLowerCase())) return { status: 409, json: { success: false, reason: "name_taken" } };
+    const profile: DemoUser = { id: `demo-user-${Date.now().toString(36)}`, name, role: b.role ?? "employee", color: b.color ?? "", hasPin: true, createdAt: new Date().toISOString() };
+    users.push(profile);
+    save();
+    return { json: { success: true, profile } };
+  }
+  const target = users.find((u) => u.id === b.id);
+  if (!target) return { status: 404, json: { success: false, reason: "unknown_profile" } };
+  if (method === "PATCH") {
+    if (b.name !== undefined && String(b.name).trim()) target.name = String(b.name).trim();
+    if (b.color !== undefined) target.color = String(b.color);
+    // The two built-in profiles keep their roles, so the switch at the top always means what it says.
+    if (b.role && target.id !== DEMO_PROFILES.executive.id && target.id !== DEMO_PROFILES.employee.id) target.role = b.role;
+    save();
+    return { json: { success: true, profile: target } };
+  }
+  if (method === "DELETE") {
+    if (target.id === DEMO_PROFILES.executive.id || target.id === DEMO_PROFILES.employee.id) return { status: 409, json: { success: false, reason: "not_yourself" } };
+    db.data.users = users.filter((u) => u.id !== target.id);
+    save();
+    return { json: { success: true } };
+  }
+  return { status: 400, json: { success: false, reason: "invalid_request" } };
 }
 
 /** Same as costContextOf in lib/auth/load-business-data, which can't be bundled for the browser. */
@@ -154,12 +196,6 @@ function mutate(body: { collection?: string; op?: string; id?: string; item?: un
   return { status: 200, json: { success: true } };
 }
 
-/** What every AI feature says in the demo: the site has no AI key, on purpose. */
-const AI_OFF_REPLY =
-  "This is the demo site, so BAi (the AI assistant) is switched off here — there's no AI key, and nothing you type leaves this browser.\n\n" +
-  "In the live system, BAi answers questions about the shop's own records (\"How much did we sell last month?\", \"Which product earns the most?\") and can log a sale or expense from a plain sentence like \"Sold 3 tablea to Liza for ₱1,050 cash\".\n\n" +
-  "Everything else in the demo works: add sales and expenses from Transactions, check stock in Inventory, look at the forecast, or switch between the Executive and Employee views at the top.";
-
 type Handler = (method: string, body: unknown, url: URL) => { status?: number; json: unknown };
 
 const ROUTES: Record<string, Handler> = {
@@ -176,10 +212,7 @@ const ROUTES: Record<string, Handler> = {
     const user = { id: me.id, name: me.name, role: me.role, color: me.color, hasPin: false, createdAt: new Date().toISOString() };
     return { json: method === "DELETE" ? { success: true } : { success: true, user } };
   },
-  "/api/auth/profiles": (method) =>
-    method === "GET"
-      ? { json: { success: true, profiles: load().data.users } }
-      : { status: 403, json: { success: false, reason: "forbidden" } },
+  "/api/auth/profiles": (method, body) => profiles(method, body),
   "/api/settings": (method) =>
     method === "GET"
       ? { json: { success: true, hasKey: false, keyPreview: null, model: "", botLanguage: "English", monthlyLimitPhp: 0, spentThisMonthPhp: 0, spreadsheetUrl: null } }
@@ -210,14 +243,24 @@ const ROUTES: Record<string, Handler> = {
     writeJson(DEMO_KEYS.photos, photos);
     return { json: { success: true } };
   },
-  // The chat: a real-looking reply that explains the AI is off here.
-  "/api/agent": () => ({ json: { success: true, reply: AI_OFF_REPLY, sources: [], usedWeb: false, proposal: null } }),
-  // The other AI helpers fall back to what the app does without a key.
-  "/api/assistant": () => ({ json: { success: false, reason: "missing_api_key" } }),
-  "/api/advisor": () => ({ json: { success: false, reason: "missing_api_key" } }),
-  "/api/sharpen": () => ({ json: { success: false, reason: "missing_api_key" } }),
-  "/api/triage": () => ({ json: { success: false, reason: "missing_api_key" } }),
-  "/api/season-pattern": () => ({ json: { success: false, reason: "missing_api_key" } }),
+  // The chat: simple messages are read without AI (lib/demo/demo-agent) and anything to record
+  // comes back as the usual card to confirm, so logging from the chat works in the demo too.
+  "/api/agent": (_m, body) => {
+    const messages = ((body ?? {}) as { messages?: { role: string; text: string }[] }).messages ?? [];
+    const last = [...messages].reverse().find((m) => m.role === "user")?.text ?? "";
+    const me = demoProfile();
+    const data = viewFor(me);
+    const ctx = costContext(data);
+    const { reply, proposal } = demoAgentReply({ role: me.role, data, products: ctx.products, ctx, now: new Date() }, last);
+    return { json: { success: true, reply, sources: [], usedWeb: false, proposal } };
+  },
+  // The other AI helpers just say they're unavailable. Not "missing_api_key": that would mark
+  // the AI as switched off app-wide and the chat would stop trying, demo reader included.
+  "/api/assistant": () => ({ json: { success: false, reason: "demo", detail: "The AI assistant is off in the demo." } }),
+  "/api/advisor": () => ({ json: { success: false, reason: "demo" } }),
+  "/api/sharpen": () => ({ json: { success: false, reason: "demo" } }),
+  "/api/triage": () => ({ json: { success: false, reason: "demo" } }),
+  "/api/season-pattern": () => ({ json: { success: false, reason: "demo" } }),
 };
 
 /** Paths that are safe to send to the demo's own server: public data, no keys involved. */
@@ -229,6 +272,11 @@ let installed = false;
 export function installDemoApi() {
   if (installed || !IS_DEMO || typeof window === "undefined") return;
   installed = true;
+  // Another tab of the demo saved: drop this tab's copy so the next request reads theirs,
+  // instead of this tab writing its older copy back over it.
+  window.addEventListener("storage", (e) => {
+    if (e.key === DEMO_KEYS.db || e.key === null) memory = null;
+  });
   const realFetch = window.fetch.bind(window);
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, window.location.href);

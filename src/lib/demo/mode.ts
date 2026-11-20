@@ -25,7 +25,7 @@ export const DEMO_PROFILES: Record<"executive" | "employee", DemoProfile> = {
 
 /** Where the demo keeps its copy of the business, its chat and its photos, in this browser. */
 export const DEMO_KEYS = {
-  db: "mkc-demo-db-v1",
+  db: "mkc-demo-db-v2",
   chat: "mkc-demo-chat-v1",
   photos: "mkc-demo-photos-v1",
 } as const;

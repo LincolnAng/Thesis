@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
 import { RotateCcw } from "lucide-react";
+import { setApiKeyMissing } from "@/lib/store/store";
 import { Segmented } from "@/components/ui/kit";
 import { useCurrentUser } from "@/lib/auth/current-user";
 import { DEMO_PROFILES } from "@/lib/demo/mode";
@@ -27,6 +29,9 @@ function viewAs(role: "executive" | "employee") {
  */
 export function DemoBar() {
   const me = useCurrentUser();
+  // An earlier demo build answered the AI helpers with "no key", which the app remembers and
+  // which turns the chat into form-only. The demo reads chat messages itself, so clear it.
+  useEffect(() => setApiKeyMissing(false), []);
   const role = me?.role === "employee" ? "employee" : "executive";
 
   return (

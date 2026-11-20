@@ -510,15 +510,56 @@ export function buildDemoData(now = new Date()): BusinessData {
       { id: "demo-sph-3", supplierId: "demo-sup-sugar", date: ymd(addDays(start, 2)), price: 75 },
     ],
     budgets: [
+      { category: "labor", monthlyBudget: 34000 },
       { category: "raw_materials", monthlyBudget: 16000 },
+      { category: "misc", monthlyBudget: 4000 },
       { category: "packaging", monthlyBudget: 3500 },
       { category: "transport", monthlyBudget: 2000 },
       { category: "Printing & marketing", monthlyBudget: 2500 },
     ],
     events,
     eventStock: [],
+    // One machine for each kind of product, so the production plan can put everything on the calendar.
     machines: [
-      { id: "demo-mch-grinder", name: "Stone grinder", outputs: [{ itemId: "prod-tableya-1kg", kind: "product", qty: 6, per: "hour" }], hoursPerDay: 8, workingDaysPerWeek: 6, notes: "", createdAt: at(start, 9) },
+      {
+        id: "demo-mch-grinder",
+        name: "Stone grinder & molds",
+        outputs: [
+          { itemId: "prod-tableya-1kg", kind: "product", qty: 6, per: "hour" },
+          { itemId: "prod-tableya-500g", kind: "product", qty: 12, per: "hour" },
+          { itemId: "prod-tableya-312g", kind: "product", qty: 18, per: "hour" },
+          { itemId: "prod-tableya-150g", kind: "product", qty: 36, per: "hour" },
+        ],
+        hoursPerDay: 8,
+        workingDaysPerWeek: 6,
+        notes: "",
+        createdAt: at(start, 9),
+      },
+      {
+        id: "demo-mch-icecream",
+        name: "Ice cream machine",
+        outputs: [
+          { itemId: "prod-ic-35oz", kind: "product", qty: 40, per: "hour" },
+          { itemId: "prod-ic-pint", kind: "product", qty: 12, per: "hour" },
+          { itemId: "prod-vanilla-ic-35oz", kind: "product", qty: 40, per: "hour" },
+        ],
+        hoursPerDay: 6,
+        workingDaysPerWeek: 5,
+        notes: "",
+        createdAt: at(start, 9),
+      },
+      {
+        id: "demo-mch-bottling",
+        name: "Bottling table",
+        outputs: [
+          { itemId: "prod-brandy", kind: "product", qty: 20, per: "hour" },
+          { itemId: "prod-sparkling-juice", kind: "product", qty: 30, per: "hour" },
+        ],
+        hoursPerDay: 4,
+        workingDaysPerWeek: 3,
+        notes: "",
+        createdAt: at(start, 9),
+      },
     ],
     supplierPrices: [
       { id: "demo-sp-beans", supplierId: "demo-sup-coop", materialId: "mat-cacao-beans", price: beanKg * 290, quantity: beanKg, unit: "kg", loggedAt: lastBeans?.timestamp ?? at(today, 9) },
